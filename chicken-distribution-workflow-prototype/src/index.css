@@ -1,6 +1,10 @@
 @import "tailwindcss";
 
 :root {
+  --client-accent: #146ef5;
+  --plant-bounty: #146ef5;
+  --plant-magnolia: #087f6b;
+  --plant-other: #735b23;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
@@ -10,6 +14,49 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+input, select, textarea { min-width: 0; max-width: 100%; }
+input:disabled { background: #f1f5f9; }
+main, main > div, section, article, fieldset { min-width: 0; }
+main .grid > *, main .flex > * { min-width: 0; }
+h1, h2, h3, p, strong, span { overflow-wrap: anywhere; letter-spacing: 0; }
+button:focus-visible { outline: 3px solid var(--client-accent); outline-offset: 3px; }
+button { touch-action: manipulation; }
+.date-range { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: 12px; min-width: 0; width: 420px; max-width: 100%; }
+.date-range > label { flex: 1 1 150px; }
+.date-range legend { margin-bottom: 6px; }
+.report-section { margin-top: 24px; padding: 20px 0; border-top: 1px solid #cbd5e1; }
+.customer-name { font-size: 1.375rem; font-weight: 800; line-height: 1.3; text-transform: uppercase; }
+.report-section > h2, .report-section > h3, .report-section > div:first-child > h2 { text-transform: uppercase; font-weight: 800; }
+.plant-name { display: inline-block; font-size: 1.5rem; font-weight: 800; text-transform: uppercase; border-left: 5px solid var(--plant-other); padding: 4px 0 4px 12px; color: #334155; }
+.plant-name[data-plant="Bounty"] { border-color: var(--plant-bounty); color: #1d4ed8; }
+.plant-name[data-plant="Magnolia"] { border-color: var(--plant-magnolia); color: #047857; }
+td .plant-name { font-size: 1rem; }
+.plant-management .divide-y > div > div > span:first-child { flex-shrink: 0; width: 72px; overflow-wrap: normal; }
+.customer-management .divide-y > div > div > span:first-child { flex-shrink: 0; width: 96px; overflow-wrap: normal; }
+.customer-contact > div > span { flex-shrink: 0; max-width: 42%; }
+.balance-item { padding: 16px; border: 1px solid #d8dee6; border-left: 4px solid #d4a72c; border-radius: 8px; background: white; }
+.inventory-product { display: block; width: 100%; padding: 16px; margin-bottom: 12px; text-align: left; border: 1px solid #cbd5e1; border-radius: 8px; background: white; }
+.remaining-stock { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border-left: 3px solid #059669; background: #ecfdf5; }
+.remaining-stock p { font-size: .75rem; font-weight: 700; color: #047857; }
+.remaining-stock strong { font-size: 1.25rem; color: #064e3b; }
+.remaining-stock.sold-out { border-left-color: #e11d48; background: #fff1f2; }
+.remaining-stock.sold-out p, .remaining-stock.sold-out strong { color: #be123c; }
+.stock-line { border-top: 1px solid #cbd5e1; padding-top: 16px; }
+.chart-rows { max-height: 480px; overflow-y: auto; }
+.chart-row { display: grid; grid-template-columns: 80px minmax(30px, 1fr) 120px; gap: 12px; align-items: center; margin-bottom: 16px; }
+.alert-item { padding: 14px; border-left: 3px solid #e11d48; background: #fff1f2; font-size: .875rem; }
+table { min-width: 560px; }
+td, th { overflow-wrap: normal; }
+@media (max-width: 1100px) {
+  .date-range { width: 100%; }
+}
+@media (max-width: 639px) {
+  .chart-row { grid-template-columns: 70px minmax(20px, 1fr) 110px; gap: 8px; }
+  .date-range > label { flex-basis: 130px; }
+  .report-section { padding: 16px 0; }
+  .remaining-stock { width: 100%; }
 }
 
 * {
@@ -25,8 +72,11 @@ button,
 input,
 select,
 textarea {
-  font: inherit;
+  font-family: inherit;
 }
+button > svg { flex-shrink: 0; }
+.mobile-nav button { flex: 0 0 auto; min-width: 96px; }
+.mobile-nav span { white-space: nowrap; overflow-wrap: normal; }
 
 button {
   cursor: pointer;

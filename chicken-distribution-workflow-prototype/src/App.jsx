@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -34,10 +34,15 @@ import {
   initialMovements,
   initialOuts,
   initialTrips,
-  plants,
-  products,
   users,
-  weeklyBusinessData,
+  demoToday,
+  initialDcrs,
+  initialAttendance,
+  initialPayroll,
+  initialTrucks,
+  initialReceivingTransfers,
+  initialSalesmanTransfers,
+  cleanOperationalData,
 } from "./data/demoData";
 import {
   allocateOldestFirst,
@@ -58,137 +63,65 @@ import {
   tripAcquisitionCost,
 } from "./utils/business";
 
+import { Badge, Button, Field, inputClass, StatCard, Drawer, SectionHeader, ResponsiveTable, StatMini, Info, MoneyInput, PlantName, UserContext, useUsers } from "./components/ui";
+import { Dashboard, Reports, Collectibles } from "./components/Reporting";
+import { Administration, Dtr, Payroll, Trucks } from "./components/Supporting";
+import { validateStock, validateSale, validatePayment, salePaymentStatus, sum, duplicateTrustReceipt } from "./utils/operations";
+import { productLabel, money, invoiceBalances, getTripProduct } from "./utils/business";
+import { initialPlantConfigs, activeProducts, activeCodes, activeClassTypes, optionLabel, stockLine, validatePlantStock, stockSnapshot } from "./utils/plants";
+import { PlantManagement } from "./components/PlantManagement";
+import { PlantContext } from "./components/ui";
+import { isWholeChicken } from "./utils/business";
+import { CustomerManagement, CustomerEditor, CustomerSelector, CustomerSearch } from "./components/CustomerManagement";
+import { normalizeCustomer, customerPermissions, matchesCustomer, hasCustomerHistory, availableCredit, exceedsCredit } from "./utils/customers";
+import { emptySalePayment, initialPaymentAmount, validateSalePayment, paymentAtSaleStatus, saleFinancialEvents } from "./utils/salePayment";
+import { compareInventoryProducts, compareInventoryTrips } from "./utils/inventory";
+import { Warehouse, SalesmanInventory } from "./components/InventoryFlow";
+import { getSalesmanAvailableQty } from "./utils/inventoryFlow";
+
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: Home },
-  { id: "trips", label: "Trips / Stock In", icon: Truck },
+  { id: "trips", label: "Plants", icon: Truck },
+  { id: "warehouse", label: "Warehouse", icon: PackageCheck },
   { id: "inventory", label: "Inventory", icon: PackageCheck },
-  { id: "out", label: "OUT / Orders", icon: ShoppingCart },
-  { id: "customers", label: "Customers", icon: Users },
-  { id: "collections", label: "Collections", icon: WalletCards },
-  { id: "dcr", label: "Daily Cash Reports", icon: FileClock },
+  { id: "out", label: "Sales", icon: ShoppingCart },
+  { id: "collections", label: "Payments", icon: WalletCards },
+  { id: "customers", label: "Ledger", icon: Users },
+  { id: "collectibles", label: "Collectibles", icon: Banknote },
+  { id: "dcr", label: "Daily Cash Report", icon: FileClock },
   { id: "discrepancies", label: "Discrepancies", icon: AlertTriangle },
   { id: "reports", label: "Reports", icon: BarChart3 },
+  { id: "dtr", label: "DTR", icon: FileClock },
+  { id: "payroll", label: "Payroll", icon: WalletCards },
+  { id: "trucks", label: "Trucks", icon: Truck },
   { id: "admin", label: "Administration", icon: Settings },
 ];
 
-const today = "2026-08-30";
+const today = demoToday;
 
 const uid = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-const defaultTripForm = {
-  plant: "Bounty",
-  date: today,
-  reference: "FLOW-A-DEMO",
-  deliveryNote: "Client workflow demo stock in",
-  notes: "Bounty Aug 30 delivery",
-  products: [
-    { name: "Whole Dressed Chicken", qty: 1500, costPerKg: 145 },
-    { name: "Liver", qty: 70, costPerKg: 90 },
-    { name: "Gizzard", qty: 55, costPerKg: 115 },
-    { name: "Feet", qty: 80, costPerKg: 65 },
-    { name: "Head", qty: 75, costPerKg: 45 },
-  ],
-};
+const tripForm = (plant) => ({ plantId: plant?.id || "", plant: plant?.name || "", date: today, reference: "", deliveryNote: "", notes: "", products: activeProducts(plant).length ? [stockLine(activeProducts(plant)[0])] : [] });
 
 const categories = ["Fuel", "Parking", "Toll", "Meals", "Repairs", "Delivery Expense", "Other"];
 const paymentMethods = ["Cash", "GCash", "Bank Deposit"];
 const wholeChickenProduct = "Whole Dressed Chicken";
 
-function Badge({ children, tone = "slate" }) {
-  const tones = {
-    blue: "bg-blue-50 text-blue-700 ring-blue-200",
-    green: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-    amber: "bg-amber-50 text-amber-800 ring-amber-200",
-    red: "bg-rose-50 text-rose-700 ring-rose-200",
-    purple: "bg-violet-50 text-violet-700 ring-violet-200",
-    slate: "bg-slate-100 text-slate-700 ring-slate-200",
-  };
-  return <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${tones[tone]}`}>{children}</span>;
-}
-
-function Button({ children, variant = "primary", className = "", ...props }) {
-  const variants = {
-    primary: "bg-[#146ef5] text-white hover:bg-blue-700",
-    secondary: "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50",
-    ghost: "bg-transparent text-slate-600 hover:bg-slate-100",
-    danger: "bg-rose-600 text-white hover:bg-rose-700",
-  };
-  return (
-    <button
-      className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-45 ${variants[variant]} ${className}`}
-      {...props}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Field({ label, children }) {
-  return (
-    <label className="block">
-      <span className="mb-1.5 block text-sm font-semibold text-slate-700">{label}</span>
-      {children}
-    </label>
-  );
-}
-
-function inputClass() {
-  return "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100";
-}
-
-function StatCard({ label, value, detail, tone = "blue", icon: Icon }) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium text-slate-500">{label}</p>
-          <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
-          {detail && <p className="mt-1 text-xs text-slate-500">{detail}</p>}
-        </div>
-        {Icon && (
-          <div className={`rounded-lg p-2 ${tone === "red" ? "bg-rose-50 text-rose-600" : tone === "green" ? "bg-emerald-50 text-emerald-600" : tone === "amber" ? "bg-amber-50 text-amber-600" : "bg-blue-50 text-blue-600"}`}>
-            <Icon size={20} />
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function Drawer({ title, children, onClose }) {
-  if (!children) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/25">
-      <button className="flex-1" aria-label="Close drawer" onClick={onClose} />
-      <aside className="h-full w-full max-w-xl overflow-y-auto bg-white p-5 shadow-2xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-950">{title}</h2>
-          <Button variant="ghost" className="h-11 w-11 px-0" onClick={onClose} aria-label="Close">
-            <X size={20} />
-          </Button>
-        </div>
-        {children}
-      </aside>
-    </div>
-  );
-}
-
-function SectionHeader({ title, eyebrow, action }) {
-  return (
-    <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-      <div>
-        {eyebrow && <p className="mb-1 text-sm font-semibold text-[#146ef5]">{eyebrow}</p>}
-        <h1 className="text-2xl font-bold text-slate-950 md:text-3xl">{title}</h1>
-      </div>
-      {action}
-    </div>
-  );
-}
-
 export default function App() {
   const [active, setActive] = useState("dashboard");
+  useEffect(() => { window.scrollTo({ top: 0 }); }, [active]);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [trips, setTrips] = useState(initialTrips);
+  const [plantConfigs, setPlantConfigs] = useState(initialPlantConfigs);
+  const [demoRole, setDemoRole] = useState("Owner / Admin");
+  const [managePlants, setManagePlants] = useState(false);
+  const [manageCustomers, setManageCustomers] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  useEffect(() => { setResetOpen(false); }, [demoRole]);
+  const [resetEpoch, setResetEpoch] = useState(0);
+  const [customers, setCustomers] = useState(() => initialCustomers.map(normalizeCustomer));
+  const [customerEditor, setCustomerEditor] = useState(null);
+  const permissions = customerPermissions[demoRole];
   const [movements, setMovements] = useState(initialMovements);
   const [outs, setOuts] = useState(initialOuts);
   const [ledgerEntries, setLedgerEntries] = useState(initialLedgerEntries);
@@ -196,13 +129,43 @@ export default function App() {
   const [expenses, setExpenses] = useState(initialExpenses);
   const [discrepancies, setDiscrepancies] = useState(initialDiscrepancies);
   const [auditLog, setAuditLog] = useState(initialAuditLog);
-  const [dcrs, setDcrs] = useState([]);
+  const [dcrs, setDcrs] = useState(initialDcrs);
+  const [userRecords, setUsers] = useState(users);
+  const [attendance, setAttendance] = useState(initialAttendance);
+  const [payroll, setPayroll] = useState(initialPayroll);
+  const [trucks, setTrucks] = useState(initialTrucks);
+  const [receivingTransfers, setReceivingTransfers] = useState(initialReceivingTransfers);
+  const [salesmanTransfers, setSalesmanTransfers] = useState(initialSalesmanTransfers);
+  const [targetCustomer, setTargetCustomer] = useState("");
   const [drawer, setDrawer] = useState(null);
   const [toast, setToast] = useState("");
   const [postDcrAlert, setPostDcrAlert] = useState("");
 
   const inventoryRows = useMemo(() => getInventoryRows(trips, movements), [trips, movements]);
-  const customers = initialCustomers;
+  const state = { trips, inventoryRows, outs, ledgerEntries, collections, expenses, discrepancies, dcrs, customers, users: userRecords, auditLog, attendance, payroll, trucks, receivingTransfers, salesmanTransfers, movements };
+  function goCustomer(view, id) { setTargetCustomer(id); setActive(view); }
+  function resetOperationalData() {
+    if (!permissions.manage) return;
+    const clean = cleanOperationalData();
+    setTrips(clean.trips); setMovements(clean.movements); setOuts(clean.outs); setCustomers(clean.customers);
+    setCollections(clean.collections); setLedgerEntries(clean.ledgerEntries); setExpenses(clean.expenses);
+    setDcrs(clean.dcrs); setDiscrepancies(clean.discrepancies); setAuditLog(clean.auditLog);
+    setAttendance(clean.attendance); setPayroll(clean.payroll); setTrucks(clean.trucks);
+    setReceivingTransfers(clean.receivingTransfers); setSalesmanTransfers(clean.salesmanTransfers);
+    setCustomerEditor(null); setDrawer(null); setPostDcrAlert(""); setTargetCustomer(""); setToast("");
+    setResetOpen(false); setManagePlants(false); setManageCustomers(false); setMobileOpen(false);
+    setResetEpoch((value) => value + 1); setActive("dashboard");
+  }
+  function openCustomerEditor(customer = null) { if (permissions.manage) setCustomerEditor({ customer }); }
+  function saveCustomer(record) {
+    if (!(customerEditor?.quick ? permissions.quickAdd : permissions.manage)) return;
+    const saved = { ...record, id: record.id || uid("cust") };
+    setCustomers((items) => record.id ? items.map((c) => c.id === saved.id ? saved : c) : [...items, saved]);
+    addAudit((record.id ? "Edited customer " : "Added customer ") + saved.name, demoRole);
+    customerEditor?.onSelected?.(saved);
+    if (!customerEditor?.quick && active === "customers") setTargetCustomer(saved.id);
+    setCustomerEditor(null); pushToast("Customer saved");
+  }
 
   function pushToast(message) {
     setToast(message);
@@ -219,11 +182,12 @@ export default function App() {
   function registerPostDcrChange(agentId, date, description) {
     const locked = dcrs.find((dcr) => dcr.agentId === agentId && dcr.date === date && dcr.status === "LOCKED");
     if (locked) {
-      const message = `Post-DCR Adjustment Detected: ${shortDate(date)} / ${getAgentName(agents, agentId)} - ${description}`;
+      const message = `Post-DCR Adjustment Detected: ${shortDate(date)} / ${getAgentName(userRecords, agentId)} - ${description}`;
       setPostDcrAlert(message);
       setDiscrepancies((items) => [
         {
           id: `disc-post-${Date.now()}`,
+          date,
           type: "Post-DCR",
           title: "Post-DCR Adjustment Detected",
           status: "Open",
@@ -236,38 +200,28 @@ export default function App() {
   }
 
   const views = {
-    dashboard: (
-      <Dashboard
-        inventoryRows={inventoryRows}
-        collections={collections}
-        outs={outs}
-        trips={trips}
-        expenses={expenses}
-        ledgerEntries={ledgerEntries}
-        discrepancies={discrepancies}
-        onNavigate={setActive}
-      />
-    ),
+    dashboard: <Dashboard state={state} onNavigate={setActive} onPayment={(id) => goCustomer("collections", id)} onLedger={(id) => goCustomer("customers", id)} />,
+    collectibles: <Collectibles state={state} onPayment={(id) => goCustomer("collections", id)} onLedger={(id) => goCustomer("customers", id)} />,
     trips: (
       <Trips
+        plantConfigs={plantConfigs}
         trips={trips}
         setTrips={setTrips}
         addAudit={addAudit}
         pushToast={pushToast}
       />
     ),
-    inventory: (
-      <Inventory
-        inventoryRows={inventoryRows}
-        movements={movements}
-        onSelect={(row) => setDrawer({ type: "inventory", row })}
-      />
-    ),
+    warehouse: <Warehouse inventoryRows={inventoryRows} trips={trips} movements={movements} receivingTransfers={receivingTransfers} setReceivingTransfers={setReceivingTransfers} salesmanTransfers={salesmanTransfers} users={userRecords} addAudit={addAudit} pushToast={pushToast} onOpen={(row) => setDrawer({ type: "inventory", row })} />,
+    inventory: <SalesmanInventory inventoryRows={inventoryRows} receivingTransfers={receivingTransfers} salesmanTransfers={salesmanTransfers} setSalesmanTransfers={setSalesmanTransfers} movements={movements} users={userRecords} addAudit={addAudit} pushToast={pushToast} onOpen={(row) => setDrawer({ type: "inventory", row })} onWarehouse={() => setActive("warehouse")} />,
     out: (
       <OutOrders
+        collections={collections} setCollections={setCollections} registerPostDcrChange={registerPostDcrChange} onStockIn={() => setActive("trips")}
+        onQuickAdd={permissions.quickAdd ? (name, onSelected) => setCustomerEditor({ quick: true, initialName: name, onSelected }) : null}
         customers={customers}
         trips={trips}
         movements={movements}
+        receivingTransfers={receivingTransfers}
+        salesmanTransfers={salesmanTransfers}
         setMovements={setMovements}
         outs={outs}
         setOuts={setOuts}
@@ -279,7 +233,8 @@ export default function App() {
       />
     ),
     customers: (
-      <Customers
+      <Customers key={targetCustomer} initialCustomerId={targetCustomer}
+        canManage={permissions.manage} onAdd={() => openCustomerEditor()} onEdit={openCustomerEditor}
         customers={customers}
         ledgerEntries={ledgerEntries}
         outs={outs}
@@ -288,7 +243,7 @@ export default function App() {
       />
     ),
     collections: (
-      <Collections
+      <Collections key={targetCustomer} initialCustomerId={targetCustomer}
         customers={customers}
         ledgerEntries={ledgerEntries}
         setLedgerEntries={setLedgerEntries}
@@ -303,7 +258,7 @@ export default function App() {
       />
     ),
     dcr: (
-      <Dcr
+      <Dcr outs={outs}
         customers={customers}
         collections={collections}
         expenses={expenses}
@@ -322,20 +277,23 @@ export default function App() {
         customers={customers}
       />
     ),
-    reports: <Reports customers={customers} inventoryRows={inventoryRows} trips={trips} outs={outs} ledgerEntries={ledgerEntries} collections={collections} expenses={expenses} discrepancies={discrepancies} />,
-    admin: <Administration users={users} auditLog={auditLog} />,
+    reports: <Reports state={state} />,
+    admin: permissions.manage && manageCustomers ? <CustomerManagement state={state} onAdd={() => openCustomerEditor()} onEdit={openCustomerEditor} onLedger={(id) => goCustomer("customers", id)} onBack={() => setManageCustomers(false)} onToggle={(c) => { if (!permissions.manage) return; setCustomers((items) => items.map((item) => item.id === c.id ? { ...item, active: !item.active } : item)); addAudit((c.active ? "Deactivated customer " : "Activated customer ") + c.name, demoRole); }} onDelete={(c) => { if (!permissions.manage || hasCustomerHistory(c.id, state)) return; setCustomers((items) => items.filter((item) => item.id !== c.id)); addAudit("Deleted unused customer " + c.name, demoRole); }} /> : demoRole === "Owner / Admin" && managePlants ? <PlantManagement plants={plantConfigs} setPlants={setPlantConfigs} trips={trips} role={demoRole} addAudit={addAudit} pushToast={pushToast} onBack={() => setManagePlants(false)} /> : <><div className="mb-4 flex flex-wrap gap-3">{permissions.manage && <><Button variant="secondary" onClick={() => setManagePlants(true)}><Settings size={17} />Manage Plants</Button><Button variant="secondary" onClick={() => setManageCustomers(true)}><Users size={17} />Manage Customers</Button></>}</div><Administration state={state} setUsers={setUsers} addAudit={addAudit} pushToast={pushToast} /></>,
+    dtr: <Dtr users={userRecords} attendance={attendance} setAttendance={setAttendance} pushToast={pushToast} addAudit={addAudit} />,
+    payroll: <Payroll users={userRecords} attendance={attendance} payroll={payroll} setPayroll={setPayroll} pushToast={pushToast} addAudit={addAudit} />,
+    trucks: <Trucks trucks={trucks} setTrucks={setTrucks} pushToast={pushToast} addAudit={addAudit} />,
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 border-r border-slate-200 bg-white md:block">
+    <PlantContext.Provider value={plantConfigs}><UserContext.Provider value={userRecords}><div className="min-h-screen bg-slate-100 text-slate-900">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 overflow-y-auto border-r border-slate-200 bg-white md:block">
         <Brand />
         <Nav active={active} setActive={setActive} />
       </aside>
 
       {mobileOpen && (
         <div className="fixed inset-0 z-40 bg-slate-950/35 md:hidden">
-          <aside className="h-full w-80 max-w-[86vw] bg-white shadow-2xl">
+          <aside className="h-full w-80 overflow-y-auto max-w-[86vw] bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 pr-3">
               <Brand />
               <Button variant="ghost" className="h-11 w-11 px-0" onClick={() => setMobileOpen(false)} aria-label="Close menu">
@@ -353,26 +311,26 @@ export default function App() {
         </div>
       )}
 
-      <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur md:ml-72 md:px-7">
+      <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur md:ml-64 md:px-7">
         <Button variant="ghost" className="h-11 w-11 px-0 md:hidden" onClick={() => setMobileOpen(true)} aria-label="Open menu">
           <Menu size={22} />
         </Button>
-        <div className="hidden text-sm font-semibold text-slate-500 md:block">Concept Workflow Prototype by Noderno</div>
+        <div className="hidden text-sm font-semibold text-slate-500 xl:block">Concept Workflow Prototype by Noderno</div>
         <div className="flex items-center gap-2">
-          <Badge tone="blue">Local state only</Badge>
-          <Badge>Presentation mode</Badge>
+          <select aria-label="Demo Role" className="min-h-11 max-w-40 rounded-lg border border-slate-200 bg-white px-2 text-sm" value={demoRole} onChange={(e) => { setDemoRole(e.target.value); setManagePlants(false); setManageCustomers(false); setCustomerEditor(null); }}><option>Owner / Admin</option><option value="Agent">Salesman</option><option>Cashier</option><option>Warehouse</option></select>
+          <Badge tone="blue">Demo: {shortDate(today)}</Badge>
         </div>
       </header>
 
-      <main className="pb-24 md:ml-72">
-        <div className="mx-auto max-w-7xl px-4 py-6 md:px-7">{views[active]}</div>
+      <main className="pb-24 md:ml-64">
+        <div key={resetEpoch} className="mx-auto max-w-7xl px-4 py-6 md:px-7">{views[active]}{active === "admin" && permissions.manage && <section className="report-section"><Button variant="danger" onClick={() => setResetOpen(true)}>Reset Operational Data</Button></section>}</div>
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 flex gap-2 overflow-x-auto border-t border-slate-200 bg-white p-2 md:hidden">
+      <nav className="mobile-nav fixed inset-x-0 bottom-0 z-30 flex gap-2 overflow-x-auto border-t border-slate-200 bg-white p-2 md:hidden">
         {navItems.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
-            className={`flex min-w-20 flex-col items-center gap-1 rounded-lg px-2 py-2 text-[11px] font-semibold ${active === id ? "bg-blue-50 text-[#146ef5]" : "text-slate-500"}`}
+            className={`flex min-w-20 flex-col items-center gap-1 rounded-lg px-2 py-2 text-xs font-semibold ${active === id ? "bg-blue-50 text-[#146ef5]" : "text-slate-500"}`}
             onClick={() => setActive(id)}
           >
             <Icon size={18} />
@@ -381,21 +339,23 @@ export default function App() {
         ))}
       </nav>
 
-      <footer className="border-t border-slate-200 bg-white px-4 py-4 text-center text-xs text-slate-500 md:ml-72">
-        Prototype for discussion purposes only. Final features and workflows will be based on approved client requirements.
+      <footer className="border-t border-slate-200 bg-white px-4 py-4 text-center text-xs text-slate-500 md:ml-64">
+        Fictional demonstration data and acquisition costs. Prototype by Noderno.
       </footer>
 
       {toast && <div className="fixed right-4 top-20 z-50 rounded-lg bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-xl">{toast}</div>}
+      {resetOpen && permissions.manage && <Drawer title="Reset all operational demo data?" onClose={() => setResetOpen(false)}><p>This clears Stock In, Warehouse and Salesman transfers, Inventory, Sales, Payments, Ledgers, DCRs, expenses and report activity. Plant and system configuration will remain.</p><p className="mt-3">Customers, DTR entries, payroll runs, truck assets, maintenance activity and audit activity will also be cleared. This cannot be undone.</p><div className="mt-6 flex flex-wrap gap-3"><Button variant="secondary" onClick={() => setResetOpen(false)}>Cancel</Button><Button variant="danger" onClick={resetOperationalData}>Reset Operational Data</Button></div></Drawer>}
+      {customerEditor && <CustomerEditor {...customerEditor} customers={customers} productNames={[...new Set([...Object.keys(generalPrice), ...plantConfigs.flatMap((p) => p.products.map((product) => product.productName)), ...trips.flatMap((trip) => trip.products.map((p) => p.name))])]} onSave={saveCustomer} onClose={() => setCustomerEditor(null)} onExisting={(c) => { customerEditor.onSelected?.(c); if (!customerEditor.quick) goCustomer("customers", c.id); setCustomerEditor(null); }} />}
 
       {drawer && (
         <Drawer title={drawerTitle(drawer)} onClose={() => setDrawer(null)}>
           {drawer.type === "inventory" && <InventoryDetail row={drawer.row} />}
-          {drawer.type === "out" && <OutDetail out={drawer.out} />}
+          {drawer.type === "out" && <OutDetail out={drawer.out} customers={customers} />}
           {drawer.type === "payment" && <PaymentDetail payment={drawer.payment} />}
           {drawer.type === "report" && <ReportDetail report={drawer.report} rows={drawer.rows} />}
         </Drawer>
       )}
-    </div>
+    </div></UserContext.Provider></PlantContext.Provider>
   );
 }
 
@@ -417,11 +377,11 @@ function Brand() {
 
 function Nav({ active, setActive }) {
   return (
-    <nav className="space-y-1 px-3">
+    <nav className="space-y-1 px-3 pb-5">
       {navItems.map(({ id, label, icon: Icon }) => (
         <button
           key={id}
-          className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold transition ${active === id ? "bg-blue-50 text-[#146ef5]" : "text-slate-600 hover:bg-slate-100"}`}
+          className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-base font-bold transition ${active === id ? "bg-blue-50 text-[#146ef5]" : "text-slate-600 hover:bg-slate-100"}`}
           onClick={() => setActive(id)}
         >
           <Icon size={19} />
@@ -432,585 +392,91 @@ function Nav({ active, setActive }) {
   );
 }
 
-function periodRangeLabel(period) {
-  const start = new Date(`${period.start}T00:00:00`);
-  const end = new Date(`${period.end}T00:00:00`);
-  const sameMonth = start.getMonth() === end.getMonth();
-  const startMonth = new Intl.DateTimeFormat("en-US", { month: "short" }).format(start);
-  const endMonth = new Intl.DateTimeFormat("en-US", { month: "short" }).format(end);
-  const startDay = start.getDate();
-  const endDay = end.getDate();
-  const year = end.getFullYear();
-  return sameMonth
-    ? `${startMonth} ${startDay}-${endDay}, ${year}`
-    : `${startMonth} ${startDay}-${endMonth} ${endDay}, ${year}`;
-}
-
-function weeklyTotals(period) {
-  const totalSales = period.days.reduce((sum, day) => sum + day.sales, 0);
-  const totalCollections = period.days.reduce((sum, day) => sum + day.collections, 0);
-  const totalExpenses = period.expenses.reduce((sum, item) => sum + item.amount, 0);
-  const wholeChickenKg = period.products.find((item) => item.product === wholeChickenProduct)?.kg || 0;
-  const byProductKg = period.products
-    .filter((item) => item.product !== wholeChickenProduct)
-    .reduce((sum, item) => sum + item.kg, 0);
-  const strongestDay = period.days.reduce((best, day) => (day.sales > best.sales ? day : best), period.days[0]);
-  const weakestDay = period.days.reduce((low, day) => (day.sales < low.sales ? day : low), period.days[0]);
-  return {
-    totalSales,
-    totalCollections,
-    totalExpenses,
-    wholeChickenKg,
-    byProductKg,
-    strongestDay,
-    weakestDay,
-    averageDailySales: totalSales / period.days.length,
-    collectionRate: totalSales ? (totalCollections / totalSales) * 100 : 0,
-    closingReceivables: period.receivables.opening + period.receivables.newCreditSales - period.receivables.collectionsApplied,
-  };
-}
-
-function tripsForPeriod(trips, period) {
-  return trips
-    .filter((trip) => trip.date >= period.start && trip.date <= period.end)
-    .sort((a, b) => a.date.localeCompare(b.date));
-}
-
-function previousWeekPeriod(period) {
-  const start = new Date(`${period.start}T00:00:00`);
-  const end = new Date(`${period.end}T00:00:00`);
-  start.setDate(start.getDate() - 7);
-  end.setDate(end.getDate() - 7);
-  return {
-    start: start.toISOString().slice(0, 10),
-    end: end.toISOString().slice(0, 10),
-  };
-}
-
-function tripProductTotals(trip) {
-  const wholeChickenStockIn = trip.products
-    .filter((item) => item.name === wholeChickenProduct)
-    .reduce((sum, item) => sum + Number(item.originalQty || 0), 0);
-  const byProductStockIn = trip.products
-    .filter((item) => item.name !== wholeChickenProduct)
-    .reduce((sum, item) => sum + Number(item.originalQty || 0), 0);
-  return {
-    wholeChickenStockIn,
-    byProductStockIn,
-    totalStockIn: wholeChickenStockIn + byProductStockIn,
-  };
-}
-
-function weeklyTripStats(trips, period, inventoryRows = []) {
-  const periodTrips = tripsForPeriod(trips, period);
-  const rows = periodTrips.map((trip) => {
-    const totals = tripProductTotals(trip);
-    const remainingStock = inventoryRows
-      .filter((row) => row.tripId === trip.id)
-      .reduce((sum, row) => sum + Number(row.remainingQty || 0), 0);
-    return { ...trip, ...totals, remainingStock };
-  });
-  const plantMap = rows.reduce((map, trip) => {
-    const current = map.get(trip.plant) || {
-      plant: trip.plant,
-      trips: 0,
-      wholeChickenStockIn: 0,
-      byProductStockIn: 0,
-      totalStockIn: 0,
-    };
-    current.trips += 1;
-    current.wholeChickenStockIn += trip.wholeChickenStockIn;
-    current.byProductStockIn += trip.byProductStockIn;
-    current.totalStockIn += trip.totalStockIn;
-    map.set(trip.plant, current);
-    return map;
-  }, new Map());
-  const plantBreakdown = [...plantMap.values()].sort((a, b) => b.trips - a.trips || a.plant.localeCompare(b.plant));
-  return {
-    rows,
-    plantBreakdown,
-    totalTrips: rows.length,
-    wholeChickenStockIn: rows.reduce((sum, trip) => sum + trip.wholeChickenStockIn, 0),
-    byProductStockIn: rows.reduce((sum, trip) => sum + trip.byProductStockIn, 0),
-    totalStockIn: rows.reduce((sum, trip) => sum + trip.totalStockIn, 0),
-  };
-}
-
-function operatingExpenseTotal(expenses, period) {
-  const baseline = (period.expenses || []).reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
-  const liveAdditions = expenses
-    .filter((expense) => expense.date >= period.start && expense.date <= period.end)
-    .filter((expense) => !initialExpenses.some((seed) => seed.id === expense.id))
-    .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
-  return baseline + liveAdditions;
-}
-
-function weeklyFinancialSummary(period, outs, trips, expenses) {
-  const financials = periodOutFinancials(outs, trips, period);
-  const recordedOperatingExpenses = operatingExpenseTotal(expenses, period);
-  return {
-    ...financials,
-    recordedOperatingExpenses,
-    operatingProfitEstimate: financials.grossProfit - recordedOperatingExpenses,
-  };
-}
-
-function marginLabel(netSales, grossProfit) {
-  if (!netSales) return "0.00%";
-  return `${((grossProfit / netSales) * 100).toFixed(2)}%`;
-}
-
-function aggregateProfit(lines, keyFn) {
-  const map = lines.reduce((items, line) => {
-    const key = keyFn(line);
-    const current = items.get(key) || {
-      key,
-      qty: 0,
-      netSales: 0,
-      cogs: 0,
-      grossProfit: 0,
-    };
-    current.qty += Number(line.qty || 0);
-    current.netSales += Number(line.revenue || 0);
-    current.cogs += Number(line.cogs || 0);
-    current.grossProfit += Number(line.grossProfit || 0);
-    items.set(key, current);
-    return items;
-  }, new Map());
-  return [...map.values()]
-    .map((item) => ({ ...item, grossMargin: item.netSales ? (item.grossProfit / item.netSales) * 100 : 0 }))
-    .sort((a, b) => b.netSales - a.netSales);
-}
-
-function tripPlantBreakdownLabel(stats) {
-  if (!stats.plantBreakdown.length) return "No trips in selected week";
-  return stats.plantBreakdown.map((plant) => `${plant.trips} ${plant.plant}`).join(" • ");
-}
-
-function tripChangeLabel(current, previous) {
-  const difference = current.totalTrips - previous.totalTrips;
-  if (difference === 0) return "No change vs previous week";
-  return `${difference > 0 ? "+" : ""}${difference} vs last week`;
-}
-
-function percentChange(current, previous) {
-  if (!previous) return "0.0%";
-  const value = ((current - previous) / previous) * 100;
-  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
-}
-
-function PeriodControls({ periodKey, setPeriodKey, showCustom = true }) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {[
-        ["thisWeek", "This Week"],
-        ["lastWeek", "Last Week"],
-        ["custom", "Custom"],
-      ].map(([key, label]) => (
-        <Button
-          key={key}
-          variant={periodKey === key ? "primary" : "secondary"}
-          className={!showCustom && key === "custom" ? "hidden" : ""}
-          onClick={() => setPeriodKey(key)}
-        >
-          {label}
-        </Button>
-      ))}
-    </div>
-  );
-}
-
-function Dashboard({ inventoryRows, collections, outs, trips, expenses, ledgerEntries, discrepancies, onNavigate }) {
-  const [periodKey, setPeriodKey] = useState("thisWeek");
-  const activePeriodKey = periodKey === "custom" ? "thisWeek" : periodKey;
-  const period = weeklyBusinessData[activePeriodKey];
-  const previousPeriod = previousWeekPeriod(period);
-  const totals = weeklyTotals(period);
-  const financials = weeklyFinancialSummary(period, outs, trips, expenses);
-  const previousFinancials = weeklyFinancialSummary(previousPeriod, outs, trips, expenses);
-  const productProfit = aggregateProfit(financials.lines, (line) => line.product);
-  const wholeChickenOut = productProfit.find((item) => item.key === wholeChickenProduct)?.qty || 0;
-  const byProductOut = productProfit.filter((item) => item.key !== wholeChickenProduct).reduce((sum, item) => sum + item.qty, 0);
-  const tripStats = weeklyTripStats(trips, period, inventoryRows);
-  const previousTripStats = weeklyTripStats(trips, previousPeriod, inventoryRows);
-  const todayOps = weeklyBusinessData.thisWeek.today;
-  const openDiscrepancies = discrepancies.filter((item) => item.status === "Open");
-  const recentOuts = outs.slice(-3).reverse();
-  const recentCollections = collections.filter((collection) => collection.date === today).slice(0, 3);
-  const todaysTrips = trips.filter((trip) => trip.date === today);
-  const maxDaily = Math.max(...period.days.flatMap((day) => [day.sales, day.collections]));
-  const plantProfit = aggregateProfit(financials.lines, (line) => line.plant || "Unassigned");
-  const productOutRows = productProfit.length ? productProfit : period.products.map((item) => ({ key: item.product, qty: item.kg, netSales: 0, cogs: 0, grossProfit: 0, grossMargin: 0 }));
-  const plantOutRows = plantProfit.length ? plantProfit : period.plants.map((item) => ({ key: item.plant, qty: item.kg, netSales: item.sales, cogs: 0, grossProfit: 0, grossMargin: 0 }));
-  const productMax = Math.max(...productOutRows.map((item) => item.qty), 1);
-  const plantMax = Math.max(...plantOutRows.map((item) => item.netSales), 1);
-  const plantRemaining = (plantName) =>
-    inventoryRows
-      .filter((row) => row.plant === plantName)
-      .reduce((sum, row) => sum + row.remainingQty, 0);
-
-  return (
-    <>
-      <SectionHeader
-        title="Dashboard"
-        eyebrow="This Week -> Today -> Attention Required"
-        action={<PeriodControls periodKey={periodKey} setPeriodKey={setPeriodKey} />}
-      />
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-sm font-bold text-[#146ef5]">{periodKey === "custom" ? "Custom Range" : period.label}</p>
-            <h2 className="text-2xl font-bold text-slate-950">{periodRangeLabel(period)}</h2>
-            <p className="mt-1 text-sm text-slate-500">Weekly business performance first, with daily operations below.</p>
-          </div>
-          {periodKey === "custom" && (
-            <div className="grid gap-2 sm:grid-cols-2">
-              <input className={inputClass()} type="date" defaultValue={period.start} aria-label="Custom start date" />
-              <input className={inputClass()} type="date" defaultValue={period.end} aria-label="Custom end date" />
-            </div>
-          )}
-        </div>
-        <h3 className="mb-3 text-sm font-bold uppercase text-slate-500">Financial Performance</h3>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Gross Sales" value={currency(financials.grossSales)} detail={`${percentChange(financials.grossSales, previousFinancials.grossSales)} vs previous week`} icon={ReceiptText} />
-          <StatCard label="Net Sales" value={currency(financials.netSales)} detail="No sales deductions in demo data" icon={ClipboardCheck} />
-          <StatCard label="COGS" value={currency(financials.cogs)} detail="Exact Plant + Trip + Product cost" icon={PackageCheck} tone="amber" />
-          <StatCard label="Gross Profit" value={currency(financials.grossProfit)} detail={`${financials.grossMargin.toFixed(2)}% gross margin`} icon={BarChart3} tone="green" />
-          <StatCard label="Gross Margin" value={`${financials.grossMargin.toFixed(2)}%`} detail="Gross Profit ÷ Net Sales" icon={ReceiptText} />
-          <StatCard label="Expenses" value={currency(financials.recordedOperatingExpenses)} detail={`${percentChange(financials.recordedOperatingExpenses, previousFinancials.recordedOperatingExpenses)} vs previous week`} icon={WalletCards} tone="red" />
-          <StatCard label="Operating Profit Estimate" value={currency(financials.operatingProfitEstimate)} detail="Gross Profit minus recorded expenses" icon={Banknote} tone="green" />
-        </div>
-        <h3 className="mb-3 mt-5 text-sm font-bold uppercase text-slate-500">Operations</h3>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <StatCard label="Trips This Week" value={`${tripStats.totalTrips} Trips`} detail={`${tripPlantBreakdownLabel(tripStats)} • ${tripChangeLabel(tripStats, previousTripStats)}`} icon={Truck} />
-          <StatCard label="Whole Chicken OUT" value={kg(wholeChickenOut)} detail="From weekly OUT lines" icon={PackageCheck} />
-          <StatCard label="By-products OUT" value={kg(byProductOut)} detail="Tracked as separate products" icon={ClipboardList} tone="amber" />
-          <StatCard label="Collections" value={currency(totals.totalCollections)} detail="Payments received, not sales" icon={Banknote} tone="green" />
-          <StatCard label="Receivables" value={currency(totals.closingReceivables)} detail={`New receivables ${currency(period.receivables.newCreditSales)}`} icon={Users} tone="amber" />
-        </div>
-      </section>
-
-      <section className="mt-5 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h2 className="font-bold text-slate-950">Trips This Week</h2>
-            <p className="text-sm text-slate-500">Trip Date, Plant, Whole Chicken, By-products, and Total Stock In are calculated from Trip records.</p>
-          </div>
-          <Badge tone="blue">{tripStats.totalTrips} trips</Badge>
-        </div>
-        <ResponsiveTable
-          columns={["Trip Date", "Plant", "Whole Chicken", "By-products", "Total Stock In"]}
-          rows={tripStats.rows.map((trip) => [
-            shortDate(trip.date).replace(", 2026", ""),
-            trip.plant,
-            kg(trip.wholeChickenStockIn),
-            kg(trip.byProductStockIn),
-            kg(trip.totalStockIn),
-          ])}
-        />
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-          <StatMini label="Total Trips" value={tripStats.totalTrips} />
-          {tripStats.plantBreakdown.map((plant) => (
-            <StatMini key={plant.plant} label={plant.plant} value={plant.trips} />
-          ))}
-          <StatMini label="Whole Chicken Stocked In" value={kg(tripStats.wholeChickenStockIn)} />
-          <StatMini label="By-products Stocked In" value={kg(tripStats.byProductStockIn)} />
-          <StatMini label="Total Stock In" value={kg(tripStats.totalStockIn)} />
-        </div>
-      </section>
-
-      <div className="mt-5 grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
-        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h2 className="font-bold text-slate-950">Weekly Sales & Collections</h2>
-              <p className="text-sm text-slate-500">Monday-Sunday comparison</p>
-            </div>
-            <div className="flex gap-2 text-xs font-bold">
-              <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-[#146ef5]" /> OUT / Sales</span>
-              <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-emerald-500" /> Collections</span>
-            </div>
-          </div>
-          <div className="space-y-3">
-            {period.days.map((day) => (
-              <div key={day.date} className="grid gap-2 md:grid-cols-[90px_1fr_110px] md:items-center">
-                <div className="text-sm font-bold text-slate-700">{day.day}</div>
-                <div className="space-y-1">
-                  <div className="h-3 overflow-hidden rounded-full bg-slate-100">
-                    <div className="h-full rounded-full bg-[#146ef5]" style={{ width: `${(day.sales / maxDaily) * 100}%` }} />
-                  </div>
-                  <div className="h-3 overflow-hidden rounded-full bg-slate-100">
-                    <div className="h-full rounded-full bg-emerald-500" style={{ width: `${(day.collections / maxDaily) * 100}%` }} />
-                  </div>
-                </div>
-                <div className="flex justify-between gap-3 text-xs font-bold text-slate-600 md:block md:text-right">
-                  <span>{currency(day.sales)}</span>
-                  <span className="text-emerald-700">{currency(day.collections)}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <StatMini label="Strongest sales day" value={`${totals.strongestDay.day} ${currency(totals.strongestDay.sales)}`} />
-            <StatMini label="Weakest sales day" value={`${totals.weakestDay.day} ${currency(totals.weakestDay.sales)}`} />
-            <StatMini label="Collections pace" value={`${totals.collectionRate.toFixed(1)}% of sales`} />
-          </div>
-        </section>
-
-        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="mb-3 font-bold text-slate-950">Products OUT This Week</h2>
-          <div className="space-y-3">
-            {productOutRows.map((item) => (
-              <div key={item.key}>
-                <div className="mb-1 flex items-center justify-between text-sm">
-                  <span className="font-semibold text-slate-700">{item.key}</span>
-                  <span className="font-bold text-slate-950">{kg(item.qty)}</span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                  <div className={`h-full rounded-full ${item.key === wholeChickenProduct ? "bg-[#146ef5]" : "bg-amber-500"}`} style={{ width: `${productMax ? (item.qty / productMax) * 100 : 0}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
-
-      <div className="mt-5 grid gap-5 xl:grid-cols-2">
-        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="mb-3 font-bold text-slate-950">OUT by Plant</h2>
-          <div className="space-y-3">
-            {plantOutRows.map((plant) => (
-              <button key={plant.key} className="w-full rounded-lg bg-slate-50 p-3 text-left hover:bg-blue-50" onClick={() => onNavigate("inventory")}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-bold text-slate-950">{plant.key}</p>
-                    <p className="text-sm text-slate-500">{kg(plant.qty)} OUT</p>
-                  </div>
-                  <p className="font-bold text-slate-950">{currency(plant.netSales)}</p>
-                </div>
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-white">
-                  <div className="h-full rounded-full bg-[#146ef5]" style={{ width: `${(plant.netSales / plantMax) * 100}%` }} />
-                </div>
-                <p className="mt-2 text-xs font-semibold text-slate-500">
-                  Gross Profit: {currency(plant.grossProfit)} • Remaining inventory: {plant.key === "Other" ? "Demo plant group" : kg(plantRemaining(plant.key))}
-                </p>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="mb-3 font-bold text-slate-950">Top Customers This Week</h2>
-          <div className="space-y-2">
-            {period.customers.map((customer, index) => (
-              <div key={customer.customerId} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 p-3">
-                <div>
-                  <p className="font-bold text-slate-950">{index + 1}. {getCustomerName(initialCustomers, customer.customerId)}</p>
-                  <p className="text-sm text-slate-500">Outstanding {currency(customer.outstanding)}</p>
-                </div>
-                <p className="font-bold text-slate-950">{currency(customer.sales)}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
-
-      <section className="mt-5 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-xl font-bold text-slate-950">Today's Operations</h2>
-            <p className="text-sm text-slate-500">Daily operational snapshot remains secondary to the weekly view.</p>
-          </div>
-          <Button variant="secondary" onClick={() => onNavigate("dcr")}>
-            <FileClock size={18} /> Open DCR
-          </Button>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-          <StatMini label="OUT Today" value={currency(todayOps.outToday)} />
-          <StatMini label="Collections Today" value={currency(todayOps.collectionsToday)} />
-          <StatMini label="Cash Pending Remittance" value={currency(todayOps.cashPendingRemittance)} />
-          <StatMini label="Trips Received Today" value={trips.filter((trip) => trip.date === today).length} />
-          <StatMini label="DCR Status" value={todayOps.dcrStatus} />
-          <StatMini label="Open Discrepancies" value={todayOps.openDiscrepancies} />
-        </div>
-        <div className="mt-4 grid gap-4 lg:grid-cols-4">
-          <TodayActivity title="Recent OUT transactions" items={recentOuts.map((out) => `${out.ref} - ${getCustomerName(initialCustomers, out.customerId)} - ${currency(out.total)}`)} empty="No recent OUT transactions." />
-          <TodayActivity title="Recent collections" items={recentCollections.map((collection) => `${getCustomerName(initialCustomers, collection.customerId)} - ${collection.method} - ${currency(collection.amount)}`)} empty="No collections today." />
-          <TodayActivity title="Today's trips" items={todaysTrips.map((trip) => `${trip.plant} - ${trip.code}`)} empty="No trips recorded today yet." />
-          <TodayActivity title="Agent DCR status" items={["Pedro Reyes - Submitted", "Maria Santos - Not submitted", "Juan Cruz - Submitted"]} />
-        </div>
-      </section>
-
-      <section className="mt-5 rounded-lg border border-rose-200 bg-rose-50 p-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="font-bold text-rose-950">Attention Required</h2>
-          <Badge tone="red">{openDiscrepancies.length || todayOps.openDiscrepancies} open</Badge>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          {[
-            ["Cash Shortage", "Pedro Reyes", "₱1,000 SHORT"],
-            ["Bank Payment Awaiting Verification", "Owner Bank Account", "₱30,000"],
-            ["Inventory Difference", "Bounty / Aug 15 / Whole Chicken", "-15 kg"],
-            ["Manual Price Override", "ABC Restaurant", "₱184 -> ₱180/kg"],
-            ["DCR Not Submitted", "Maria Santos", "Sunday DCR pending"],
-          ].map(([title, detail, value]) => (
-            <div key={title} className="rounded-lg bg-white p-3 shadow-sm">
-              <p className="text-sm font-bold text-rose-900">{title}</p>
-              <p className="mt-1 text-xs font-semibold text-slate-500">{detail}</p>
-              <p className="mt-3 font-bold text-slate-950">{value}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-    </>
-  );
-}
-
-function TodayActivity({ title, items, empty }) {
-  return (
-    <div className="rounded-lg bg-slate-50 p-3">
-      <p className="mb-2 text-sm font-bold text-slate-700">{title}</p>
-      <div className="space-y-2">
-        {items.length ? (
-          items.map((item) => <p key={item} className="text-sm font-semibold text-slate-600">{item}</p>)
-        ) : (
-          <p className="text-sm font-semibold text-slate-400">{empty}</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function Trips({ trips, setTrips, addAudit, pushToast }) {
-  const [form, setForm] = useState(defaultTripForm);
-  const formTripAcquisitionCost = form.products.reduce(
-    (sum, item) => sum + Number(item.qty || 0) * Number(item.costPerKg || 0),
-    0
-  );
+function Trips({ trips, setTrips, addAudit, pushToast, plantConfigs }) {
+  const [form, setForm] = useState(() => tripForm(plantConfigs.find((p) => p.active)));
+  const plant = plantConfigs.find((p) => p.id === form.plantId);
+  const productOptions = activeProducts(plant);
+  const [error, setError] = useState("");
+  const totalCost = sum(form.products, (item) => Number(item.qty) * (item.acquisitionType === "Free from Plant" ? 0 : Number(item.costPerKg)));
   function updateProduct(index, patch) {
-    setForm((current) => ({
-      ...current,
-      products: current.products.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)),
-    }));
+    setForm((current) => ({ ...current, products: current.products.map((item, i) => i === index ? { ...item, ...patch } : item) }));
   }
   function confirmStockIn() {
-    const suffix = form.plant.slice(0, 3).toUpperCase().replace(/\W/g, "");
-    const code = `TR-${form.date.replaceAll("-", "").slice(0, 6)}-${suffix}-${trips.length + 1}`;
+    const problem = validatePlantStock(form, plant) || validateStock(form);
+    if (problem) return setError(problem);
     const trip = {
-      id: `trip-${Date.now()}`,
-      code,
-      plant: form.plant,
-      date: form.date,
-      reference: form.reference,
-      deliveryNote: form.deliveryNote,
-      notes: form.notes,
-      products: form.products
-        .filter((item) => item.name && Number(item.qty) > 0)
-        .map((item) => ({ name: item.name, originalQty: Number(item.qty), costPerKg: Number(item.costPerKg || 0) })),
+      id: uid("trip"), code: "TR-" + form.date.replaceAll("-", "") + "-" + plant.shortCode + "-" + (trips.length + 1),
+      plantId: plant.id, plant: plant.name, date: form.date, reference: form.reference, deliveryNote: form.deliveryNote, notes: form.notes,
+      products: form.products.map((item) => stockSnapshot(item, plant)),
     };
-    setTrips((items) => [trip, ...items]);
-    addAudit(`Confirmed Stock In ${code}`, "Owner / Admin");
-    pushToast(`${code} added to inventory with ${currency(tripAcquisitionCost(trip))} acquisition cost`);
+    setTrips((items) => [trip, ...items]); setError(""); setForm(tripForm(plant));
+    addAudit("Confirmed Stock In " + trip.code, "Owner / Admin");
+    pushToast(trip.code + " added to Warehouse");
   }
-  return (
-    <>
-      <SectionHeader title="Trips / Stock In" eyebrow="Admin workflow" action={<Button onClick={confirmStockIn}><Plus size={18} />Confirm Stock In</Button>} />
-      <div className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <h2 className="mb-4 font-bold">+ New Trip / Stock In</h2>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Plant Origin">
-              <select className={inputClass()} value={form.plant} onChange={(e) => setForm({ ...form, plant: e.target.value })}>{plants.map((plant) => <option key={plant}>{plant}</option>)}</select>
-            </Field>
-            <Field label="Trip Date">
-              <input className={inputClass()} type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
-            </Field>
-            <Field label="Reference Number">
-              <input className={inputClass()} value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} />
-            </Field>
-            <Field label="Delivery Note">
-              <input className={inputClass()} value={form.deliveryNote} onChange={(e) => setForm({ ...form, deliveryNote: e.target.value })} />
-            </Field>
-          </div>
-          <Field label="Notes">
-            <textarea className={`${inputClass()} mt-1 min-h-24 py-3`} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-          </Field>
-          <div className="mt-4 space-y-2">
-            <p className="text-sm font-bold text-slate-700">Products, Quantities, and Acquisition Cost</p>
-            {form.products.map((item, index) => (
-              <div key={`${item.name}-${index}`} className="grid gap-2 xl:grid-cols-[1fr_120px_120px_130px_44px]">
-                <Field label={index === 0 ? "Product" : " "}>
-                  <select className={inputClass()} value={item.name} onChange={(e) => updateProduct(index, { name: e.target.value })}>{products.map((product) => <option key={product}>{product}</option>)}</select>
-                </Field>
-                <Field label={index === 0 ? "Quantity" : " "}>
-                  <input className={inputClass()} type="number" min="0" value={item.qty} onChange={(e) => updateProduct(index, { qty: e.target.value })} />
-                </Field>
-                <Field label={index === 0 ? "Cost / kg" : " "}>
-                  <input className={inputClass()} type="number" min="0" step="0.01" value={item.costPerKg} onChange={(e) => updateProduct(index, { costPerKg: e.target.value })} />
-                </Field>
-                <div>
-                  <p className="mb-1.5 text-sm font-semibold text-slate-700">{index === 0 ? "Total Cost" : " "}</p>
-                  <div className="flex min-h-11 items-center justify-end rounded-lg bg-slate-50 px-3 text-sm font-bold text-slate-950">
-                    {currency(Number(item.qty || 0) * Number(item.costPerKg || 0))}
-                  </div>
-                </div>
-                <Button variant="ghost" className="px-0" onClick={() => setForm({ ...form, products: form.products.filter((_, itemIndex) => itemIndex !== index) })} aria-label="Remove product">
-                  <X size={18} />
-                </Button>
-              </div>
-            ))}
-            <Button variant="secondary" className="w-full" onClick={() => setForm({ ...form, products: [...form.products, { name: "Other", qty: 0, costPerKg: 0 }] })}>
-              <Plus size={18} /> Add Product
-            </Button>
-          </div>
-          <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
-            <p className="text-sm font-semibold text-blue-800">Total Trip Acquisition Cost</p>
-            <p className="mt-1 text-2xl font-bold text-blue-950">{currency(formTripAcquisitionCost)}</p>
-          </div>
-        </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <h2 className="mb-4 font-bold">Recent Trips</h2>
-          <div className="space-y-3">
-            {trips.map((trip) => (
-              <div key={trip.id} className="rounded-lg border border-slate-200 p-3">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <p className="font-bold text-slate-950">{trip.code}</p>
-                    <p className="text-sm text-slate-500">{trip.plant} - {shortDate(trip.date)}</p>
-                  </div>
-                  <Badge tone="green">Stock In</Badge>
-                </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {trip.products.map((product) => (
-                    <div key={product.name} className="rounded-md bg-slate-50 px-3 py-2 text-sm">
-                      <span className="font-semibold">{product.name}</span>: {kg(product.originalQty)} • {currency(product.costPerKg)}/kg
-                    </div>
-                  ))}
-                </div>
-                <p className="mt-3 text-sm font-bold text-slate-700">Total Acquisition Cost: {currency(tripAcquisitionCost(trip))}</p>
-              </div>
-            ))}
-          </div>
-        </div>
+  return <>
+    <SectionHeader title="Plants" />
+    <section className="report-section">
+      <h2 className="mb-4 text-lg font-bold">New Trip / Stock In</h2>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <Field label="Plant Origin"><select className={inputClass()} value={form.plantId} onChange={(e) => { const next = plantConfigs.find((p) => p.id === e.target.value); setForm({ ...form, plantId: next.id, plant: next.name, products: activeProducts(next).length ? [stockLine(activeProducts(next)[0])] : [] }); setError(""); }}><option value="" disabled>Select Plant</option>{plantConfigs.filter((p) => p.active).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
+        <Field label="Trip Date"><input className={inputClass()} type="date" value={form.date} onInput={(e) => setForm({ ...form, date: e.target.value })} /></Field>
+        <Field label="Reference"><input className={inputClass()} value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} /></Field>
+        <Field label="Delivery Note"><input className={inputClass()} value={form.deliveryNote} onChange={(e) => setForm({ ...form, deliveryNote: e.target.value })} /></Field>
+        <Field label="Notes"><input className={inputClass()} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
       </div>
-    </>
-  );
+      <div className="mt-4 space-y-4">
+        {form.products.map((item, index) => { const config = productOptions.find((p) => p.productId === item.productId); return <div key={index} className="stock-line">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <Field label="Product"><select className={inputClass()} value={item.productId} onChange={(e) => updateProduct(index, stockLine(productOptions.find((p) => p.productId === e.target.value)))}>{productOptions.map((p) => <option key={p.productId} value={p.productId}>{p.productName}</option>)}</select></Field>
+            {config?.usesSizeCodes && <Field label="Size/Code"><select className={inputClass()} value={item.sizeCode} onChange={(e) => updateProduct(index, { sizeCode: e.target.value })}><option value="">Select Code</option>{activeCodes(config).map((c) => <option key={c.id} value={c.id}>{optionLabel(c)}</option>)}</select></Field>}
+            {config?.usesClassTypes && <Field label="Class Type"><select className={inputClass()} value={item.classType} onChange={(e) => updateProduct(index, { classType: e.target.value })}><option value="">Select Class Type</option>{activeClassTypes(config).map((c) => <option key={c.id} value={c.id}>{optionLabel(c)}</option>)}</select></Field>}
+            {config?.usesBags && <Field label="Bags"><input className={inputClass()} type="number" min="0" step="1" value={item.bags} onChange={(e) => updateProduct(index, { bags: e.target.value })} placeholder="Not recorded" /></Field>}
+            {config?.usesHeadCount && <Field label="Heads Count"><input className={inputClass()} type="number" min="0" step="1" value={item.headCount} onChange={(e) => updateProduct(index, { headCount: e.target.value })} placeholder="Not recorded" /></Field>}
+            <Field label="Total KG"><input className={inputClass()} type="number" min="0" step="0.01" value={item.qty} onChange={(e) => updateProduct(index, { qty: e.target.value })} /></Field>
+            <Field label="Acquisition Type"><select className={inputClass()} value={item.acquisitionType} onChange={(e) => updateProduct(index, { acquisitionType: e.target.value, costPerKg: e.target.value === "Free from Plant" ? 0 : "" })}><option>Purchased</option>{config?.allowsFreeFromPlant && <option>Free from Plant</option>}</select></Field>
+            <Field label="Cost/kg"><MoneyInput disabled={item.acquisitionType === "Free from Plant"} value={item.costPerKg} onChange={(e) => updateProduct(index, { costPerKg: e.target.value })} /></Field>
+            <StatMini label="Total Acquisition Cost" value={currency(Number(item.qty || 0) * Number(item.costPerKg || 0))} />
+            <div className="flex items-end gap-2">{item.acquisitionType === "Free from Plant" && <Badge tone="green">FREE FROM PLANT</Badge>}<Button variant="ghost" disabled={form.products.length === 1} onClick={() => setForm({ ...form, products: form.products.filter((_, i) => i !== index) })} aria-label="Remove product"><X size={18} /></Button></div>
+          </div>
+        </div>; })}
+        {!productOptions.length && <p className="text-slate-600">No active products configured for this plant.</p>}
+        <Button variant="secondary" disabled={!productOptions.length} onClick={() => setForm({ ...form, products: [...form.products, stockLine(productOptions[0])] })}><Plus size={18} />Add Product</Button>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <StatMini label="Total Trip Acquisition Cost" value={currency(totalCost)} />
+        <StatMini label="Total Bags" value={sum(form.products, "bags")} /><StatMini label="Total KG" value={kg(sum(form.products, "qty"))} />
+        <StatMini label="Purchased KG" value={kg(sum(form.products.filter((item) => item.acquisitionType === "Purchased"), "qty"))} />
+        <StatMini label="Free KG" value={kg(sum(form.products.filter((item) => item.acquisitionType === "Free from Plant"), "qty"))} />
+      </div>
+      {error && <p role="alert" className="mt-3 font-semibold text-rose-700">{error}</p>}
+      <Button className="mt-4" disabled={!plant?.active || !productOptions.length} onClick={confirmStockIn}><ClipboardCheck size={18} />Confirm Stock In</Button>
+    </section>
+    <section className="report-section"><h2 className="mb-4 text-lg font-bold">Plant Trips</h2>
+      {[...new Set(trips.map((trip) => trip.plant))].map((plant) => <div key={plant} className="mb-6">
+        <h3 className="mb-3"><PlantName name={plant} /></h3>
+        <div className="space-y-3">{trips.filter((trip) => trip.plant === plant).sort((a, b) => b.date.localeCompare(a.date)).map((trip) => <details key={trip.id} className="rounded-lg border border-slate-200 bg-white p-4">
+          <summary className="cursor-pointer font-bold">{shortDate(trip.date)} / {trip.code} / {kg(sum(trip.products, "originalQty"))} / {currency(tripAcquisitionCost(trip))}</summary>
+          <div className="mt-3"><ResponsiveTable columns={["Product", "Size/Code", "Class Type", "Bags", "Heads", "KG", "Acquisition Type", "Cost/kg", "Total Cost"]} rows={trip.products.map((item) => [item.name, productLabel("", item.sizeCode, "", item.sizeCodeLabel) || "-", productLabel("", "", item.classType, "", item.classTypeLabel) || "-", item.bags ?? "Not recorded", item.headCount ?? "Not recorded", kg(item.originalQty), item.acquisitionType === "Free from Plant" ? <Badge tone="green">FREE FROM PLANT</Badge> : "Purchased", currency(item.costPerKg), currency(item.originalQty * item.costPerKg)])} /></div>
+        </details>)}</div>
+      </div>)}
+    </section>
+  </>;
 }
 
-function Inventory({ inventoryRows, onSelect }) {
+function Inventory({ inventoryRows, onSelect, onStockIn }) {
   const [selectedPlant, setSelectedPlant] = useState(null);
   const [plantQuery, setPlantQuery] = useState("");
   const [tripFilter, setTripFilter] = useState("All");
   const [productQuery, setProductQuery] = useState("");
   const [productMode, setProductMode] = useState("All Products");
 
-  const activeRows = inventoryRows.filter((row) => row.remainingQty > 0);
+  const activeRows = inventoryRows;
   const plantSummaries = [...new Set(activeRows.map((row) => row.plant))]
     .map((plantName) => {
       const rows = activeRows.filter((row) => row.plant === plantName);
       const totalRemaining = rows.reduce((sum, row) => sum + row.remainingQty, 0);
       const wholeChickenStock = rows
-        .filter((row) => row.product === wholeChickenProduct)
+        .filter(isWholeChicken)
         .reduce((sum, row) => sum + row.remainingQty, 0);
       return {
         plant: plantName,
@@ -1028,7 +494,7 @@ function Inventory({ inventoryRows, onSelect }) {
   const selectedRows = activeRows.filter((row) => row.plant === selectedPlant);
   const selectedTotal = selectedRows.reduce((sum, row) => sum + row.remainingQty, 0);
   const selectedWholeChicken = selectedRows
-    .filter((row) => row.product === wholeChickenProduct)
+    .filter(isWholeChicken)
     .reduce((sum, row) => sum + row.remainingQty, 0);
   const plantSummary = selectedPlant
     ? {
@@ -1047,14 +513,14 @@ function Inventory({ inventoryRows, onSelect }) {
       map.set(row.tripId, { tripId: row.tripId, tripDate: row.tripDate, tripCode: row.tripCode });
     }
     return map;
-  }, new Map()).values()].sort((a, b) => a.tripDate.localeCompare(b.tripDate) || a.tripCode.localeCompare(b.tripCode));
+  }, new Map()).values()].sort(compareInventoryTrips);
   const productFilteredRows = selectedRows.filter((row) => {
     const matchesTrip = tripFilter === "All" || row.tripId === tripFilter;
-    const matchesProductText = `${row.product} ${row.tripCode}`.toLowerCase().includes(productQuery.toLowerCase());
+    const matchesProductText = [row.product, row.sizeCode, row.tripCode].filter(Boolean).join(" ").toLowerCase().includes(productQuery.toLowerCase());
     const matchesMode =
       productMode === "All Products" ||
-      (productMode === "Whole Chicken" && row.product === wholeChickenProduct) ||
-      (productMode === "By-products" && row.product !== wholeChickenProduct);
+      (productMode === "Whole Chicken" && isWholeChicken(row)) ||
+      (productMode === "By-products" && !isWholeChicken(row));
     return matchesTrip && matchesProductText && matchesMode;
   });
   const tripGroups = tripOptions
@@ -1062,11 +528,7 @@ function Inventory({ inventoryRows, onSelect }) {
       ...trip,
       rows: productFilteredRows
         .filter((row) => row.tripId === trip.tripId)
-        .sort((a, b) => {
-          if (a.product === wholeChickenProduct) return -1;
-          if (b.product === wholeChickenProduct) return 1;
-          return products.indexOf(a.product) - products.indexOf(b.product);
-        }),
+        .sort(compareInventoryProducts),
     }))
     .filter((group) => group.rows.length);
 
@@ -1099,14 +561,14 @@ function Inventory({ inventoryRows, onSelect }) {
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-xl font-bold text-slate-950">{summary.plant}</h2>
-                  <p className="mt-1 text-sm font-semibold text-slate-500">{summary.activeTrips} active trips</p>
+                  <h2><PlantName name={summary.plant} /></h2>
+                  <p className="mt-1 text-sm font-semibold text-slate-500">{summary.activeTrips} trips / {summary.rows.filter((row) => row.remainingQty === 0).length} sold out</p>
                 </div>
                 <div className="rounded-lg bg-blue-50 p-2 text-[#146ef5]">
                   <PackageCheck size={22} />
                 </div>
               </div>
-              <p className="mt-4 text-sm font-semibold text-slate-600">Whole Chicken + By-products</p>
+              <p className="mt-4 text-sm font-semibold text-slate-600">{[summary.rows.some(isWholeChicken) && "Whole Chicken", summary.rows.some((row) => !isWholeChicken(row)) && "By-products"].filter(Boolean).join(" + ")}</p>
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <StatMini label="Total remaining stock" value={kg(summary.totalRemaining)} />
                 <StatMini label="Whole Chicken" value={kg(summary.wholeChickenStock)} />
@@ -1120,7 +582,7 @@ function Inventory({ inventoryRows, onSelect }) {
           ))}
           {!plantSummaries.length && (
             <div className="rounded-lg border border-slate-200 bg-white p-5 text-sm font-semibold text-slate-500">
-              No active plants match the search.
+              {inventoryRows.length ? "No plants match the search." : <><p>No stock received yet.</p><Button className="mt-3" onClick={onStockIn}><Plus size={17} />Stock In Product</Button></>}
             </div>
           )}
         </div>
@@ -1131,7 +593,7 @@ function Inventory({ inventoryRows, onSelect }) {
   return (
     <>
       <SectionHeader
-        title={`${selectedPlant} Inventory`}
+        title={<PlantName name={selectedPlant} />}
         eyebrow="Inventory -> Plant -> Trip Date -> Products"
         action={
           <Button variant="secondary" onClick={() => setSelectedPlant(null)}>
@@ -1178,22 +640,23 @@ function Inventory({ inventoryRows, onSelect }) {
       </div>
       <div className="space-y-5">
         {tripGroups.map((group) => {
-          const wholeChicken = group.rows.find((row) => row.product === wholeChickenProduct);
-          const byProducts = group.rows.filter((row) => row.product !== wholeChickenProduct);
+          const wholeChicken = group.rows.filter(isWholeChicken);
+          const byProducts = group.rows.filter((row) => !isWholeChicken(row));
           return (
             <section key={group.tripId} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
               <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <h2 className="text-lg font-bold text-slate-950">Trip - {shortDate(group.tripDate)}</h2>
                   <p className="text-sm font-semibold text-slate-500">{group.tripCode}</p>
+                  <p className="mt-2 text-sm font-semibold">Whole Chicken: {kg(sum(wholeChicken, "remainingQty"))} / By-products: {kg(sum(byProducts, "remainingQty"))} / Total Remaining: {kg(sum(group.rows, "remainingQty"))}</p>
                 </div>
-                <Badge tone="blue">{group.rows.length} products</Badge>
+                <Badge tone="blue">{group.rows.length} stock lines / {group.rows.filter((row) => row.remainingQty === 0).length} sold out</Badge>
               </div>
-              {wholeChicken && (
+              {wholeChicken.length > 0 && (
                 <div className="mb-4">
                   <p className="mb-2 text-sm font-bold text-slate-700">Whole Dressed Chicken</p>
                   <InventoryRowHeader />
-                  <ProductInventoryRow row={wholeChicken} prominent onSelect={onSelect} />
+                  {wholeChicken.map((row) => <ProductInventoryRow key={row.id} row={row} prominent onSelect={onSelect} />)}
                 </div>
               )}
               {byProducts.length > 0 && (
@@ -1220,67 +683,36 @@ function Inventory({ inventoryRows, onSelect }) {
   );
 }
 
-function InventoryRowHeader() {
-  return (
-    <div className="mb-2 hidden rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold uppercase text-slate-500 lg:grid lg:grid-cols-[1.3fr_100px_90px_95px_110px_90px_130px_145px]">
-      <span>Product</span>
-      <span className="text-right">Stock In</span>
-      <span className="text-right">OUT</span>
-      <span className="text-right">Adjustment</span>
-      <span className="text-right">Remaining</span>
-      <span className="text-right">Cost/kg</span>
-      <span className="text-right">Cost Value</span>
-      <span></span>
-    </div>
-  );
-}
+function InventoryRowHeader() { return null; }
 
-function ProductInventoryRow({ row, prominent = false, onSelect }) {
-  return (
-    <div className={`rounded-lg border ${prominent ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-slate-50"}`}>
-      <button
-        className="hidden w-full items-center gap-3 px-3 py-3 text-left lg:grid lg:grid-cols-[1.3fr_100px_90px_95px_110px_90px_130px_145px]"
-        onClick={() => onSelect(row)}
-      >
-        <span className="font-bold text-slate-950">{row.product}</span>
-        <span className="text-right text-sm font-semibold">{kg(row.originalQty)}</span>
-        <span className="text-right text-sm font-semibold">{kg(row.totalOut)}</span>
-        <span className="text-right text-sm font-semibold">{row.adjustments ? kg(row.adjustments) : "-"}</span>
-        <span className="text-right text-base font-bold text-slate-950">{kg(row.remainingQty)}</span>
-        <span className="text-right text-sm font-semibold">{currency(row.costPerKg)}</span>
-        <span className="text-right text-sm font-bold text-slate-950">{currency(row.inventoryCostValue)}</span>
-        <span className="flex items-center justify-end gap-1 text-sm font-bold text-[#146ef5]">View Movements <ChevronRight size={16} /></span>
-      </button>
-      <button className="w-full p-3 text-left lg:hidden" onClick={() => onSelect(row)}>
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="font-bold text-slate-950">{row.product}</p>
-            <p className="mt-1 text-xs font-semibold text-slate-500">{row.plant} / {shortDate(row.tripDate)}</p>
-          </div>
-          <Badge tone={row.remainingQty < 100 ? "amber" : "green"}>{kg(row.remainingQty)}</Badge>
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-          <div><p className="text-slate-500">Stock In</p><p className="font-bold">{kg(row.originalQty)}</p></div>
-          <div><p className="text-slate-500">OUT</p><p className="font-bold">{kg(row.totalOut)}</p></div>
-          <div><p className="text-slate-500">Remaining</p><p className="font-bold">{kg(row.remainingQty)}</p></div>
-          <div><p className="text-slate-500">Cost/kg</p><p className="font-bold">{currency(row.costPerKg)}</p></div>
-          <div><p className="text-slate-500">Cost Value</p><p className="font-bold">{currency(row.inventoryCostValue)}</p></div>
-        </div>
-        <p className="mt-3 flex items-center gap-1 text-sm font-bold text-[#146ef5]">View Movements <ChevronRight size={16} /></p>
-      </button>
+function ProductInventoryRow({ row, onSelect }) {
+  return <button className="inventory-product" onClick={() => onSelect(row)}>
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div><h3 className="text-base font-extrabold uppercase">{productLabel(row.product, row.sizeCode, row.classType, row.sizeCodeLabel, row.classTypeLabel)}</h3>
+        <p className="mt-1 text-sm text-slate-500">Bags received: {row.bags ?? "Not recorded"}</p>
+        {row.product === "Head" && <p className="mt-1 text-sm text-slate-500">Heads received: {row.headCount ?? "Not recorded"}</p>}
+        {row.acquisitionType === "Free from Plant" && <Badge tone="green">FREE FROM PLANT</Badge>}
+      </div>
+      <div className={`remaining-stock ${row.remainingQty === 0 ? "sold-out" : ""}`}><p>REMAINING</p><strong>{kg(row.remainingQty)}</strong>
+        <Badge tone={row.remainingQty === 0 ? "red" : row.remainingQty < 100 ? "amber" : "green"}>{row.remainingQty === 0 ? "SOLD OUT" : row.remainingQty < 100 ? "Low Stock" : "Available"}</Badge>
+      </div>
     </div>
-  );
+    <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+      {[["Original KG", kg(row.originalQty)], ["Sold KG", kg(row.totalOut)], ["Adjustments", kg(row.adjustments)], ["Cost/kg", currency(row.costPerKg)], ["Remaining Cost Value", currency(row.inventoryCostValue)]].map(([label, value]) => <div key={label}><p className="text-sm text-slate-500">{label}</p><p className="font-semibold">{value}</p></div>)}
+    </div>
+    <p className="mt-3 flex items-center gap-1 text-sm font-semibold text-blue-700">View Movements <ChevronRight size={16} /></p>
+  </button>;
 }
 
 function MovementRef({ movement }) {
-  const [reference, customer] = movement.ref.split(" / ");
+  const [reference, customer] = String(movement.ref ?? movement.type ?? "Movement").split(" / ");
   return (
     <div>
       <p className="font-semibold">{reference}</p>
       {customer ? (
         <p className="text-sm text-slate-500">{customer}</p>
       ) : (
-        <p className="text-sm text-slate-500">{movement.type}</p>
+        <p className="text-sm text-slate-500">{movement.type === "OUT" ? "Sale" : movement.type}</p>
       )}
     </div>
   );
@@ -1300,13 +732,16 @@ function InventoryDetail({ row }) {
       </div>
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
         <p className="text-sm font-bold text-[#146ef5]">{row.plant}</p>
-        <h3 className="mt-1 text-xl font-bold text-slate-950">{row.product}</h3>
+        <h3 className="mt-1 text-xl font-extrabold uppercase text-slate-950">{productLabel(row.product, row.sizeCode, row.classType, row.sizeCodeLabel, row.classTypeLabel)}</h3>
+        <Badge tone={row.acquisitionType === "Free from Plant" ? "green" : "slate"}>{row.acquisitionType === "Free from Plant" ? "FREE FROM PLANT" : "Purchased"}</Badge>
         <p className="mt-1 text-sm font-semibold text-slate-500">Trip: {shortDate(row.tripDate)} - {row.tripCode}</p>
       </div>
       <div className="grid grid-cols-2 gap-3">
         {[
           ["Stock In", kg(row.originalQty)],
-          ["Total OUT", kg(row.totalOut)],
+          ["Bags Received", row.bags ?? "Not recorded"],
+          ...(row.product === "Head" ? [["Heads Count", row.headCount ?? "Not recorded"]] : []),
+          ["Sold KG", kg(row.totalOut)],
           ["Adjustments", kg(row.adjustments)],
           ["Remaining", kg(row.remainingQty)],
           ["Cost / kg", currency(row.costPerKg)],
@@ -1320,7 +755,7 @@ function InventoryDetail({ row }) {
         ))}
       </div>
       <h3 className="font-bold">Movement History</h3>
-      {row.history.map((movement) => (
+      {(row.history ?? []).map((movement) => (
         <div key={movement.id} className="flex items-center justify-between border-b border-slate-100 py-3">
           <MovementRef movement={movement} />
           <p className={`font-bold ${movement.qty < 0 ? "text-rose-600" : "text-emerald-600"}`}>{movement.qty > 0 ? "+" : ""}{kg(movement.qty)}</p>
@@ -1330,20 +765,33 @@ function InventoryDetail({ row }) {
   );
 }
 
-function OutOrders({ customers, trips, movements, setMovements, outs, setOuts, ledgerEntries, setLedgerEntries, setDiscrepancies, addAudit, pushToast }) {
-  const defaultCustomerId = "cust-abc";
+function OutOrders({ customers, trips, movements, receivingTransfers, salesmanTransfers, setMovements, outs, setOuts, ledgerEntries, setLedgerEntries, setDiscrepancies, addAudit, pushToast, onQuickAdd, collections, setCollections, registerPostDcrChange, onStockIn }) {
+  const agents = useUsers();
+  const [review, setReview] = useState(false);
+  const [salePayment, setSalePayment] = useState(emptySalePayment);
+  const [trustReceipt, setTrustReceipt] = useState("");
+  const [saleDate, setSaleDate] = useState(today);
+  const [saleAgent, setSaleAgent] = useState("");
+  const defaultCustomerId = customers.find((c) => c.active)?.id || "";
   const [customerId, setCustomerId] = useState(defaultCustomerId);
-  const selectedCustomer = customers.find((customer) => customer.id === customerId) || customers[0];
-  const plantOptions = useMemo(() => [...new Set(trips.map((trip) => trip.plant))], [trips]);
+  const selectedCustomer = customers.find((customer) => customer.id === customerId) || { name: "Select Customer", pricing: {}, active: false };
+  const selectedAgentId = saleAgent || (agents.some((agent) => agent.id === selectedCustomer.agentId && agent.active && agent.role === "Agent") ? selectedCustomer.agentId : agents.find((agent) => agent.active && agent.role === "Agent")?.id || "");
+  const availableFor = (salesmanId, trip, item) => getSalesmanAvailableQty(receivingTransfers, salesmanTransfers, movements, salesmanId, trip.id, item.name, item.sizeCode, item.classType);
+  const saleableTrips = trips.filter((trip) => trip.products.some((item) => availableFor(selectedAgentId, trip, item) > 0));
+  const plantOptions = [...new Set(saleableTrips.map((trip) => trip.plant))];
   const [groups, setGroups] = useState(() => [
     buildDefaultGroup(selectedCustomer),
   ]);
   const linesWithTrip = groups.flatMap((group) => group.lines.map((line) => ({ ...line, tripId: group.tripId, groupId: group.id })));
   const activeLinesWithTrip = linesWithTrip.filter((line) => Number(line.qty || 0) > 0);
-  const hasInsufficient = activeLinesWithTrip.some((line) => Number(line.qty) > getAvailableQty(trips, movements, line.tripId, line.product));
-  const hasEmptyOptionalGroup = groups.slice(1).some((group) => group.lines.length === 0 || group.lines.every((line) => Number(line.qty || 0) <= 0));
+  const duplicateSale = duplicateTrustReceipt(outs, trustReceipt);
+  const saleError = !selectedCustomer.active ? "Select an active customer." : duplicateSale ? `Trust Receipt Number already exists. ${trustReceipt.trim()} is already used by ${duplicateSale.ref}.` : validateSale(groups, trips, movements, saleDate, selectedAgentId, receivingTransfers, salesmanTransfers);
+  const hasInsufficient = Boolean(saleError);
+  const hasEmptyOptionalGroup = groups.some((group) => group.lines.length === 0 || group.lines.every((line) => Number(line.qty || 0) <= 0));
   const hasEmptyGroup = groups.some((group) => group.lines.length === 0 || group.lines.every((line) => Number(line.qty || 0) <= 0));
-  const total = activeLinesWithTrip.reduce((sum, line) => sum + Number(line.qty || 0) * Number(line.price || 0), 0);
+  const total = sum(activeLinesWithTrip, (line) => money(Number(line.qty || 0) * Number(line.price || 0)));
+  const initialPaid = initialPaymentAmount(salePayment);
+  const paymentError = validateSalePayment(salePayment, total);
   const overrides = activeLinesWithTrip.filter((line) => Number(line.price) !== customerPrice(selectedCustomer, line.product));
   const summaryGroups = groups.map((group) => {
     const trip = trips.find((item) => item.id === group.tripId);
@@ -1357,26 +805,29 @@ function OutOrders({ customers, trips, movements, setMovements, outs, setOuts, l
   }).filter((group) => group.lines.length);
 
   function getTrip(preferredTripId) {
-    return trips.find((trip) => trip.id === preferredTripId) || trips[0];
+    return saleableTrips.find((trip) => trip.id === preferredTripId) || saleableTrips[0];
   }
 
   function defaultTripId() {
-    return getTrip("trip-bty-0815")?.id || trips[0]?.id || "";
+    return saleableTrips[0]?.id || "";
   }
 
   function lineFor(product, qty = 0, customer = selectedCustomer) {
-    return { product, qty, price: customerPrice(customer, product) };
+    return { product, qty, sizeCode: "", sizeCodeLabel: "", classType: "", classTypeLabel: "", price: customerPrice(customer, product) };
   }
 
   function normalizeLinesForTrip(lines, trip, customer = selectedCustomer) {
-    const productNames = trip?.products?.map((product) => product.name) || [];
+    const availableItems = (trip?.products || []).filter((item) => availableFor(selectedAgentId, trip, item) > 0);
+    const productNames = availableItems.map((product) => product.name);
     const fallbackProduct = productNames.includes(wholeChickenProduct) ? wholeChickenProduct : productNames[0] || wholeChickenProduct;
     const safeLines = lines.length ? lines : [lineFor(fallbackProduct, 0, customer)];
     return safeLines.map((line) => {
       const product = productNames.includes(line.product) ? line.product : fallbackProduct;
+      const exact = availableItems.find((item) => item.name === product && (item.sizeCode || "") === (line.sizeCode || "") && (item.classType || "") === (line.classType || "")) || availableItems.find((item) => item.name === product);
       return {
         ...line,
         product,
+        sizeCode: exact?.sizeCode || "", sizeCodeLabel: exact?.sizeCodeLabel || "", classType: exact?.classType || "", classTypeLabel: exact?.classTypeLabel || "",
         price: line.product === product ? line.price : customerPrice(customer, product),
       };
     });
@@ -1393,25 +844,25 @@ function OutOrders({ customers, trips, movements, setMovements, outs, setOuts, l
   }
 
   function buildDefaultGroup(customer = selectedCustomer) {
-    return buildOrderGroup("trip-bty-0815", [
-      { product: "Whole Dressed Chicken", qty: 100 },
-      { product: "Liver", qty: 10 },
-    ], customer);
+    return buildOrderGroup(defaultTripId(), [{ product: "Whole Dressed Chicken", qty: 0 }], customer);
   }
 
   function resetOutForm() {
-    const defaultCustomer = customers.find((item) => item.id === defaultCustomerId) || customers[0];
+    const defaultCustomer = customers.find((item) => item.id === defaultCustomerId);
     setCustomerId(defaultCustomerId);
+    setTrustReceipt(""); setSaleDate(today); setReview(false); setSaleAgent("");
+    setSalePayment(emptySalePayment());
     setGroups([buildDefaultGroup(defaultCustomer)]);
   }
 
-  function handleCustomerChange(nextCustomerId) {
-    const nextCustomer = customers.find((customer) => customer.id === nextCustomerId) || customers[0];
-    setCustomerId(nextCustomerId);
+  function handleCustomerChange(nextCustomerId, record) {
+    const nextCustomer = record || customers.find((customer) => customer.id === nextCustomerId);
+    if (!nextCustomer?.active) return;
+    setCustomerId(nextCustomer.id);
     setGroups((current) =>
       current.map((group) => ({
         ...group,
-        lines: group.lines.map((line) => ({ ...line, price: customerPrice(nextCustomer, line.product) })),
+        lines: group.lines.map((line) => ({ ...line, price: Number(line.price) === customerPrice(selectedCustomer, line.product) ? customerPrice(nextCustomer, line.product) : line.price })),
       }))
     );
   }
@@ -1421,7 +872,7 @@ function OutOrders({ customers, trips, movements, setMovements, outs, setOuts, l
   }
 
   function changeGroupPlant(groupId, plant) {
-    const nextTrip = trips.find((trip) => trip.plant === plant);
+      const nextTrip = saleableTrips.find((trip) => trip.plant === plant);
     if (!nextTrip) return;
     setGroups((current) =>
       current.map((group) =>
@@ -1455,21 +906,13 @@ function OutOrders({ customers, trips, movements, setMovements, outs, setOuts, l
 
   function addAnotherGroup() {
     setGroups((current) => {
-      const hasOpenEmptyGroup = current.slice(1).some((group) => group.lines.length === 0 || group.lines.every((line) => Number(line.qty || 0) <= 0));
+      const hasOpenEmptyGroup = current.some((group) => group.lines.length === 0 || group.lines.every((line) => Number(line.qty || 0) <= 0));
       if (hasOpenEmptyGroup) return current;
       const usedTripIds = new Set(current.map((group) => group.tripId));
-      const preferredIds = ["trip-mag-0818", "trip-bty-0824", "trip-mag-0827", "trip-bty-0830"];
       const nextTrip =
-        preferredIds.map((tripId) => trips.find((trip) => trip.id === tripId)).find((trip) => trip && !usedTripIds.has(trip.id)) ||
-        trips.find((trip) => !usedTripIds.has(trip.id)) ||
-        trips[0];
-      const nextIndex = current.length;
-      const lineSpecs = nextIndex === 1
-        ? [
-            { product: "Whole Dressed Chicken", qty: 50 },
-            { product: "Feet", qty: 10 },
-          ]
-        : [{ product: "Whole Dressed Chicken", qty: 0 }];
+        saleableTrips.find((trip) => !usedTripIds.has(trip.id)) ||
+        saleableTrips[0];
+      const lineSpecs = [{ product: "Whole Dressed Chicken", qty: 0 }];
       return [...current, buildOrderGroup(nextTrip?.id, lineSpecs)];
     });
   }
@@ -1479,7 +922,8 @@ function OutOrders({ customers, trips, movements, setMovements, outs, setOuts, l
   }
 
   function confirmOut() {
-    const ref = `OUT-${1080 + outs.length + 1}`;
+    if (saleError || paymentError || !selectedAgentId || total <= 0) return;
+    const ref = "SALE-" + (1300 + outs.length + 1);
     const outGroups = groups.map((group) => {
       const trip = trips.find((item) => item.id === group.tripId);
       if (!trip) return null;
@@ -1489,32 +933,39 @@ function OutOrders({ customers, trips, movements, setMovements, outs, setOuts, l
         tripDate: trip.date,
         lines: group.lines
           .filter((line) => Number(line.qty || 0) > 0)
-          .map((line) => ({ ...line, subtotal: Number(line.qty || 0) * Number(line.price || 0) })),
+          .map((line) => ({ ...line, qty: Number(line.qty), price: Number(line.price), subtotal: money(Number(line.qty || 0) * Number(line.price || 0)) })),
       };
     }).filter((group) => group?.lines.length);
-    const out = { id: `out-${Date.now()}`, ref, date: today, customerId, agentId: selectedCustomer.agentId, total, groups: outGroups };
+    const out = { id: uid("out"), ref, trustReceipt: trustReceipt.trim(), date: saleDate, customerId, agentId: selectedAgentId, total, groups: outGroups };
+    const financial = saleFinancialEvents(out, salePayment, "PAY-" + (3000 + collections.length + 1), uid);
+    if (exceedsCredit(selectedCustomer, ledgerEntries, total - initialPaid)) addAudit("Credit Limit Exceeded: " + ref + " / " + selectedCustomer.name + " (warning-only demo policy)", getAgentName(agents, selectedAgentId));
     setOuts((items) => [out, ...items]);
     setMovements((items) => [
       ...items,
       ...outGroups.flatMap((group) =>
         group.lines.map((line, index) => ({
-          id: `mov-${Date.now()}-${group.tripId}-${index}`,
+          id: uid("mov"),
           tripId: group.tripId,
           product: line.product,
+          sizeCode: line.sizeCode || "", classType: line.classType || "", agentId: selectedAgentId,
+          outId: out.id,
           qty: -Number(line.qty || 0),
           type: "OUT",
           ref: `${ref} / ${selectedCustomer.name}`,
-          actor: getAgentName(agents, selectedCustomer.agentId),
-          at: new Date().toISOString(),
+          actor: getAgentName(agents, selectedAgentId),
+          at: saleDate + "T12:00:00",
         }))
       ),
     ]);
-    setLedgerEntries((items) => [
-      ...items,
-      { id: `led-${Date.now()}`, customerId, date: today, ref, description: "Chicken Order", charge: total, payment: 0, type: "OUT", outId: out.id },
-    ]);
+    setLedgerEntries((items) => [...items, ...financial.entries]);
+    if (financial.collection) {
+      setCollections((items) => [financial.collection, ...items]);
+      if (financial.discrepancy) setDiscrepancies((items) => [financial.discrepancy, ...items]);
+      addAudit("Recorded " + currency(initialPaid) + " " + salePayment.method + " payment at " + ref, getAgentName(agents, selectedAgentId));
+      registerPostDcrChange(selectedAgentId, saleDate, financial.collection.ref + " payment at Sale added after lock");
+    }
     overrides.forEach((line) => {
-      const acquisitionCost = getAcquisitionCost(trips, line.tripId, line.product);
+      const acquisitionCost = getAcquisitionCost(trips, line.tripId, line.product, line.sizeCode, line.classType);
       const qty = Number(line.qty || 0);
       const normalPrice = customerPrice(selectedCustomer, line.product);
       const expectedGrossProfit = qty * normalPrice - qty * acquisitionCost;
@@ -1522,6 +973,8 @@ function OutOrders({ customers, trips, movements, setMovements, outs, setOuts, l
       setDiscrepancies((items) => [
         {
           id: `disc-price-${Date.now()}-${line.product}`,
+          date: saleDate,
+          tripId: line.tripId, sizeCode: line.sizeCode,
           type: "Price",
           title: "Manual Price Override",
           status: "Open",
@@ -1538,50 +991,56 @@ function OutOrders({ customers, trips, movements, setMovements, outs, setOuts, l
         },
         ...items,
       ]);
-      addAudit(`Changed ${line.product} price ${currency(normalPrice)} -> ${currency(line.price)}`, getAgentName(agents, selectedCustomer.agentId));
+      addAudit(`Changed ${line.product} price ${currency(normalPrice)} -> ${currency(line.price)}`, getAgentName(agents, selectedAgentId));
     });
-    addAudit(`Created ${ref}`, getAgentName(agents, selectedCustomer.agentId));
-    pushToast(`${ref} created successfully`);
+    addAudit(`Created ${ref}`, getAgentName(agents, selectedAgentId));
+    resetOutForm();
+    pushToast(`${ref} confirmed successfully`);
   }
   return (
     <>
       <SectionHeader
-        title="OUT / Orders"
-        eyebrow="Single plant/trip by default. Add another origin only when the customer orders it."
+        title="Sales"
         action={
           <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={resetOutForm}><Plus size={18} />New OUT</Button>
-            <Button disabled={hasInsufficient || hasEmptyGroup || total <= 0} onClick={confirmOut}><ClipboardCheck size={18} />Confirm OUT</Button>
+            <Button variant="secondary" onClick={resetOutForm}><Plus size={18} />{outs.length ? "New Sale" : "Create First Sale"}</Button>
           </div>
         }
       />
-      <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
+      {!outs.length && <p className="mb-4 text-slate-500">No sales yet.</p>}
+      {!trips.length && <div className="mb-4"><p className="mb-2 text-slate-500">No stock received yet.</p><Button variant="secondary" onClick={onStockIn}>Stock In Product</Button></div>}
+      {!!trips.length && !saleableTrips.length && <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 font-semibold text-amber-900">No inventory assigned to this Salesman yet. Receive stock from Warehouse before creating a Sale.</p>}
+      <div className="grid gap-5 2xl:grid-cols-[300px_1fr]">
         <div className="rounded-lg border border-slate-200 bg-white p-4">
           <h2 className="mb-3 font-bold">Step 1 - Select Customer</h2>
-          <select className={inputClass()} value={customerId} onChange={(e) => handleCustomerChange(e.target.value)}>
-            {customers.map((customer) => <option value={customer.id} key={customer.id}>{customer.name}</option>)}
-          </select>
-          <div className="mt-4 space-y-3 rounded-lg bg-slate-50 p-3">
-            <p className="font-bold">{selectedCustomer.name}</p>
-            <Info label="Customer Type" value={selectedCustomer.type} />
+          <CustomerSelector customers={customers.filter((c) => c.active)} value={customerId} onChange={handleCustomerChange} onAdd={onQuickAdd ? (name, clearSearch) => onQuickAdd(name, (customer) => { handleCustomerChange(customer.id, customer); clearSearch(); }) : null} />
+          {selectedCustomer.id && <div className="mt-4 space-y-3 rounded-lg bg-slate-50 p-3">
+            <p className="text-xs font-extrabold uppercase text-blue-700">Customer</p><p className="customer-name uppercase">{selectedCustomer.name}</p>
+            <Info label="Customer Type" value={selectedCustomer.type || "-"} />
             <Info label="Outstanding Balance" value={currency(customerBalance(ledgerEntries, customerId))} />
-            <Info label="Credit Status" value={selectedCustomer.creditStatus} />
+            <Info label="Credit Status" value={selectedCustomer.creditStatus || "-"} />
+            <Info label="Payment Type" value={selectedCustomer.paymentType || "-"} />
+            <Info label="Available Credit" value={availableCredit(selectedCustomer, ledgerEntries) === null ? "Not set" : currency(availableCredit(selectedCustomer, ledgerEntries))} />
             <Info label="Price for Whole Chicken" value={currency(customerPrice(selectedCustomer, "Whole Dressed Chicken")) + "/kg"} />
-          </div>
-          <div className="mt-4 rounded-lg bg-blue-50 p-3 text-sm text-blue-900">
-            Customer-specific pricing loads automatically. Any edited price is visibly flagged and added to the audit log.
+          </div>}
+          {selectedCustomer.active && exceedsCredit(selectedCustomer, ledgerEntries, total - initialPaid) && <p role="alert" className="mt-3 border-l-4 border-amber-500 bg-amber-50 p-3 font-semibold text-amber-900">Credit Limit Exceeded</p>}
+          <div className="mt-4 grid gap-3 sm:grid-cols-3 2xl:grid-cols-1">
+            <Field label="Trust Receipt No."><input className={inputClass()} placeholder="TR-001" value={trustReceipt} onChange={(e) => setTrustReceipt(e.target.value)} /></Field>
+            <Field label="Sale Date"><input className={inputClass()} type="date" value={saleDate} onInput={(e) => setSaleDate(e.target.value)} /></Field>
+            <Field label="Salesman"><select className={inputClass()} value={selectedAgentId} onChange={(e) => { const id = e.target.value; setSaleAgent(id); const firstTrip = trips.find((trip) => trip.products.some((item) => availableFor(id, trip, item) > 0)); const firstItem = firstTrip?.products.find((item) => availableFor(id, firstTrip, item) > 0); setGroups([{ id: uid("group"), tripId: firstTrip?.id || "", lines: firstItem ? [{ product: firstItem.name, sizeCode: firstItem.sizeCode || "", sizeCodeLabel: firstItem.sizeCodeLabel || "", classType: firstItem.classType || "", classTypeLabel: firstItem.classTypeLabel || "", qty: 0, price: customerPrice(selectedCustomer, firstItem.name) }] : [] }]); }} >{agents.filter((agent) => agent.active && agent.role === "Agent").map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</select></Field>
           </div>
         </div>
         <div className="space-y-4">
-          {groups.map((group, groupIndex) => {
-            const trip = trips.find((item) => item.id === group.tripId);
-            const tripOptions = trips.filter((tripOption) => tripOption.plant === trip?.plant);
+          {saleableTrips.length > 0 && groups.map((group, groupIndex) => {
+            const trip = saleableTrips.find((item) => item.id === group.tripId);
+            const tripOptions = saleableTrips.filter((tripOption) => tripOption.plant === trip?.plant);
+            const availableItems = (trip?.products || []).filter((item) => availableFor(selectedAgentId, trip, item) > 0);
             return (
               <div key={group.id} className="rounded-lg border border-slate-200 bg-white p-4">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h2 className="font-bold">{groups.length === 1 ? "Step 2-4 - Plant / Trip / Products" : `Plant / Trip ${groupIndex + 1}`}</h2>
-                    {groupIndex === 0 && <p className="text-sm text-slate-500">Complete this first origin, then confirm the OUT or add another origin.</p>}
+
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge tone="blue">{trip?.plant} - {trip ? shortDate(trip.date) : ""}</Badge>
@@ -1606,51 +1065,55 @@ function OutOrders({ customers, trips, movements, setMovements, outs, setOuts, l
                 </div>
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
                   <h3 className="text-sm font-bold text-slate-700">{groupIndex === 0 ? "Step 4 - Add Products" : "Products"}</h3>
-                  <span className="text-xs font-semibold text-slate-500">Stock deducts from {trip?.plant} / {trip ? shortDate(trip.date) : "selected trip"}</span>
+                  <span className="text-xs font-semibold text-slate-500">Stock deducts from {getAgentName(agents, selectedAgentId)} / {trip?.plant} / {trip ? shortDate(trip.date) : "selected trip"}</span>
                 </div>
                 <div className="mt-2 space-y-2">
                   {group.lines.map((line, index) => {
-                    const available = getAvailableQty(trips, movements, group.tripId, line.product);
+                    const available = getSalesmanAvailableQty(receivingTransfers, salesmanTransfers, movements, selectedAgentId, group.tripId, line.product, line.sizeCode, line.classType);
                     const defaultPrice = customerPrice(selectedCustomer, line.product);
                     const changed = Number(line.price) !== defaultPrice;
                     const insufficient = Number(line.qty) > available;
                     return (
                       <div key={`${group.id}-${index}`} className={`rounded-lg border p-3 ${insufficient ? "border-rose-200 bg-rose-50" : "border-slate-200 bg-slate-50"}`}>
-                        <div className="grid gap-2 md:grid-cols-[1fr_120px_120px_44px]">
-                          <select className={inputClass()} value={line.product} onChange={(e) => updateLine(group.id, index, { product: e.target.value, price: customerPrice(selectedCustomer, e.target.value) })}>
-                            {(trip?.products || []).map((productOption) => <option key={productOption.name}>{productOption.name}</option>)}
-                          </select>
-                          <input className={inputClass()} type="number" min="0" value={line.qty} onChange={(e) => updateLine(group.id, index, { qty: e.target.value })} />
-                          <input className={inputClass()} type="number" min="0" value={line.price} onChange={(e) => updateLine(group.id, index, { price: e.target.value })} />
+                        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(150px,1fr)_120px_120px_100px_130px_44px]">
+                          <Field label="Product"><select className={inputClass()} value={line.product} onChange={(e) => { const item = availableItems.find((stock) => stock.name === e.target.value); updateLine(group.id, index, { product: e.target.value, sizeCode: item?.sizeCode || "", sizeCodeLabel: item?.sizeCodeLabel || "", classType: item?.classType || "", classTypeLabel: item?.classTypeLabel || "", qty: 0, price: customerPrice(selectedCustomer, e.target.value) }); }}>
+                            {[...new Set(availableItems.map((item) => item.name))].map((name) => <option key={name}>{name}</option>)}
+                          </select></Field>
+                          {availableItems.some((item) => item.name === line.product && item.sizeCode) && <Field label="Size/Code"><select className={inputClass()} value={line.sizeCode || ""} onChange={(e) => { const item = availableItems.find((stock) => stock.name === line.product && stock.sizeCode === e.target.value); updateLine(group.id, index, { sizeCode: e.target.value, sizeCodeLabel: item?.sizeCodeLabel || "", classType: item?.classType || "", classTypeLabel: item?.classTypeLabel || "", qty: 0 }); }}>
+                            {[...new Map(availableItems.filter((item) => item.name === line.product).map((item) => [item.sizeCode || "", item])).values()].map((item) => <option key={item.sizeCode || "uncoded"} value={item.sizeCode || ""}>{productLabel("", item.sizeCode, "", item.sizeCodeLabel)}</option>)}
+                          </select></Field>}
+                          {availableItems.some((item) => item.name === line.product && item.classType) && <Field label="Class Type"><select className={inputClass()} value={line.classType || ""} onChange={(e) => { const item = availableItems.find((stock) => stock.name === line.product && (stock.sizeCode || "") === (line.sizeCode || "") && stock.classType === e.target.value); updateLine(group.id, index, { classType: e.target.value, classTypeLabel: item?.classTypeLabel || "", qty: 0 }); }}>{availableItems.filter((item) => item.name === line.product && (item.sizeCode || "") === (line.sizeCode || "")).map((item) => <option key={item.classType} value={item.classType}>{productLabel("", "", item.classType, "", item.classTypeLabel)}</option>)}</select></Field>}
+                          <Field label="KG"><input className={inputClass()} type="number" min="0" step="0.01" value={line.qty} onChange={(e) => updateLine(group.id, index, { qty: e.target.value })} /></Field>
+                          <Field label="Selling Price/kg"><MoneyInput value={line.price} onChange={(e) => updateLine(group.id, index, { price: e.target.value })} /></Field>
                           <Button variant="ghost" className="px-0" disabled={group.lines.length === 1} onClick={() => updateGroup(group.id, { lines: group.lines.filter((_, lineIndex) => lineIndex !== index) })} aria-label="Remove line"><X size={18} /></Button>
                         </div>
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-semibold">
-                          <Badge tone={insufficient ? "red" : "green"}>Available from this trip: {kg(available)}</Badge>
+                          <Badge tone={insufficient ? "red" : "green"}>Salesman available: {kg(available)}</Badge>
                           <Badge>Default Customer Price: {currency(defaultPrice)}/kg</Badge>
                           {changed && <Badge tone="amber">Price manually changed: {currency(line.price)}/kg, difference {currency(Number(line.price) - defaultPrice)}/kg</Badge>}
-                          {insufficient && <span className="text-rose-700">Insufficient stock. Requested {kg(line.qty)}, available {kg(available)}.</span>}
+                          {insufficient && <span className="text-rose-700">Insufficient Salesman Inventory. Requested {kg(line.qty)}, available {kg(available)}.</span>}
                         </div>
                       </div>
                     );
                   })}
                 </div>
-                <Button variant="secondary" className="mt-3" onClick={() => updateGroup(group.id, { lines: [...group.lines, { product: trip?.products?.[0]?.name || "Whole Dressed Chicken", qty: 0, price: customerPrice(selectedCustomer, trip?.products?.[0]?.name || "Whole Dressed Chicken") }] })}>
+                <Button variant="secondary" className="mt-3" onClick={() => { const item = availableItems[0]; if (item) updateGroup(group.id, { lines: [...group.lines, { product: item.name, sizeCode: item.sizeCode || "", sizeCodeLabel: item.sizeCodeLabel || "", classType: item.classType || "", classTypeLabel: item.classTypeLabel || "", qty: 0, price: customerPrice(selectedCustomer, item.name) }] }); }}>
                   <Plus size={18} /> Add Product
                 </Button>
               </div>
             );
           })}
-          <div className="rounded-lg border border-dashed border-slate-300 bg-white p-3">
+          {saleableTrips.length > 0 && <div className="rounded-lg border border-dashed border-slate-300 bg-white p-3">
             <Button variant="ghost" className="w-full justify-start text-slate-600" disabled={hasEmptyOptionalGroup} onClick={addAnotherGroup}>
               <Plus size={18} /> Add Another Plant / Trip
             </Button>
-            {hasEmptyOptionalGroup && <p className="px-4 pb-2 text-xs font-semibold text-slate-500">Fill or remove the empty optional plant/trip before adding another.</p>}
-          </div>
-          <div className="sticky bottom-24 rounded-lg border border-slate-200 bg-white p-4 shadow-lg md:bottom-4">
+            {hasEmptyOptionalGroup && groups.length > 1 && <p className="px-4 pb-2 text-xs font-semibold text-slate-500">Fill or remove the empty optional plant/trip before adding another.</p>}
+          </div>}
+          <div className="border-t border-slate-200 bg-white p-4">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-slate-500">Order Summary</p>
-                <p className="mt-1 font-bold text-slate-950">{selectedCustomer.name}</p>
+                <p className="text-sm font-semibold text-slate-500">Sale Summary</p>
+                <p className="customer-name uppercase">{selectedCustomer.name}</p>
                 <div className="mt-2 space-y-2 text-sm text-slate-700">
                   {summaryGroups.length === 0 && <p>No products added yet.</p>}
                   {summaryGroups.map((group) => (
@@ -1659,7 +1122,7 @@ function OutOrders({ customers, trips, movements, setMovements, outs, setOuts, l
                       <div className="mt-1 space-y-1">
                         {group.lines.map((line, index) => (
                           <div key={`${group.id}-summary-${line.product}-${index}`} className="flex flex-wrap justify-between gap-2">
-                            <span>{line.product} - {kg(line.qty)}</span>
+                            <span>{productLabel(line.product, line.sizeCode, line.classType, line.sizeCodeLabel, line.classTypeLabel)} - {kg(line.qty)} x {currency(line.price)}</span>
                             <span className="font-semibold">{currency(Number(line.qty || 0) * Number(line.price || 0))}</span>
                           </div>
                         ))}
@@ -1670,93 +1133,133 @@ function OutOrders({ customers, trips, movements, setMovements, outs, setOuts, l
               </div>
               <div className="lg:min-w-[180px]">
                 <div className="text-right">
-                  <p className="text-sm font-semibold text-slate-500">OUT Total</p>
+                  <p className="text-sm font-semibold text-slate-500">Sale Total</p>
                   <p className="text-2xl font-bold text-slate-950">{currency(total)}</p>
+                  <Button className="mt-3" disabled={hasInsufficient || hasEmptyGroup || total <= 0 || !selectedAgentId} onClick={() => setReview(true)}><ClipboardCheck size={18} />Review Sale</Button>
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
+      {saleError && <p className="my-3 text-sm font-semibold text-amber-800" role="status">{saleError}</p>}
+      {review && <Drawer title="Review Sale" onClose={() => setReview(false)}>
+        <h2 className="customer-name mb-3 uppercase">{selectedCustomer.name}</h2>
+        {exceedsCredit(selectedCustomer, ledgerEntries, total - initialPaid) && <p role="alert" className="mb-3 border-l-4 border-amber-500 bg-amber-50 p-3 font-semibold text-amber-900">Credit Limit Exceeded</p>}
+        <Info label="Trust Receipt No." value={trustReceipt || "Not provided"} />
+        <Info label="Sale Date" value={shortDate(saleDate)} />
+        {summaryGroups.map((group) => <div key={group.id} className="my-4 border-t border-slate-200 pt-4">
+          <p className="font-bold">{group.trip?.plant} / {group.trip && shortDate(group.trip.date)}</p>
+          {group.lines.map((line, i) => <div key={i} className="mt-3 flex flex-wrap justify-between gap-2 text-sm"><span>{productLabel(line.product, line.sizeCode, line.classType, line.sizeCodeLabel, line.classTypeLabel)} / {kg(line.qty)} x {currency(line.price)}</span><strong>{currency(money(Number(line.qty) * Number(line.price)))}</strong></div>)}
+          <Button variant="ghost" className="mt-2" onClick={() => setReview(false)}>Edit Products</Button>
+        </div>)}
+        <p className="my-4 text-2xl font-bold">Total: {currency(total)}</p>
+        <section className="report-section mb-5"><h3 className="mb-3 font-bold">Payment at Sale</h3>
+          {!salePayment.enabled ? <><p className="mb-3 text-slate-500">No Payment Yet</p><Button variant="secondary" onClick={() => setSalePayment({ ...salePayment, enabled: true })}><Plus size={17} />Add Payment</Button></> : <>
+            <div className="grid gap-3 sm:grid-cols-2"><Field label="Amount Paid"><MoneyInput value={salePayment.amount} onChange={(e) => setSalePayment({ ...salePayment, amount: e.target.value })} /></Field>
+              <Field label="Payment Method"><select className={inputClass()} value={salePayment.method} onChange={(e) => setSalePayment({ ...salePayment, method: e.target.value, reference: "", bank: "" })}>{paymentMethods.map((method) => <option key={method}>{method}</option>)}</select></Field>
+              <Field label={salePayment.method === "Cash" ? "Reference Number (Optional)" : "Reference Number"}><input className={inputClass()} value={salePayment.reference} onChange={(e) => setSalePayment({ ...salePayment, reference: e.target.value })} /></Field>
+              {salePayment.method === "Bank Deposit" && <Field label="Bank (Optional)"><input className={inputClass()} value={salePayment.bank} onChange={(e) => setSalePayment({ ...salePayment, bank: e.target.value })} /></Field>}
+              <Field label="Notes / Description (Optional)"><input className={inputClass()} value={salePayment.notes || ""} onChange={(e) => setSalePayment({ ...salePayment, notes: e.target.value })} placeholder="Branch or payment description" /></Field>
+            </div><Button className="mt-3" variant="ghost" onClick={() => setSalePayment(emptySalePayment())}><X size={17} />Remove Payment</Button>
+          </>}
+          <div className="mt-4 grid gap-3 sm:grid-cols-2"><StatMini label="Payment" value={currency(Number.isFinite(initialPaid) ? initialPaid : 0)} /><StatMini label="Remaining Balance" value={currency(Math.max(0, total - (Number.isFinite(initialPaid) ? initialPaid : 0)))} /></div>
+          {paymentError ? <p role="alert" className="mt-3 font-semibold text-rose-700">{paymentError}</p> : <div className="mt-3"><Badge tone={initialPaid >= total ? "green" : initialPaid > 0 ? "amber" : "slate"}>{paymentAtSaleStatus(total, initialPaid)}</Badge></div>}
+        </section>
+        <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => setReview(false)}>Edit Sale</Button><Button disabled={hasInsufficient || !!paymentError || !selectedAgentId || total <= 0} onClick={confirmOut}><ClipboardCheck size={18} />Confirm Sale</Button></div>
+      </Drawer>}
+      <section className="report-section"><h2 className="mb-3 text-lg font-bold">Sales</h2>
+        <ResponsiveTable columns={["Date", "Sale", "Trust Receipt", "Customer", "Total", "Payment Status"]} rows={outs.slice().sort((a, b) => b.date.localeCompare(a.date)).map((out) => [shortDate(out.date), out.ref, out.trustReceipt || "-", getCustomerName(customers, out.customerId), currency(out.total), <Badge tone={salePaymentStatus(ledgerEntries, out.ref) === "Paid" ? "green" : "amber"}>{salePaymentStatus(ledgerEntries, out.ref)}</Badge>])} />
+      </section>
     </>
   );
 }
 
-function Customers({ customers, ledgerEntries, outs, collections, onSelect }) {
-  const [selectedId, setSelectedId] = useState("cust-abc");
-  const selected = customers.find((customer) => customer.id === selectedId);
-  const ledger = ledgerWithRunningBalance(ledgerEntries, selectedId);
+function Customers({ initialCustomerId = "", customers, ledgerEntries, outs, collections, onSelect, canManage, onAdd, onEdit }) {
+  const agents = useUsers();
+  const [selectedId, setSelectedId] = useState(initialCustomerId);
+  const [balanceFilter, setBalanceFilter] = useState("All");
+  const [query, setQuery] = useState("");
+  const selected = customers.find((customer) => customer.id === selectedId) || customers[0];
+  const ledger = ledgerWithRunningBalance(ledgerEntries, selected?.id);
   const totalPurchases = ledger.reduce((sum, entry) => sum + entry.charge, 0);
   const totalPayments = ledger.reduce((sum, entry) => sum + entry.payment, 0);
   return (
     <>
-      <SectionHeader title="Customers" eyebrow="Customer Ledger" />
+      <SectionHeader title="Ledger" action={<div className="flex flex-wrap items-end gap-3"><Field label="Customers"><select className={inputClass()} value={balanceFilter} onChange={(e) => setBalanceFilter(e.target.value)}>{["All", "With Balance", "Paid"].map((value) => <option key={value}>{value}</option>)}</select></Field>{canManage && <Button onClick={onAdd}><Plus size={17} />Add Customer</Button>}</div>} />
+      <div className="mb-4"><CustomerSearch value={query} onChange={setQuery} /></div>
+      {!customers.length && <p className="mb-4 text-slate-500">No customers yet.</p>}
       <div className="grid gap-5 xl:grid-cols-[330px_1fr]">
         <div className="space-y-2">
-          {customers.map((customer) => (
+          {customers.filter((customer) => matchesCustomer(customer, query) && (balanceFilter === "All" || (balanceFilter === "With Balance" ? customerBalance(ledgerEntries, customer.id) > 0 : customerBalance(ledgerEntries, customer.id) <= 0))).map((customer) => (
             <button key={customer.id} className={`w-full rounded-lg border p-3 text-left ${selectedId === customer.id ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white"}`} onClick={() => setSelectedId(customer.id)}>
-              <p className="font-bold">{customer.name}</p>
-              <p className="text-sm text-slate-500">{customer.type} - {getAgentName(agents, customer.agentId)}</p>
-              <p className="mt-2 text-sm font-semibold">Balance: {currency(customerBalance(ledgerEntries, customer.id))}</p>
+              <p className="customer-name">{customer.name}</p>
+              <p className="text-sm text-slate-500">{customer.type} - Salesman: {getAgentName(agents, customer.agentId)}</p>
+              <p className={customerBalance(ledgerEntries, customer.id) > 0 ? "mt-2 text-base font-bold text-amber-800" : "mt-2 text-sm font-semibold text-emerald-700"}>Balance: {currency(customerBalance(ledgerEntries, customer.id))}</p>
             </button>
           ))}
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
+        {selected && <div className="rounded-lg border border-slate-200 bg-white p-4">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-xl font-bold">{selected.name}</h2>
-              <p className="text-sm text-slate-500">{selected.type} - Assigned Agent: {getAgentName(agents, selected.agentId)}</p>
+              <h2 className="customer-name">{selected.name}</h2>
+              <p className="text-sm text-slate-500">{selected.type} - Assigned Salesman: {getAgentName(agents, selected.agentId)}</p>
             </div>
-            <Badge tone={selected.creditStatus === "Good" ? "green" : "amber"}>{selected.creditStatus}</Badge>
+            <div className="flex flex-wrap gap-2"><Badge tone={selected.active ? "green" : "slate"}>{selected.active ? "Active" : "Inactive"}</Badge>{canManage && <Button variant="secondary" onClick={() => onEdit(selected)}>Edit Customer</Button>}</div>
           </div>
-          <div className="mb-4 grid gap-3 sm:grid-cols-4">
-            <StatMini label="Credit Limit" value={currency(selected.creditLimit)} />
+          <div className="mb-4 grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+            <StatMini label="Credit Limit" value={selected.creditLimit === null || selected.creditLimit === "" ? "Not set" : currency(selected.creditLimit)} />
             <StatMini label="Outstanding Balance" value={currency(customerBalance(ledgerEntries, selected.id))} />
             <StatMini label="Total Purchases" value={currency(totalPurchases)} />
             <StatMini label="Total Payments" value={currency(totalPayments)} />
           </div>
+          <div className="customer-contact mb-4 grid gap-3 2xl:grid-cols-2"><Info label="Contact" value={selected.contactPerson || "-"} /><Info label="Mobile" value={selected.mobile || "-"} /><Info label="Address" value={selected.address || "-"} /><Info label="Payment Type" value={selected.paymentType} /><Info label="Available Credit" value={availableCredit(selected, ledgerEntries) === null ? "Not set" : currency(availableCredit(selected, ledgerEntries))} /><Info label="Payment Days" value={selected.paymentDays === "" ? "Not set" : selected.paymentDays ?? "Not set"} /></div>
+          {!ledger.length && <p className="mb-4 text-slate-500">No Transactions Yet</p>}
           <ResponsiveTable
-            columns={["Date", "Reference", "Description", "Charge", "Payment", "Balance"]}
+            columns={["Date", "Salesman", "Trust Receipt", "Transaction", "Charge", "Payment", "Balance"]}
             rows={ledger.map((entry) => [
               shortDate(entry.date).replace(", 2026", ""),
-              <button className="font-bold text-[#146ef5]" onClick={() => entry.type === "OUT" ? onSelect({ type: "out", out: outs.find((out) => out.ref === entry.ref) }) : onSelect({ type: "payment", payment: { ...entry, collection: collections.find((collection) => collection.ref === entry.ref) } })}>{entry.ref}</button>,
-              entry.description,
+              getAgentName(agents, entry.agentId),
+              entry.trustReceipt || "-",
+              <button className="font-bold text-[#146ef5]" onClick={() => entry.type === "OUT" ? onSelect({ type: "out", out: outs.find((out) => out.ref === entry.ref) }) : onSelect({ type: "payment", payment: { ...entry, collection: collections.find((collection) => collection.ref === entry.ref) } })}>{entry.ref} / {entry.type === "OUT" ? <>Sale <Badge tone={salePaymentStatus(ledgerEntries, entry.ref) === "Paid" ? "green" : "amber"}>{salePaymentStatus(ledgerEntries, entry.ref)}</Badge></> : entry.description}</button>,
               entry.charge ? currency(entry.charge) : "-",
               entry.payment ? currency(entry.payment) : "-",
               currency(entry.balance),
             ])}
           />
-        </div>
+          <section className="report-section"><h3 className="mb-3 font-bold">Pricing</h3><ResponsiveTable columns={["Product", "Default Selling Price/kg", "Customer Selling Price/kg"]} rows={Object.entries(selected.pricing).map(([product, price]) => [product, currency(generalPrice[product] || 0), currency(price)])} /></section>
+        </div>}
       </div>
     </>
   );
 }
 
-function Collections({ customers, ledgerEntries, setLedgerEntries, collections, setCollections, expenses, setExpenses, setDiscrepancies, addAudit, pushToast, registerPostDcrChange }) {
-  const [collection, setCollection] = useState({ agentId: "agent-pedro", customerId: "cust-abc", amount: 30000, method: "Cash", date: today, reference: "", bank: "BDO", manual: false, allocations: [] });
-  const [expense, setExpense] = useState({ agentId: "agent-pedro", date: today, category: "Fuel", amount: 2500, source: "Cash Collection", description: "Flow D fuel expense" });
-  const autoAllocations = allocateOldestFirst(ledgerEntries, collection.customerId, collection.amount);
+function Collections({ initialCustomerId = "", customers, ledgerEntries, setLedgerEntries, collections, setCollections, expenses, setExpenses, setDiscrepancies, addAudit, pushToast, registerPostDcrChange }) {
+  const agents = useUsers();
+  const firstAgent = agents.find((agent) => agent.active && agent.role === "Agent")?.id || "";
+  const [collection, setCollection] = useState({ agentId: firstAgent, customerId: customers.some((c) => c.id === initialCustomerId) ? initialCustomerId : customers[0]?.id || "", amount: "", method: "Cash", date: today, reference: "", bank: "", notes: "", manual: false, allocations: [] });
+  const [expense, setExpense] = useState({ agentId: firstAgent, date: today, category: "Fuel", amount: "", source: "Cash Collection", description: "", status: "Approved" });
+  const autoAllocations = allocateOldestFirst(ledgerEntries, collection.customerId, collection.amount, collection.date);
   const allocations = collection.manual ? collection.allocations.filter((item) => Number(item.amount) > 0) : autoAllocations;
   const allocationTotal = allocations.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  const collectionInvalid =
-    Number(collection.amount || 0) <= 0 ||
-    (collection.method === "GCash" && !collection.reference) ||
-    (collection.method === "Bank Deposit" && (!collection.reference || !collection.bank)) ||
-    allocationTotal > Number(collection.amount || 0);
+  const paymentError = validatePayment(collection, ledgerEntries, allocations);
+  const collectionInvalid = Boolean(paymentError) || !customers.some((c) => c.id === collection.customerId) || !agents.some((agent) => agent.id === collection.agentId && agent.active && agent.role === "Agent");
 
   function recordCollection() {
+    if (collectionInvalid) return;
     const ref = `PAY-${3000 + collections.length + 1}`;
-    const destination = collection.method === "Cash" ? "Cash held by agent until remittance" : collection.method === "GCash" ? "Owner GCash" : "Owner Bank Account";
+    const destination = collection.method === "Cash" ? "Cash held by Salesman until remittance" : collection.method === "GCash" ? "Owner GCash" : "Owner Bank Account";
     const newCollection = { ...collection, id: `col-${Date.now()}`, ref, amount: Number(collection.amount), destination, allocations };
     setCollections((items) => [newCollection, ...items]);
     setLedgerEntries((items) => [
       ...items,
-      { id: `led-${Date.now()}`, customerId: collection.customerId, date: collection.date, ref, description: `${collection.method} Payment`, charge: 0, payment: Number(collection.amount), type: "Payment", allocations, agentId: collection.agentId, method: collection.method },
+      { id: `led-${Date.now()}`, customerId: collection.customerId, date: collection.date, ref, description: `${collection.method} Payment`, notes: collection.notes.trim(), charge: 0, payment: Number(collection.amount), type: "Payment", allocations, reference: collection.reference.trim(), agentId: collection.agentId, method: collection.method },
     ]);
     if (collection.method === "Bank Deposit") {
       setDiscrepancies((items) => [
         {
           id: `disc-bank-${Date.now()}`,
+          date: collection.date,
           type: "Payment Verification",
           title: "Bank Verification",
           status: "Open",
@@ -1769,64 +1272,74 @@ function Collections({ customers, ledgerEntries, setLedgerEntries, collections, 
       ]);
       addAudit(`Bank payment ${ref} awaiting verification for ${getCustomerName(customers, collection.customerId)}`);
     }
-    addAudit(`Recorded ${currency(collection.amount)} ${collection.method.toLowerCase()} collection`, getAgentName(agents, collection.agentId));
-    registerPostDcrChange(collection.agentId, collection.date, `${ref} collection was added after lock`);
+    addAudit(`Recorded ${currency(collection.amount)} ${collection.method.toLowerCase()} payment`, getAgentName(agents, collection.agentId));
+    registerPostDcrChange(collection.agentId, collection.date, `${ref} payment was added after lock`);
+    setCollection((current) => ({ ...current, amount: "", reference: "", notes: "", allocations: [] }));
     pushToast(`${ref} recorded and allocated`);
   }
 
   function recordExpense() {
+    if (!expense.date || !Number.isFinite(Number(expense.amount)) || Number(expense.amount) <= 0) return;
     const item = { ...expense, id: `exp-${Date.now()}`, amount: Number(expense.amount) };
     setExpenses((items) => [item, ...items]);
     addAudit(`Recorded ${currency(item.amount)} ${item.category.toLowerCase()} expense`, getAgentName(agents, item.agentId));
     registerPostDcrChange(item.agentId, item.date, `${item.category} expense was added after lock`);
+    setExpense((current) => ({ ...current, amount: "", description: "" }));
     pushToast(`${item.category} expense recorded`);
   }
 
   return (
     <>
-      <SectionHeader title="Collections" eyebrow="Payments apply to Customer Ledger, not plant/trip" />
+      <SectionHeader title="Payments" />
+      {!collections.length && <p className="mb-4 text-slate-500">No payments recorded yet.</p>}
       <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <h2 className="mb-4 font-bold">+ Record Collection</h2>
+          <h2 className="mb-4 font-bold">Record Payment</h2>
+          <h3 className="customer-name mb-4">{collection.customerId ? getCustomerName(customers, collection.customerId) : "Select Customer"}</h3>
+          <div className="mb-4 grid gap-3 sm:grid-cols-2"><StatMini label="Current Balance" value={currency(customerBalance(ledgerEntries, collection.customerId))} /><StatMini label="Amount Applied" value={currency(allocationTotal)} /></div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Agent"><select className={inputClass()} value={collection.agentId} onChange={(e) => setCollection({ ...collection, agentId: e.target.value })}>{agents.map((agent) => <option value={agent.id} key={agent.id}>{agent.name}</option>)}</select></Field>
-            <Field label="Customer"><select className={inputClass()} value={collection.customerId} onChange={(e) => setCollection({ ...collection, customerId: e.target.value, allocations: [] })}>{customers.map((customer) => <option value={customer.id} key={customer.id}>{customer.name}</option>)}</select></Field>
-            <Field label="Amount"><input className={inputClass()} type="number" value={collection.amount} onChange={(e) => setCollection({ ...collection, amount: e.target.value })} /></Field>
+            <Field label="Salesman"><select className={inputClass()} value={collection.agentId} onChange={(e) => setCollection({ ...collection, agentId: e.target.value })}>{agents.filter((agent) => agent.active && agent.role === "Agent").map((agent) => <option value={agent.id} key={agent.id}>{agent.name}</option>)}</select></Field>
+            <CustomerSelector label="Customer" customers={customers} value={collection.customerId} onChange={(id) => setCollection({ ...collection, customerId: id, allocations: [] })} />
+            <Field label="Amount"><MoneyInput className={inputClass()} value={collection.amount} onChange={(e) => setCollection({ ...collection, amount: e.target.value })} /></Field>
             <Field label="Payment Method"><select className={inputClass()} value={collection.method} onChange={(e) => setCollection({ ...collection, method: e.target.value })}>{paymentMethods.map((method) => <option key={method}>{method}</option>)}</select></Field>
-            <Field label="Date"><input className={inputClass()} type="date" value={collection.date} onChange={(e) => setCollection({ ...collection, date: e.target.value })} /></Field>
+            <Field label="Date"><input className={inputClass()} type="date" value={collection.date} onInput={(e) => setCollection({ ...collection, date: e.target.value })} /></Field>
             {collection.method === "GCash" && <Field label="GCash Reference Number"><input className={inputClass()} value={collection.reference} onChange={(e) => setCollection({ ...collection, reference: e.target.value })} /></Field>}
             {collection.method === "Bank Deposit" && <Field label="Bank"><input className={inputClass()} value={collection.bank} onChange={(e) => setCollection({ ...collection, bank: e.target.value })} /></Field>}
-            {collection.method === "Bank Deposit" && <Field label="Reference / Deposit Reference"><input className={inputClass()} value={collection.reference} onChange={(e) => setCollection({ ...collection, reference: e.target.value })} /></Field>}
+            {collection.method === "Bank Deposit" && <Field label="Bank Reference Number"><input className={inputClass()} value={collection.reference} onChange={(e) => setCollection({ ...collection, reference: e.target.value })} /></Field>}
+            <Field label="Notes / Description (Optional)"><input className={inputClass()} value={collection.notes} onChange={(e) => setCollection({ ...collection, notes: e.target.value })} placeholder="Branch or payment description" /></Field>
           </div>
-          <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-700">Destination: {collection.method === "Cash" ? "Cash held by agent until remittance" : collection.method === "GCash" ? "Owner GCash" : "Owner Bank Account"}</div>
-          {collection.method === "Bank Deposit" && <div className="mt-3 rounded-lg border border-dashed border-slate-300 p-4 text-center text-sm font-semibold text-slate-500">Proof of Deposit placeholder</div>}
+          <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-700">Destination: {collection.method === "Cash" ? "Cash held by Salesman until remittance" : collection.method === "GCash" ? "Owner GCash" : "Owner Bank Account"}</div>
+
           <div className="mt-4 flex items-center gap-3">
             <input id="manual" type="checkbox" checked={collection.manual} onChange={(e) => setCollection({ ...collection, manual: e.target.checked })} />
             <label htmlFor="manual" className="text-sm font-semibold">Allocate Manually</label>
           </div>
           <AllocationPreview collection={collection} ledgerEntries={ledgerEntries} allocations={allocations} setCollection={setCollection} />
           {allocationTotal > Number(collection.amount || 0) && <p className="mt-3 text-sm font-bold text-rose-700">Manual allocation cannot exceed the payment amount.</p>}
-          <Button className="mt-4 w-full" disabled={collectionInvalid} onClick={recordCollection}><Banknote size={18} />Record Collection</Button>
+          {paymentError && collection.amount !== "" && <p role="alert" className="mt-3 text-sm font-semibold text-rose-700">{paymentError}</p>}
+          <Button className="mt-4 w-full" disabled={collectionInvalid} onClick={recordCollection}><Banknote size={18} />Record Payment</Button>
         </div>
         <div className="space-y-4">
           <div className="rounded-lg border border-slate-200 bg-white p-4">
             <h2 className="mb-4 font-bold">+ Record Expense</h2>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Agent"><select className={inputClass()} value={expense.agentId} onChange={(e) => setExpense({ ...expense, agentId: e.target.value })}>{agents.map((agent) => <option value={agent.id} key={agent.id}>{agent.name}</option>)}</select></Field>
+              <Field label="Salesman"><select className={inputClass()} value={expense.agentId} onChange={(e) => setExpense({ ...expense, agentId: e.target.value })}>{agents.filter((agent) => agent.active && agent.role === "Agent").map((agent) => <option value={agent.id} key={agent.id}>{agent.name}</option>)}</select></Field>
+              <Field label="Expense Date"><input className={inputClass()} type="date" value={expense.date} onInput={(e) => setExpense({ ...expense, date: e.target.value })} /></Field>
+              <Field label="Approval"><select className={inputClass()} value={expense.status} onChange={(e) => setExpense({ ...expense, status: e.target.value })}><option>Approved</option><option>Pending</option></select></Field>
               <Field label="Category"><select className={inputClass()} value={expense.category} onChange={(e) => setExpense({ ...expense, category: e.target.value })}>{categories.map((category) => <option key={category}>{category}</option>)}</select></Field>
-              <Field label="Amount"><input className={inputClass()} type="number" value={expense.amount} onChange={(e) => setExpense({ ...expense, amount: e.target.value })} /></Field>
+              <Field label="Amount"><MoneyInput className={inputClass()} value={expense.amount} onChange={(e) => setExpense({ ...expense, amount: e.target.value })} /></Field>
               <Field label="Payment Source"><select className={inputClass()} value={expense.source} onChange={(e) => setExpense({ ...expense, source: e.target.value })}>{["Cash Collection", "Personal Cash", "Other"].map((source) => <option key={source}>{source}</option>)}</select></Field>
             </div>
             <Field label="Description"><textarea className={`${inputClass()} min-h-20 py-3`} value={expense.description} onChange={(e) => setExpense({ ...expense, description: e.target.value })} /></Field>
-            <div className="mt-3 rounded-lg border border-dashed border-slate-300 p-4 text-center text-sm font-semibold text-slate-500">Receipt placeholder</div>
-            {expense.source === "Cash Collection" && <div className="mt-3 rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-900">This reduces expected physical cash remittance in the DCR.</div>}
-            <Button className="mt-4 w-full" onClick={recordExpense}><ReceiptText size={18} />Record Expense</Button>
+
+            {expense.source === "Cash Collection" && <div className="mt-3 rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-900">Approved cash-paid expenses reduce expected physical cash remittance.</div>}
+            <Button className="mt-4 w-full" disabled={!expense.date || Number(expense.amount) <= 0 || !agents.some((agent) => agent.id === expense.agentId && agent.active && agent.role === "Agent")} onClick={recordExpense}><ReceiptText size={18} />Record Expense</Button>
           </div>
           <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <h2 className="mb-3 font-bold">Recent Collections</h2>
-            {collections.slice(0, 6).map((item) => (
+            <h2 className="mb-3 font-bold">Recent Payments</h2>
+            {collections.slice().sort((a, b) => b.date.localeCompare(a.date) || b.ref.localeCompare(a.ref)).slice(0, 6).map((item) => (
               <div key={item.id} className="flex items-center justify-between border-b border-slate-100 py-3 last:border-0">
-                <div><p className="font-semibold">{getCustomerName(customers, item.customerId)}</p><p className="text-sm text-slate-500">{item.method} - {item.ref}</p></div>
+                <div><p className="font-semibold">{getCustomerName(customers, item.customerId)}</p><p className="text-sm text-slate-500">{item.method} - {item.ref}{item.notes ? " / " + item.notes : ""}</p></div>
                 <p className="font-bold">{currency(item.amount)}</p>
               </div>
             ))}
@@ -1838,19 +1351,19 @@ function Collections({ customers, ledgerEntries, setLedgerEntries, collections, 
 }
 
 function AllocationPreview({ collection, ledgerEntries, allocations, setCollection }) {
-  const invoices = useMemo(() => ledgerEntries.filter((entry) => entry.customerId === collection.customerId && entry.charge > 0), [ledgerEntries, collection.customerId]);
+  const invoices = invoiceBalances(ledgerEntries, collection.customerId).filter((item) => item.date <= collection.date);
   return (
     <div className="mt-4 rounded-lg border border-slate-200 p-3">
       <p className="mb-2 font-bold">Payment Allocation</p>
-      {!collection.manual && <p className="mb-2 text-sm text-slate-500">Automatically applies to oldest unpaid OUT/invoice first.</p>}
+      {!collection.manual && <p className="mb-2 text-sm text-slate-500">Automatically applies to oldest unpaid sale/invoice first.</p>}
       {collection.manual ? (
         <div className="space-y-2">
           {invoices.map((invoice) => {
             const current = collection.allocations.find((item) => item.invoiceRef === invoice.ref)?.amount || "";
             return (
               <div key={invoice.ref} className="grid grid-cols-[1fr_130px] gap-2">
-                <span className="rounded-lg bg-slate-50 px-3 py-2 text-sm font-semibold">{invoice.ref} - {currency(invoice.charge)}</span>
-                <input className={inputClass()} type="number" value={current} onChange={(e) => {
+                <span className="rounded-lg bg-slate-50 px-3 py-2 text-sm font-semibold">{invoice.ref} - {currency(invoice.balance)} outstanding</span>
+                <MoneyInput aria-label={"Allocate to " + invoice.ref} className={inputClass()} value={current} onChange={(e) => {
                   const next = collection.allocations.filter((item) => item.invoiceRef !== invoice.ref);
                   setCollection({ ...collection, allocations: [...next, { invoiceRef: invoice.ref, amount: Number(e.target.value || 0) }] });
                 }} />
@@ -1861,7 +1374,7 @@ function AllocationPreview({ collection, ledgerEntries, allocations, setCollecti
       ) : (
         <div className="space-y-2">
           {allocations.map((allocation) => <div key={allocation.invoiceRef} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm"><span>{allocation.invoiceRef}</span><strong>{currency(allocation.amount)} applied</strong></div>)}
-          {!allocations.length && <p className="text-sm text-slate-500">No open invoices found for this customer in demo data.</p>}
+          {!allocations.length && <p className="text-sm text-slate-500">Enter an amount to preview invoice allocation.</p>}
         </div>
       )}
       <p className="mt-2 text-sm font-semibold text-slate-700">Remaining Balance after payment: {currency(Math.max(0, customerBalance(ledgerEntries, collection.customerId) - Number(collection.amount || 0)))}</p>
@@ -1869,20 +1382,25 @@ function AllocationPreview({ collection, ledgerEntries, allocations, setCollecti
   );
 }
 
-function Dcr({ customers, collections, expenses, dcrs, setDcrs, setDiscrepancies, addAudit, pushToast, postDcrAlert }) {
-  const [agentId, setAgentId] = useState("agent-pedro");
+function Dcr({ outs, customers, collections, expenses, dcrs, setDcrs, setDiscrepancies, addAudit, pushToast, postDcrAlert }) {
+  const agents = useUsers();
+  const [agentId, setAgentId] = useState(agents.find((agent) => agent.active && agent.role === "Agent")?.id || "");
   const [date, setDate] = useState(today);
-  const [actual, setActual] = useState(36500);
-  const [explanation, setExplanation] = useState("Cash shortage found during remittance count.");
-  const dcr = buildDcr({ collections, expenses, customers, agentId, date });
-  const diff = Number(actual || 0) - dcr.expectedCashRemittance;
+  const [actual, setActual] = useState(0);
+  const [explanation, setExplanation] = useState("");
+  const liveDcr = buildDcr({ collections, expenses, customers, agentId, date });
   const locked = dcrs.find((item) => item.agentId === agentId && item.date === date && item.status === "LOCKED");
+  const dcr = locked?.snapshot || liveDcr;
+  const actualRemittance = locked ? locked.actual : actual;
+  const diff = locked ? locked.diff : money(Number(actual || 0) - dcr.expectedCashRemittance);
+  const hasActivity = dcr.collections.length > 0 || dcr.expenses.length > 0 || outs.some((out) => out.agentId === agentId && out.date === date);
   function submitDcr() {
-    const saved = { id: `dcr-${Date.now()}`, agentId, date, actual: Number(actual), diff, status: "LOCKED", explanation };
+    if (!hasActivity || !agentId || locked || !date || !Number.isFinite(Number(actual)) || Number(actual) < 0 || (diff !== 0 && !explanation.trim())) return;
+    const saved = { id: `dcr-${Date.now()}`, agentId, date, actual: Number(actual), diff, status: "LOCKED", explanation, snapshot: structuredClone(liveDcr) };
     setDcrs((items) => [saved, ...items.filter((item) => !(item.agentId === agentId && item.date === date))]);
     if (diff !== 0) {
       setDiscrepancies((items) => [
-        { id: `disc-cash-${Date.now()}`, type: "Cash", title: diff < 0 ? "Cash Shortage" : "Cash Over", status: "Open", agentId, expected: dcr.expectedCashRemittance, actual: Number(actual), difference: diff, details: explanation },
+        { id: `disc-cash-${Date.now()}`, date, type: "Cash", title: diff < 0 ? "Cash Shortage" : "Cash Over", status: "Open", agentId, expected: dcr.expectedCashRemittance, actual: Number(actual), difference: diff, details: explanation },
         ...items,
       ]);
     }
@@ -1891,13 +1409,14 @@ function Dcr({ customers, collections, expenses, dcrs, setDcrs, setDiscrepancies
   }
   return (
     <>
-      <SectionHeader title="Daily Cash Reports" eyebrow="System-generated from agent transactions" action={<Button disabled={Boolean(locked) || (diff !== 0 && !explanation)} onClick={submitDcr}><FileClock size={18} />Submit DCR</Button>} />
+      <SectionHeader title="Daily Cash Report" eyebrow="System-generated from Salesman transactions" action={<Button disabled={!hasActivity || !agentId || Boolean(locked) || !date || actual === "" || Number(actual) < 0 || (diff !== 0 && !explanation.trim())} onClick={submitDcr}><FileClock size={18} />Submit DCR</Button>} />
+      {!hasActivity && <p className="mb-4 text-slate-500">No transactions for this date.</p>}
       <div className="grid gap-5 xl:grid-cols-[330px_1fr]">
         <div className="rounded-lg border border-slate-200 bg-white p-4">
           <div className="grid gap-3">
-            <Field label="Agent"><select className={inputClass()} value={agentId} onChange={(e) => setAgentId(e.target.value)}>{agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</select></Field>
-            <Field label="Date"><input className={inputClass()} type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
-            <Button variant="secondary" onClick={() => setActual(Math.max(0, dcr.expectedCashRemittance - 1000))}><FileText size={18} />Generate DCR</Button>
+            <Field label="Salesman"><select className={inputClass()} value={agentId} onChange={(e) => setAgentId(e.target.value)}>{agents.filter((agent) => agent.role === "Agent" || dcrs.some((item) => item.agentId === agent.id)).map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</select></Field>
+            <Field label="Date"><input className={inputClass()} type="date" value={date} onInput={(e) => setDate(e.target.value)} /></Field>
+            <Button disabled={Boolean(locked) || !hasActivity} variant="secondary" onClick={() => setActual(Math.max(0, dcr.expectedCashRemittance))}><FileText size={18} />Generate DCR</Button>
           </div>
           {locked && <div className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm font-bold text-emerald-800">DCR submitted and locked</div>}
           {postDcrAlert && <div className="mt-4 rounded-lg bg-rose-50 p-3 text-sm font-bold text-rose-800">{postDcrAlert}</div>}
@@ -1906,11 +1425,12 @@ function Dcr({ customers, collections, expenses, dcrs, setDcrs, setDiscrepancies
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 className="text-xl font-bold">Daily Cash Report</h2>
-              <p className="text-sm text-slate-500">Agent: {getAgentName(agents, agentId)} - Date: {shortDate(date)}</p>
+              <p className="text-sm text-slate-500">Salesman: {getAgentName(agents, agentId)} - Date: {shortDate(date)}</p>
             </div>
             <Badge tone={locked ? "green" : "blue"}>{locked ? "LOCKED" : "Draft"}</Badge>
           </div>
-          <h3 className="mb-2 font-bold">Collections</h3>
+          <StatMini label="Sales Handled" value={currency(sum(outs.filter((out) => out.agentId === agentId && out.date === date), "total"))} />
+          <h3 className="mb-2 mt-4 font-bold">Payments</h3>
           <ResponsiveTable
             columns={["Customer", "Cash", "GCash", "Bank", "Total"]}
             rows={dcr.rows.map((row) => [row.customer, currency(row.Cash), currency(row.GCash), currency(row["Bank Deposit"]), currency(row.total)])}
@@ -1926,12 +1446,12 @@ function Dcr({ customers, collections, expenses, dcrs, setDcrs, setDiscrepancies
             <StatMini label="Cash Collected" value={currency(dcr.totals.Cash)} />
             <StatMini label="Less Cash-paid Expenses" value={currency(dcr.expenseTotals.cashPaid)} />
             <StatMini label="Expected Cash Remittance" value={currency(dcr.expectedCashRemittance)} />
-            <Field label="Actual Cash Remitted"><input disabled={Boolean(locked)} className={inputClass()} type="number" value={actual} onChange={(e) => setActual(e.target.value)} /></Field>
+            <Field label="Actual Cash Remitted"><MoneyInput disabled={Boolean(locked)} className={inputClass()} value={actualRemittance} onChange={(e) => setActual(e.target.value)} /></Field>
           </div>
           <div className={`mt-4 rounded-lg p-4 text-center text-lg font-bold ${diff === 0 ? "bg-emerald-50 text-emerald-700" : diff < 0 ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-800"}`}>
             {diff === 0 ? "Balanced ✓" : diff < 0 ? `SHORT ${currency(Math.abs(diff))}` : `OVER ${currency(diff)}`}
           </div>
-          {diff !== 0 && <Field label="Explanation required"><textarea disabled={Boolean(locked)} className={`${inputClass()} mt-3 min-h-20 py-3`} value={explanation} onChange={(e) => setExplanation(e.target.value)} /></Field>}
+          {diff !== 0 && <Field label="Explanation required"><textarea disabled={Boolean(locked)} className={`${inputClass()} mt-3 min-h-20 py-3`} value={locked ? locked.explanation : explanation} onChange={(e) => setExplanation(e.target.value)} /></Field>}
         </div>
       </div>
     </>
@@ -1939,6 +1459,7 @@ function Dcr({ customers, collections, expenses, dcrs, setDcrs, setDiscrepancies
 }
 
 function Discrepancies({ discrepancies, setDiscrepancies, customers }) {
+  const agents = useUsers();
   const counts = ["Open", "Resolved", "Cash", "Inventory", "Payment Verification"].map((key) => ({
     key,
     count: key === "Open" || key === "Resolved" ? discrepancies.filter((item) => item.status === key).length : discrepancies.filter((item) => item.type === key).length,
@@ -1949,6 +1470,7 @@ function Discrepancies({ discrepancies, setDiscrepancies, customers }) {
   return (
     <>
       <SectionHeader title="Discrepancies" eyebrow="Owner review queue" />
+      {!discrepancies.length && <p className="mb-4 text-slate-500">No discrepancies recorded.</p>}
       <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{counts.map((item) => <StatCard key={item.key} label={item.key} value={item.count} icon={AlertTriangle} tone={item.key === "Open" ? "red" : item.key === "Resolved" ? "green" : "amber"} />)}</div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {discrepancies.map((item) => (
@@ -1958,7 +1480,7 @@ function Discrepancies({ discrepancies, setDiscrepancies, customers }) {
               <Badge tone={item.status === "Resolved" ? "green" : item.status === "Reviewed" ? "blue" : "red"}>{item.status}</Badge>
             </div>
             <div className="space-y-2 text-sm">
-              {item.agentId && <Info label="Agent" value={getAgentName(agents, item.agentId)} />}
+              {item.agentId && <Info label="Salesman" value={getAgentName(agents, item.agentId)} />}
               {item.customerId && <Info label="Customer" value={getCustomerName(customers, item.customerId)} />}
               {item.plant && <Info label="Plant" value={item.plant} />}
               {item.tripDate && <Info label="Trip" value={shortDate(item.tripDate)} />}
@@ -1967,7 +1489,7 @@ function Discrepancies({ discrepancies, setDiscrepancies, customers }) {
               {item.actual !== undefined && <Info label="Actual" value={item.type === "Inventory" ? kg(item.actual) : currency(item.actual)} />}
               {item.amount && <Info label="Amount" value={currency(item.amount)} />}
               {item.normalPrice && <Info label="Normal Price" value={`${currency(item.normalPrice)}/kg`} />}
-              {item.agentPrice && <Info label="Agent Price" value={`${currency(item.agentPrice)}/kg`} />}
+              {item.agentPrice && <Info label="Salesman Price" value={`${currency(item.agentPrice)}/kg`} />}
               {item.acquisitionCost !== undefined && <Info label="Acquisition Cost" value={`${currency(item.acquisitionCost)}/kg`} />}
               {item.expectedGrossProfit !== undefined && <Info label="Expected Gross Profit" value={currency(item.expectedGrossProfit)} />}
               {item.actualGrossProfit !== undefined && <Info label="Actual Gross Profit" value={currency(item.actualGrossProfit)} />}
@@ -1986,364 +1508,20 @@ function Discrepancies({ discrepancies, setDiscrepancies, customers }) {
   );
 }
 
-function Reports({ customers, inventoryRows, trips, outs, ledgerEntries, collections, expenses, discrepancies }) {
-  const [report, setReport] = useState("Weekly Business Report");
-  const [periodKey, setPeriodKey] = useState("thisWeek");
-  const activePeriodKey = periodKey === "custom" ? "thisWeek" : periodKey;
-  const period = weeklyBusinessData[activePeriodKey];
-  const reportNames = [
-    "Weekly Business Report",
-    "Trip Inventory Report",
-    "Plant Sales Report",
-    "Customer Ledger Report",
-    "Agent Collection Report",
-    "Daily Cash Report",
-    "Cash Discrepancy Report",
-    "Inventory Discrepancy Report",
-    "Payment Verification Report",
-  ];
-  const reportFinancials = weeklyFinancialSummary(period, outs, trips, expenses);
-  const reportPlantProfit = aggregateProfit(reportFinancials.lines, (line) => line.plant || "Unassigned");
-  const rows = {
-    "Trip Inventory Report": inventoryRows.slice(0, 8).map((row) => [row.plant, shortDate(row.tripDate), row.product, `${kg(row.remainingQty)} / ${currency(row.costPerKg)}/kg`, currency(row.inventoryCostValue)]),
-    "Plant Sales Report": reportPlantProfit.map((plant) => [plant.key, currency(plant.netSales), currency(plant.cogs), currency(plant.grossProfit), marginLabel(plant.netSales, plant.grossProfit)]),
-    "Customer Ledger Report": customers.map((customer) => [customer.name, customer.type, currency(customerBalance(ledgerEntries, customer.id)), getAgentName(agents, customer.agentId)]),
-    "Agent Collection Report": collections.slice(0, 6).map((item) => [getAgentName(agents, item.agentId), getCustomerName(customers, item.customerId), item.method, currency(item.amount)]),
-    "Daily Cash Report": [["Pedro Reyes", "Aug 30, 2026", "Submitted", "Cash shortage reviewed"], ["Maria Santos", "Aug 30, 2026", "Not submitted", "Attention required"], ["Juan Cruz", "Aug 30, 2026", "Submitted", "Balanced"]],
-    "Cash Discrepancy Report": discrepancies.filter((item) => item.type === "Cash").map((item) => [item.title, getAgentName(agents, item.agentId), currency(item.difference), item.status]),
-    "Inventory Discrepancy Report": discrepancies.filter((item) => item.type === "Inventory").map((item) => [item.plant, shortDate(item.tripDate), item.product, kg(item.difference)]),
-    "Payment Verification Report": discrepancies.filter((item) => item.type === "Payment Verification").map((item) => [getCustomerName(customers, item.customerId), getAgentName(agents, item.agentId), currency(item.amount), item.status]),
-  };
-  const tableRows = rows[report] || [["Demo", "Report", "For presentation", "Ready"]];
-
-  return (
-    <>
-      <SectionHeader
-        title="Reports"
-        eyebrow="Weekly Business Report is whole business + week. DCR remains agent + day."
-        action={<PeriodControls periodKey={periodKey} setPeriodKey={setPeriodKey} />}
-      />
-      {periodKey === "custom" && (
-        <div className="mb-4 grid gap-2 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-2">
-          <input className={inputClass()} type="date" defaultValue={period.start} aria-label="Custom report start date" />
-          <input className={inputClass()} type="date" defaultValue={period.end} aria-label="Custom report end date" />
-        </div>
-      )}
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-        {reportNames.map((name) => (
-          <button
-            key={name}
-            className={`rounded-lg border p-4 text-left ${report === name ? "border-blue-300 bg-blue-50" : name === "Weekly Business Report" ? "border-blue-200 bg-white hover:bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
-            onClick={() => setReport(name)}
-          >
-            <FileText className="mb-3 text-[#146ef5]" size={22} />
-            <p className="font-bold">{name}</p>
-            <p className="mt-1 text-sm text-slate-500">{name === "Weekly Business Report" ? "Whole business performance" : "Tap to view demo table"}</p>
-          </button>
-        ))}
-      </div>
-      <div className="mt-5">
-        {report === "Weekly Business Report" ? (
-          <WeeklyBusinessReport period={period} trips={trips} outs={outs} expenses={expenses} inventoryRows={inventoryRows} customers={customers} discrepancies={discrepancies} />
-        ) : (
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <h2 className="mb-3 font-bold">{report}</h2>
-            <ResponsiveTable columns={report === "Trip Inventory Report" ? ["Plant", "Trip", "Product", "Remaining / Cost", "Cost Value"] : report === "Plant Sales Report" ? ["Plant", "Net Sales", "COGS", "Gross Profit", "Margin"] : ["Column A", "Column B", "Column C", "Column D"]} rows={tableRows.length ? tableRows : [["No matching records", "-", "-", "-"]]} />
-          </div>
-        )}
-      </div>
-    </>
-  );
-}
-
-function WeeklyBusinessReport({ period, trips, outs, expenses, inventoryRows, customers, discrepancies }) {
-  const totals = weeklyTotals(period);
-  const financials = weeklyFinancialSummary(period, outs, trips, expenses);
-  const previousFinancials = weeklyFinancialSummary(previousWeekPeriod(period), outs, trips, expenses);
-  const plantProfit = aggregateProfit(financials.lines, (line) => line.plant || "Unassigned");
-  const productProfit = aggregateProfit(financials.lines, (line) => line.product);
-  const customerProfit = aggregateProfit(financials.lines, (line) => line.customerId);
-  const tripProfit = aggregateProfit(financials.lines, (line) => line.tripId).map((tripRow) => {
-    const trip = trips.find((item) => item.id === tripRow.key);
-    const inventoryForTrip = inventoryRows.filter((row) => row.tripId === tripRow.key);
-    return {
-      ...tripRow,
-      trip,
-      originalAcquisitionCost: tripAcquisitionCost(trip),
-      remainingKg: inventoryForTrip.reduce((sum, row) => sum + Number(row.remainingQty || 0), 0),
-      remainingInventoryCostValue: inventoryForTrip.reduce((sum, row) => sum + Number(row.inventoryCostValue || 0), 0),
-    };
-  });
-  const tripStats = weeklyTripStats(trips, period, inventoryRows);
-  const previousTripStats = weeklyTripStats(trips, previousWeekPeriod(period), inventoryRows);
-  const cash = period.agents.reduce((sum, agent) => sum + agent.cash, 0);
-  const gcash = period.agents.reduce((sum, agent) => sum + agent.gcash, 0);
-  const bank = period.agents.reduce((sum, agent) => sum + agent.bank, 0);
-  const remainingForPlant = (plantName) =>
-    plantName === "Other"
-      ? "Demo plant group"
-      : kg(inventoryRows.filter((row) => row.plant === plantName).reduce((sum, row) => sum + row.remainingQty, 0));
-
-  return (
-    <div className="space-y-5">
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-slate-950">Weekly Business Report</h2>
-            <p className="text-sm font-semibold text-slate-500">Period: {periodRangeLabel(period)}</p>
-          </div>
-          <Badge tone="blue">{period.label}</Badge>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <StatMini label="Gross Sales" value={currency(financials.grossSales)} />
-          <StatMini label="COGS" value={currency(financials.cogs)} />
-          <StatMini label="Gross Profit" value={currency(financials.grossProfit)} />
-          <StatMini label="Gross Margin" value={`${financials.grossMargin.toFixed(2)}%`} />
-          <StatMini label="Operating Profit Estimate" value={currency(financials.operatingProfitEstimate)} />
-        </div>
-      </section>
-
-      <ReportSection title="Financial Performance">
-        <ResponsiveTable
-          columns={["Metric", "This Week", "Previous Week", "Notes"]}
-          rows={[
-            ["Gross Sales", currency(financials.grossSales), currency(previousFinancials.grossSales), "Selling value from OUT transactions"],
-            ["Sales Deductions", currency(financials.salesDeductions), currency(previousFinancials.salesDeductions), "No returns or credits in demo data"],
-            ["Net Sales", currency(financials.netSales), currency(previousFinancials.netSales), "Gross Sales minus deductions"],
-            ["COGS", currency(financials.cogs), currency(previousFinancials.cogs), "Qty OUT × exact trip/product acquisition cost"],
-            ["Gross Profit", currency(financials.grossProfit), currency(previousFinancials.grossProfit), "Net Sales minus COGS"],
-            ["Gross Margin", `${financials.grossMargin.toFixed(2)}%`, `${previousFinancials.grossMargin.toFixed(2)}%`, "Gross Profit ÷ Net Sales"],
-            ["Recorded Operating Expenses", currency(financials.recordedOperatingExpenses), currency(previousFinancials.recordedOperatingExpenses), "Agent/business expenses"],
-            ["Operating Profit Estimate", currency(financials.operatingProfitEstimate), currency(previousFinancials.operatingProfitEstimate), "Gross Profit minus recorded operating expenses"],
-          ]}
-        />
-        <p className="mt-3 text-sm font-semibold text-slate-500">Collections are tracked separately as payments against receivables and are not counted as sales again.</p>
-      </ReportSection>
-
-      <ReportSection title="Trip Summary">
-        <div className="mb-4 grid gap-3 sm:grid-cols-3">
-          <StatMini label="Trips This Week" value={tripStats.totalTrips} />
-          <StatMini label="Previous Week" value={previousTripStats.totalTrips} />
-          <StatMini label="Change" value={`${tripStats.totalTrips - previousTripStats.totalTrips >= 0 ? "+" : ""}${tripStats.totalTrips - previousTripStats.totalTrips} Trip${Math.abs(tripStats.totalTrips - previousTripStats.totalTrips) === 1 ? "" : "s"}`} />
-        </div>
-        <div className="mb-4 grid gap-3 md:grid-cols-2">
-          {tripStats.plantBreakdown.map((plant) => (
-            <div key={plant.plant} className="rounded-lg bg-slate-50 p-3">
-              <p className="text-base font-bold text-slate-950">{plant.plant}</p>
-              <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                <StatMini label="Trips" value={`${plant.trips} Trip${plant.trips === 1 ? "" : "s"}`} />
-                <StatMini label="Whole Chicken" value={kg(plant.wholeChickenStockIn)} />
-                <StatMini label="By-products" value={kg(plant.byProductStockIn)} />
-              </div>
-            </div>
-          ))}
-        </div>
-        <ResponsiveTable
-          columns={["Trip Date", "Plant Origin", "Whole Chicken Stock In", "By-product Stock In", "Total Stock In", "Remaining Stock"]}
-          rows={tripStats.rows.map((trip) => [
-            shortDate(trip.date).replace(", 2026", ""),
-            trip.plant,
-            kg(trip.wholeChickenStockIn),
-            kg(trip.byProductStockIn),
-            kg(trip.totalStockIn),
-            kg(trip.remainingStock),
-          ])}
-        />
-      </ReportSection>
-
-      <div className="grid gap-5 xl:grid-cols-2">
-        <ReportSection title="Sales / OUT">
-          <ResponsiveTable
-            columns={["Metric", "This Week", "Last Week", "Change"]}
-            rows={[
-              ["Gross Sales", currency(financials.grossSales), currency(previousFinancials.grossSales), percentChange(financials.grossSales, previousFinancials.grossSales)],
-              ["Net Sales", currency(financials.netSales), currency(previousFinancials.netSales), percentChange(financials.netSales, previousFinancials.netSales)],
-              ["COGS", currency(financials.cogs), currency(previousFinancials.cogs), percentChange(financials.cogs, previousFinancials.cogs)],
-            ]}
-          />
-        </ReportSection>
-        <ReportSection title="Collections">
-          <ResponsiveTable
-            columns={["Type", "Amount", "Share", "Notes"]}
-            rows={[
-              ["Total Collections", currency(totals.totalCollections), `${totals.collectionRate.toFixed(1)}%`, "Collection rate vs sales"],
-              ["Cash", currency(cash), "-", "Agent remittance basis"],
-              ["GCash", currency(gcash), "-", "Owner GCash"],
-              ["Bank", currency(bank), "-", "Owner bank account"],
-            ]}
-          />
-        </ReportSection>
-      </div>
-
-      <div className="grid gap-5 xl:grid-cols-2">
-        <ReportSection title="Expenses">
-          <ResponsiveTable
-            columns={["Category", "Amount", "Last Week", "Change"]}
-            rows={[
-              ...period.expenses.map((expense) => [expense.category, currency(expense.amount), "-", "-"]),
-              ["Total Recorded Operating Expenses", currency(financials.recordedOperatingExpenses), currency(previousFinancials.recordedOperatingExpenses), percentChange(financials.recordedOperatingExpenses, previousFinancials.recordedOperatingExpenses)],
-            ]}
-          />
-        </ReportSection>
-        <ReportSection title="Receivables">
-          <ResponsiveTable
-            columns={["Metric", "Amount", "Purpose", "Scope"]}
-            rows={[
-              ["Opening Receivables", currency(period.receivables.opening), "Starting balance", "Whole business"],
-              ["New Credit Sales", currency(period.receivables.newCreditSales), "New receivables", "This week"],
-              ["Collections Applied", currency(period.receivables.collectionsApplied), "Payments applied", "This week"],
-              ["Closing Receivables", currency(totals.closingReceivables), "Ending balance", "Whole business"],
-            ]}
-          />
-        </ReportSection>
-      </div>
-
-      <ReportSection title="Profitability by Plant">
-        <ResponsiveTable
-          columns={["Plant", "Net Sales", "COGS", "Gross Profit", "Gross Margin", "Remaining Inventory"]}
-          rows={plantProfit.map((plant) => [plant.key, currency(plant.netSales), currency(plant.cogs), currency(plant.grossProfit), marginLabel(plant.netSales, plant.grossProfit), remainingForPlant(plant.key)])}
-        />
-      </ReportSection>
-
-      <ReportSection title="Profitability by Trip">
-        <ResponsiveTable
-          columns={["Trip", "Original Acquisition Cost", "Sales Generated", "COGS Sold", "Gross Profit", "Remaining Inventory", "Remaining Cost Value"]}
-          rows={tripProfit.map((trip) => [
-            `${trip.trip?.plant || "Unknown"} - ${trip.trip ? shortDate(trip.trip.date) : trip.key} - ${trip.trip?.code || trip.key}`,
-            currency(trip.originalAcquisitionCost),
-            currency(trip.netSales),
-            currency(trip.cogs),
-            currency(trip.grossProfit),
-            kg(trip.remainingKg),
-            currency(trip.remainingInventoryCostValue),
-          ])}
-        />
-      </ReportSection>
-
-      <ReportSection title="Profitability by Product">
-        <ResponsiveTable
-          columns={["Product", "Qty OUT", "Net Sales", "COGS", "Gross Profit", "Margin"]}
-          rows={productProfit.map((product) => [
-            product.key,
-            kg(product.qty),
-            currency(product.netSales),
-            currency(product.cogs),
-            currency(product.grossProfit),
-            marginLabel(product.netSales, product.grossProfit),
-          ])}
-        />
-      </ReportSection>
-
-      <div className="grid gap-5 xl:grid-cols-2">
-        <ReportSection title="Customer Profitability">
-          <ResponsiveTable
-            columns={["Customer", "Net Sales", "COGS", "Gross Profit", "Gross Margin"]}
-            rows={customerProfit.map((customer) => [
-              getCustomerName(customers, customer.key),
-              currency(customer.netSales),
-              currency(customer.cogs),
-              currency(customer.grossProfit),
-              marginLabel(customer.netSales, customer.grossProfit),
-            ])}
-          />
-        </ReportSection>
-        <ReportSection title="Top Outstanding Balances">
-          <ResponsiveTable
-            columns={["Customer", "Outstanding", "Sales", "Collections"]}
-            rows={[...period.customers]
-              .sort((a, b) => b.outstanding - a.outstanding)
-              .map((customer) => [
-                getCustomerName(customers, customer.customerId),
-                currency(customer.outstanding),
-                currency(customer.sales),
-                currency(customer.collections),
-              ])}
-          />
-        </ReportSection>
-      </div>
-
-      <ReportSection title="Agent Performance">
-        <ResponsiveTable
-          columns={["Agent", "OUT handled", "Collections", "Cash / GCash / Bank", "Expenses", "Remittance", "Discrepancies"]}
-          rows={period.agents.map((agent) => [
-            getAgentName(agents, agent.agentId),
-            currency(agent.outHandled),
-            currency(agent.collections),
-            `${currency(agent.cash)} / ${currency(agent.gcash)} / ${currency(agent.bank)}`,
-            currency(agent.expenses),
-            `${currency(agent.expectedRemittance)} expected / ${currency(agent.actualRemittance)} actual`,
-            agent.discrepancies,
-          ])}
-        />
-        <p className="mt-3 text-sm font-semibold text-slate-500">This section supports accountability and operational reporting, not employee ranking.</p>
-      </ReportSection>
-
-      <ReportSection title="Discrepancies">
-        <ResponsiveTable
-          columns={["Type", "Issue", "Amount / Difference", "Status"]}
-          rows={discrepancies.map((item) => [
-            item.type,
-            item.title,
-            item.amount ? currency(item.amount) : item.difference !== undefined ? (item.type === "Inventory" ? kg(item.difference) : item.type === "Price" ? `${currency(item.difference)}/kg` : currency(item.difference)) : item.details || "-",
-            item.status,
-          ])}
-        />
-      </ReportSection>
-    </div>
-  );
-}
-
-function ReportSection({ title, children }) {
-  return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <h3 className="mb-3 font-bold text-slate-950">{title}</h3>
-      {children}
-    </section>
-  );
-}
-
-function Administration({ users, auditLog }) {
-  return (
-    <>
-      <SectionHeader title="Administration" eyebrow="Users and Audit Log" />
-      <div className="grid gap-5 lg:grid-cols-[380px_1fr]">
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <h2 className="mb-3 font-bold">Users</h2>
-          {users.map((user) => (
-            <div key={user.id} className="flex items-center justify-between border-b border-slate-100 py-3 last:border-0">
-              <div><p className="font-semibold">{user.name}</p><p className="text-sm text-slate-500">{user.id}</p></div>
-              <Badge tone={user.role.includes("Admin") ? "blue" : "slate"}>{user.role}</Badge>
-            </div>
-          ))}
-        </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <h2 className="mb-3 flex items-center gap-2 font-bold"><History size={19} />Audit Log</h2>
-          {auditLog.map((item) => (
-            <div key={item.id} className="grid gap-2 border-b border-slate-100 py-3 text-sm last:border-0 sm:grid-cols-[90px_150px_1fr]">
-              <span className="font-semibold text-slate-500">{new Date(item.at).toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })}</span>
-              <span className="font-bold">{item.actor}</span>
-              <span>{item.action}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </>
-  );
-}
-
-function OutDetail({ out }) {
+function OutDetail({ out, customers }) {
   if (!out) return <p className="text-sm text-slate-500">Transaction details are not available in this demo record.</p>;
   return (
     <div className="space-y-4">
       <Info label="Reference" value={out.ref} />
-      <Info label="Customer" value={getCustomerName(initialCustomers, out.customerId)} />
+      <Info label="Trust Receipt No." value={out.trustReceipt || "-"} />
+      <Info label="Customer" value={getCustomerName(customers, out.customerId)} />
       <Info label="Total" value={currency(out.total)} />
       {out.groups.map((group, index) => (
         <div key={`${group.tripId}-${index}`} className="rounded-lg border border-slate-200 p-3">
           <p className="font-bold">{group.plant} - {shortDate(group.tripDate)}</p>
           {group.lines.map((line) => (
-            <div key={`${line.product}-${line.qty}`} className="mt-2 flex items-center justify-between text-sm">
-              <span>{line.product} - {kg(line.qty)} x {currency(line.price)}</span>
+            <div key={`${line.product}-${line.sizeCode}-${line.qty}`} className="mt-2 flex items-center justify-between text-sm">
+              <span>{productLabel(line.product, line.sizeCode)} - {kg(line.qty)} x {currency(line.price)}</span>
               <strong>{currency(line.subtotal)}</strong>
             </div>
           ))}
@@ -2354,12 +1532,15 @@ function OutDetail({ out }) {
 }
 
 function PaymentDetail({ payment }) {
+  const agents = useUsers();
   return (
     <div className="space-y-3">
       <Info label="Reference" value={payment.ref} />
-      <Info label="Agent" value={getAgentName(agents, payment.agentId)} />
+      <Info label="Salesman" value={getAgentName(agents, payment.agentId)} />
       <Info label="Payment Method" value={payment.method || payment.collection?.method || "Payment"} />
-      <Info label="Amount" value={currency(payment.payment)} />
+      <Info label="Amount" value={currency(payment.payment ?? payment.amount)} />
+      <Info label="Reference Number" value={payment.reference || payment.collection?.reference || "-"} />
+      <Info label="Notes / Description" value={payment.notes || payment.collection?.notes || "-"} />
       <Info label="Date/time" value={shortDate(payment.date)} />
       <div className="rounded-lg border border-slate-200 p-3">
         <p className="mb-2 font-bold">Payment Allocation</p>
@@ -2373,58 +1554,10 @@ function ReportDetail({ report, rows }) {
   return <ResponsiveTable columns={[report, "Value", "Status", "Notes"]} rows={rows} />;
 }
 
-function ResponsiveTable({ columns, rows, footer }) {
-  return (
-    <div className="overflow-hidden rounded-lg border border-slate-200">
-      <div className="hidden overflow-x-auto md:block">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-            <tr>{columns.map((column) => <th key={column} className="px-3 py-3 font-bold">{column}</th>)}</tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex} className="px-3 py-3">{cell}</td>)}</tr>)}
-          </tbody>
-          {footer && <tfoot className="bg-slate-950 text-sm font-bold text-white"><tr>{footer.map((cell, index) => <td key={index} className="px-3 py-3">{cell}</td>)}</tr></tfoot>}
-        </table>
-      </div>
-      <div className="divide-y divide-slate-100 md:hidden">
-        {rows.map((row, rowIndex) => (
-          <div key={rowIndex} className="p-3">
-            {row.map((cell, cellIndex) => (
-              <div key={cellIndex} className="mb-2 flex justify-between gap-3 text-sm">
-                <span className="font-semibold text-slate-500">{columns[cellIndex]}</span>
-                <span className="text-right font-semibold">{cell}</span>
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function StatMini({ label, value }) {
-  return (
-    <div className="rounded-lg bg-slate-50 p-3">
-      <p className="text-xs font-semibold text-slate-500">{label}</p>
-      <p className="mt-1 font-bold text-slate-950">{value}</p>
-    </div>
-  );
-}
-
-function Info({ label, value }) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="text-slate-500">{label}</span>
-      <strong className="text-right text-slate-900">{value}</strong>
-    </div>
-  );
-}
-
 function drawerTitle(drawer) {
   if (!drawer) return "";
   if (drawer.type === "inventory") return "Stock Item Detail";
-  if (drawer.type === "out") return drawer.out?.ref || "OUT Detail";
+  if (drawer.type === "out") return drawer.out?.ref || "Sale Detail";
   if (drawer.type === "payment") return drawer.payment?.ref || "Payment Detail";
   if (drawer.type === "report") return drawer.report || "Report";
   return "Detail";
