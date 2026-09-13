@@ -122,3 +122,27 @@ later Payments retain FIFO allocation. Sales never become cash receipts automati
 
 See [CLEAN-START-PAYMENTS-REPORT.md](./CLEAN-START-PAYMENTS-REPORT.md) for the latest
 implementation and verification. Earlier reports describe previous prototype stages.
+
+## Supabase Backend Foundation (Phase 1)
+
+The `feature/supabase-backend` branch contains a development-only Supabase foundation.
+The React prototype is still local-state only; this phase does not connect the UI,
+add authentication screens, or import demo operations. See
+[SUPABASE-BACKEND-PLAN.md](./SUPABASE-BACKEND-PLAN.md) and
+[BACKEND-AUDIT.md](./BACKEND-AUDIT.md) for the schema, RLS, RPC, ledger, concurrency,
+and migration notes.
+
+With Docker installed, the local workflow is:
+
+```bash
+supabase start
+supabase db reset
+supabase test db
+supabase db lint --local
+```
+
+The Phase 1 backend foundation has been validated against its dedicated hosted
+development project. See [PHASE-1-EXECUTION-REPORT.md](./PHASE-1-EXECUTION-REPORT.md)
+for the hosted test, concurrency, lint and advisor results. Never put a database
+password, service-role key or access token in the repository. The React app remains
+entirely local-state based until Phase 2 is explicitly approved.
