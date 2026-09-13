@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { Banknote, BarChart3, Building2, FileClock, Home, LogOut, Menu, PackageCheck, ShoppingCart, Truck, Users, WalletCards, X } from "lucide-react";
+import { Banknote, BarChart3, Building2, Clock3, FileClock, Home, LogOut, Menu, PackageCheck, ShoppingCart, Truck, Users, WalletCards, X } from "lucide-react";
 import { AppProvider, useAppContext } from "./context/AppContext";
 import { AuthScreen } from "./components/AuthScreen";
 import { LivePlantManagement } from "./components/LivePlantManagement";
 import { CustomersScreen, DcrScreen, FinanceScreen, LiveDashboard, SalesmanInventoryScreen, SalesScreen, StockInScreen, WarehouseScreen } from "./components/CoreOperations";
 import { HostedReports } from "./components/HostedReports";
 import { HostedTrucks } from "./components/HostedTrucks";
+import { HostedDtr } from "./components/HostedDtr";
 import { Button, SectionHeader } from "./components/ui";
 import { supabaseConfigurationError } from "./lib/supabaseClient";
 import { canAccessScreen, initialScreenForRole } from "./lib/roleAccess";
@@ -58,6 +59,7 @@ function Workspace() {
     { id: "ledger", label: "Ledger", icon: Users },
     { id: "collectibles", label: "Collectibles", icon: Banknote },
     { id: "dcr", label: "Daily Cash Report", icon: FileClock },
+    { id: "dtr", label: "DTR", icon: Clock3 },
     { id: "reports", label: "Reports", icon: BarChart3 },
     { id: "trucks", label: "Trucks", icon: Truck },
   ].filter((item) => canAccessScreen(role, item.id));
@@ -73,6 +75,7 @@ function Workspace() {
     ledger: <FinanceScreen organizationId={organization.id} role={role} userId={user.id} view="ledger" onChanged={changed} onNavigate={navigate} />,
     collectibles: <FinanceScreen organizationId={organization.id} role={role} userId={user.id} view="collectibles" onChanged={changed} onNavigate={navigate} />,
     dcr: <DcrScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} />,
+    dtr: <HostedDtr organizationId={organization.id} userId={user.id} role={role} />,
     reports: <HostedReports organizationId={organization.id} epoch={epoch} />,
     trucks: <HostedTrucks organizationId={organization.id} userId={user.id} />,
   };
