@@ -1,0 +1,19 @@
+node_modules/
+dist/
+
+# Local environment and credentials
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Supabase CLI local state
+supabase/.branches/
+supabase/.temp/
+supabase/.env
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+*.log
