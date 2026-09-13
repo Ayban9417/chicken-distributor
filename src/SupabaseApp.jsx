@@ -5,6 +5,7 @@ import { AuthScreen } from "./components/AuthScreen";
 import { LivePlantManagement } from "./components/LivePlantManagement";
 import { CustomersScreen, DcrScreen, FinanceScreen, LiveDashboard, SalesmanInventoryScreen, SalesScreen, StockInScreen, WarehouseScreen } from "./components/CoreOperations";
 import { HostedReports } from "./components/HostedReports";
+import { HostedTrucks } from "./components/HostedTrucks";
 import { Button, SectionHeader } from "./components/ui";
 import { supabaseConfigurationError } from "./lib/supabaseClient";
 import { canAccessScreen, initialScreenForRole } from "./lib/roleAccess";
@@ -58,6 +59,7 @@ function Workspace() {
     { id: "collectibles", label: "Collectibles", icon: Banknote },
     { id: "dcr", label: "Daily Cash Report", icon: FileClock },
     { id: "reports", label: "Reports", icon: BarChart3 },
+    { id: "trucks", label: "Trucks", icon: Truck },
   ].filter((item) => canAccessScreen(role, item.id));
   const screens = {
     dashboard: <LiveDashboard organizationId={organization.id} epoch={epoch} />,
@@ -72,6 +74,7 @@ function Workspace() {
     collectibles: <FinanceScreen organizationId={organization.id} role={role} userId={user.id} view="collectibles" onChanged={changed} onNavigate={navigate} />,
     dcr: <DcrScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} />,
     reports: <HostedReports organizationId={organization.id} epoch={epoch} />,
+    trucks: <HostedTrucks organizationId={organization.id} userId={user.id} />,
   };
   const content = screens[active] || screens.dashboard;
 

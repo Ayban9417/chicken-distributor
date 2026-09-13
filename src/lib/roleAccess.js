@@ -11,6 +11,7 @@ export const screenRoles = {
   collectibles: ["owner_admin", "cashier", "salesman"],
   dcr: ["owner_admin", "cashier", "salesman"],
   reports: ["owner_admin", "cashier"],
+  trucks: ["owner_admin", "warehouse"],
 };
 
 export const canAccessScreen = (role, screen) => screenRoles[screen]?.includes(role) || false;

@@ -181,8 +181,9 @@ test("hosted navigation exposes only the intended Phase 2 screens by role", () =
   assert.equal(initialScreenForRole("salesman"), "inventory");
   assert.equal(initialScreenForRole("cashier"), "payments");
 
-  for (const screen of ["plants", "stock-in", "warehouse", "customers", "reports"]) assert.equal(canAccessScreen("owner_admin", screen), true);
+  for (const screen of ["plants", "stock-in", "warehouse", "customers", "reports", "trucks"]) assert.equal(canAccessScreen("owner_admin", screen), true);
   assert.equal(canAccessScreen("warehouse", "warehouse"), true);
+  assert.equal(canAccessScreen("warehouse", "trucks"), true);
   assert.equal(canAccessScreen("warehouse", "sales"), false);
   for (const screen of ["inventory", "sales", "payments", "dcr"]) assert.equal(canAccessScreen("salesman", screen), true);
   assert.equal(canAccessScreen("salesman", "warehouse"), false);
