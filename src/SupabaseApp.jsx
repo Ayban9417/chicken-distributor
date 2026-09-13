@@ -4,6 +4,7 @@ import { AppProvider, useAppContext } from "./context/AppContext";
 import { AuthScreen } from "./components/AuthScreen";
 import { LivePlantManagement } from "./components/LivePlantManagement";
 import { CustomersScreen, DcrScreen, FinanceScreen, LiveDashboard, SalesmanInventoryScreen, SalesScreen, StockInScreen, WarehouseScreen } from "./components/CoreOperations";
+import { HostedReports } from "./components/HostedReports";
 import { Button, SectionHeader } from "./components/ui";
 import { supabaseConfigurationError } from "./lib/supabaseClient";
 import { canAccessScreen, initialScreenForRole } from "./lib/roleAccess";
@@ -70,7 +71,7 @@ function Workspace() {
     ledger: <FinanceScreen organizationId={organization.id} role={role} userId={user.id} view="ledger" onChanged={changed} onNavigate={navigate} />,
     collectibles: <FinanceScreen organizationId={organization.id} role={role} userId={user.id} view="collectibles" onChanged={changed} onNavigate={navigate} />,
     dcr: <DcrScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} />,
-    reports: <LiveDashboard organizationId={organization.id} epoch={epoch} />,
+    reports: <HostedReports organizationId={organization.id} epoch={epoch} />,
   };
   const content = screens[active] || screens.dashboard;
 
