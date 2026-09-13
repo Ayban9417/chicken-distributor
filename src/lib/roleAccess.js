@@ -11,6 +11,7 @@ export const screenRoles = {
   collectibles: ["owner_admin", "cashier", "salesman"],
   dcr: ["owner_admin", "cashier", "salesman"],
   dtr: ["owner_admin", "warehouse", "salesman", "cashier", "payroll_admin"],
+  payroll: ["owner_admin", "payroll_admin"],
   reports: ["owner_admin", "cashier"],
   trucks: ["owner_admin", "warehouse"],
 };
