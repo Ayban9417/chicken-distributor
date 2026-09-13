@@ -96,5 +96,5 @@ select results_eq(
 set local request.jwt.claim.sub = 'c0000000-0000-4000-8000-000000000101';
 select is((select count(*) from public.organizations where id = 'c0000000-0000-4000-8000-000000000001'), 1::bigint, 'Owner can read own organization');
 
-select * from finish();
+select * from finish(true);
 rollback;

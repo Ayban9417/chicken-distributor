@@ -203,5 +203,5 @@ select is(
   'company stock reconciles to Warehouse plus all Salesmen'
 );
 
-select * from finish();
+select * from finish(true);
 rollback;

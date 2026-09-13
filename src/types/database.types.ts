@@ -2429,7 +2429,83 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
+      create_sale: {
+        Args: {
+          p_client_request_id: string
+          p_customer_id: string
+          p_initial_payment?: Json
+          p_lines: Json
+          p_notes?: string
+          p_organization_id: string
+          p_sale_date: string
+          p_sales_deductions?: number
+          p_salesman_user_id: string
+          p_trust_receipt_number: string
+        }
+        Returns: Json
+      }
+      create_stock_trip: {
+        Args: {
+          p_client_request_id: string
+          p_delivery_note?: string
+          p_lines: Json
+          p_notes?: string
+          p_organization_id: string
+          p_plant_id: string
+          p_reference_number?: string
+          p_trip_date: string
+        }
+        Returns: Json
+      }
+      record_payment: {
+        Args: {
+          p_amount: number
+          p_client_request_id: string
+          p_customer_id: string
+          p_method: string
+          p_notes?: string
+          p_organization_id: string
+          p_payment_date: string
+          p_reference_number?: string
+          p_salesman_user_id?: string
+          p_target_sale_id?: string
+        }
+        Returns: Json
+      }
+      submit_dcr: {
+        Args: {
+          p_actual_cash_remittance: number
+          p_client_request_id: string
+          p_explanation?: string
+          p_organization_id: string
+          p_report_date: string
+          p_salesman_user_id: string
+        }
+        Returns: Json
+      }
+      transfer_salesman_to_salesman: {
+        Args: {
+          p_client_request_id: string
+          p_effective_date: string
+          p_from_salesman_user_id: string
+          p_lines: Json
+          p_notes?: string
+          p_organization_id: string
+          p_to_salesman_user_id: string
+        }
+        Returns: Json
+      }
+      transfer_warehouse_to_salesman: {
+        Args: {
+          p_client_request_id: string
+          p_effective_date: string
+          p_lines: Json
+          p_notes?: string
+          p_organization_id: string
+          p_salesman_user_id: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never
