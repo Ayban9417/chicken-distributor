@@ -2,6 +2,13 @@ const number = (value) => Number(value || 0);
 
 export const sumBy = (rows, key) => rows.reduce((total, row) => total + number(row[key]), 0);
 
+export function tripBagSummary(products = []) {
+  const recorded = products.filter((product) => product.bags !== null && product.bags !== undefined);
+  if (!recorded.length) return "Not recorded";
+  const total = recorded.reduce((sum, product) => sum + number(product.bags), 0);
+  return recorded.length === products.length ? total : `${total} recorded`;
+}
+
 export function financialSummary(sales = [], expenses = []) {
   const grossSales = sumBy(sales, "gross_sales");
   const salesDeductions = sumBy(sales, "sales_deductions");

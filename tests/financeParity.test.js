@@ -96,3 +96,29 @@ test("locked hosted DCR keeps backend totals and restores payment and expense de
   assert.equal(dcr.snapshot.expenseTotals.byCategory.Fuel, 10);
   assert.equal(dcr.snapshot.expectedCashRemittance, 90);
 });
+
+test("locked hosted DCR excludes post-lock activity from its immutable detail", () => {
+  const dcr = normalizeHostedDcr({
+    id: "dcr-1",
+    salesman_user_id: "salesman-1",
+    report_date: "2026-09-14",
+    status: "locked",
+    locked_at: "2026-09-14T10:00:00Z",
+    cash_collected: "100",
+    gcash_collected: "0",
+    bank_collected: "0",
+    cash_paid_expenses: "0",
+    expected_cash_remittance: "100",
+    actual_cash_remittance: "100",
+    difference: "0",
+  }, {
+    customers: [{ id: "customer-1", name: "Branch Store" }],
+    collections: [
+      { id: "pay-1", customerId: "customer-1", agentId: "salesman-1", date: "2026-09-14", method: "Cash", amount: 100, createdAt: "2026-09-14T09:00:00Z" },
+      { id: "pay-2", customerId: "customer-1", agentId: "salesman-1", date: "2026-09-14", method: "Cash", amount: 40, createdAt: "2026-09-14T11:00:00Z" },
+    ],
+    expenses: [],
+  });
+  assert.equal(dcr.snapshot.rows[0].Cash, 100);
+  assert.equal(dcr.snapshot.totals.Cash, 100);
+});

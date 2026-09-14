@@ -45,7 +45,7 @@ export function HostedReports({ organizationId, epoch = 0 }) {
   const productTotals = useMemo(() => groupRows(data.productSales, (row) => row.product_name || "-", ["quantity_kg", "line_sales", "line_cogs", "line_gross_profit"]), [data.productSales]);
   const stock = [...data.warehouseStock.map((row) => ({ ...row, location: "Warehouse" })), ...data.salesmanStock.map((row) => ({ ...row, location: row.salesman_name || "Salesman" }))];
   const all = report === "Weekly Business Report";
-  const inventoryRows = trips.flatMap((trip) => trip.products.map((product) => ({ tripId: trip.id, remainingQty: product.remainingQty })));
+  const inventoryRows = trips.map((trip) => ({ tripId: trip.id, remainingQty: trip.remainingQty }));
   const grossMargin = financial.netSales ? (financial.netSales - financial.cogs) / financial.netSales * 100 : 0;
 
   return <div>

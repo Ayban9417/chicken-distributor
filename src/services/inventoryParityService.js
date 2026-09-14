@@ -19,7 +19,7 @@ export async function loadHostedWarehouse(organizationId, client = requireSupaba
     loadWarehouseStock(organizationId),
     loadSalesmanStock(organizationId),
     loadPeople(organizationId),
-    client.from("inventory_movements").select("id, inventory_lot_id, quantity_kg, to_salesman_user_id, effective_date, reference_id").eq("organization_id", organizationId).eq("movement_type", "warehouse_to_salesman").order("effective_date", { ascending: false }),
+    client.from("inventory_movements").select("id, inventory_lot_id, quantity_kg, to_salesman_user_id, effective_date, reference_id, reference_line_id").eq("organization_id", organizationId).eq("movement_type", "warehouse_to_salesman").order("effective_date", { ascending: false }),
   ]);
   const lotIds = stock.map((row) => row.inventory_lot_id);
   const lots = lotIds.length ? fail(await client.from("inventory_lots").select("id, stock_trip_line_id").in("id", lotIds)) : [];
@@ -27,11 +27,16 @@ export async function loadHostedWarehouse(organizationId, client = requireSupaba
   const tripLines = lineIds.length ? fail(await client.from("stock_trip_lines").select("id, bags, head_count").in("id", lineIds)) : [];
   const movements = fail(movementsResult);
   const receiptIds = [...new Set(movements.map((row) => row.reference_id))];
-  const receipts = receiptIds.length ? fail(await client.from("receiving_receipts").select("id, receipt_number, notes").in("id", receiptIds)) : [];
+  const receiptLineIds = [...new Set(movements.map((row) => row.reference_line_id).filter(Boolean))];
+  const [receipts, receiptLines] = await Promise.all([
+    receiptIds.length ? client.from("receiving_receipts").select("id, receipt_number, notes").in("id", receiptIds).then(fail) : [],
+    receiptLineIds.length ? client.from("receiving_receipt_lines").select("id, bags, head_count").in("id", receiptLineIds).then(fail) : [],
+  ]);
   const lotMap = new Map(lots.map((row) => [row.id, row]));
   const lineMap = new Map(tripLines.map((row) => [row.id, row]));
   const stockMap = new Map(stock.map((row) => [row.inventory_lot_id, row]));
   const receiptMap = new Map(receipts.map((row) => [row.id, row]));
+  const receiptLineMap = new Map(receiptLines.map((row) => [row.id, row]));
   const rows = stock.map((row) => {
     const line = lineMap.get(lotMap.get(row.inventory_lot_id)?.stock_trip_line_id) || {};
     return {
@@ -59,6 +64,7 @@ export async function loadHostedWarehouse(organizationId, client = requireSupaba
   const receivingTransfers = movements.map((movement) => {
     const row = stockMap.get(movement.inventory_lot_id) || {};
     const receipt = receiptMap.get(movement.reference_id) || {};
+    const receiptLine = receiptLineMap.get(movement.reference_line_id) || {};
     return {
       id: movement.id,
       receipt: receipt.receipt_number || "-",
@@ -72,7 +78,8 @@ export async function loadHostedWarehouse(organizationId, client = requireSupaba
       sizeCode: row.product_code || "",
       classType: row.class_type || "",
       qty: number(movement.quantity_kg),
-      bags: null,
+      bags: receiptLine.bags ?? null,
+      headCount: receiptLine.head_count ?? null,
       costPerKg: number(row.cost_per_kg),
       notes: receipt.notes || "",
     };
@@ -96,15 +103,20 @@ export async function loadHostedSalesmanInventory(organizationId, client = requi
   const lotIds = [...new Set(stock.map((row) => row.inventory_lot_id))];
   const [lotsResult, movementsResult] = await Promise.all([
     lotIds.length ? client.from("inventory_lots").select("id, original_quantity_kg").in("id", lotIds) : Promise.resolve({ data: [], error: null }),
-    lotIds.length ? client.from("inventory_movements").select("id, inventory_lot_id, movement_type, quantity_kg, from_location_type, from_salesman_user_id, to_location_type, to_salesman_user_id, effective_date, reference_id").eq("organization_id", organizationId).in("inventory_lot_id", lotIds).order("effective_date", { ascending: false }) : Promise.resolve({ data: [], error: null }),
+    lotIds.length ? client.from("inventory_movements").select("id, inventory_lot_id, movement_type, quantity_kg, from_location_type, from_salesman_user_id, to_location_type, to_salesman_user_id, effective_date, reference_id, reference_line_id").eq("organization_id", organizationId).in("inventory_lot_id", lotIds).order("effective_date", { ascending: false }) : Promise.resolve({ data: [], error: null }),
   ]);
   const lots = fail(lotsResult);
   const movements = fail(movementsResult);
   const transferMovements = movements.filter((row) => row.movement_type === "salesman_to_salesman");
   const receiptIds = [...new Set(transferMovements.map((row) => row.reference_id))];
-  const receipts = receiptIds.length ? fail(await client.from("transfer_receipts").select("id, receipt_number, notes").in("id", receiptIds)) : [];
+  const receiptLineIds = [...new Set(transferMovements.map((row) => row.reference_line_id).filter(Boolean))];
+  const [receipts, receiptLines] = await Promise.all([
+    receiptIds.length ? client.from("transfer_receipts").select("id, receipt_number, notes").in("id", receiptIds).then(fail) : [],
+    receiptLineIds.length ? client.from("transfer_receipt_lines").select("id, bags, head_count").in("id", receiptLineIds).then(fail) : [],
+  ]);
   const originalMap = new Map(lots.map((row) => [row.id, number(row.original_quantity_kg)]));
   const receiptMap = new Map(receipts.map((row) => [row.id, row]));
+  const receiptLineMap = new Map(receiptLines.map((row) => [row.id, row]));
   const stockMap = new Map(stock.map((row) => [`${row.inventory_lot_id}|${row.salesman_user_id}`, row]));
   const rows = stock.map((row) => {
     const relevant = movements.filter((movement) => movement.inventory_lot_id === row.inventory_lot_id);
@@ -135,6 +147,7 @@ export async function loadHostedSalesmanInventory(organizationId, client = requi
   const salesmanTransfers = transferMovements.map((movement) => {
     const row = stockMap.get(`${movement.inventory_lot_id}|${movement.from_salesman_user_id}`) || stock.find((item) => item.inventory_lot_id === movement.inventory_lot_id) || {};
     const receipt = receiptMap.get(movement.reference_id) || {};
+    const receiptLine = receiptLineMap.get(movement.reference_line_id) || {};
     return {
       id: movement.id,
       receipt: receipt.receipt_number || "-",
@@ -149,7 +162,8 @@ export async function loadHostedSalesmanInventory(organizationId, client = requi
       sizeCode: row.product_code || "",
       classType: row.class_type || "",
       qty: number(movement.quantity_kg),
-      bags: null,
+      bags: receiptLine.bags ?? null,
+      headCount: receiptLine.head_count ?? null,
       notes: receipt.notes || "",
       costPerKg: number(row.cost_per_kg),
     };

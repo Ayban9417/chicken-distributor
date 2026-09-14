@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { collectibleSummary, dcrSummary, financialSummary, inDateRange, salesByPlant, salesByProduct } from "../src/utils/hostedReports.js";
+import { collectibleSummary, dcrSummary, financialSummary, inDateRange, salesByPlant, salesByProduct, tripBagSummary } from "../src/utils/hostedReports.js";
 import { loadHostedReports } from "../src/services/reportingService.js";
 import { loadHostedDashboard } from "../src/services/dashboardService.js";
 import { activityDays, customerSales, normalizeHostedTrips } from "../src/utils/hostedDashboard.js";
@@ -22,6 +22,12 @@ function recordingClient(dataByTable = {}) {
   }
   return { queries, from: (table) => new Query(table) };
 }
+
+test("trip bag summary preserves recorded bags when other products do not use bags", () => {
+  assert.equal(tripBagSummary([{ bags: 10 }, { bags: null }]), "10 recorded");
+  assert.equal(tripBagSummary([{ bags: 10 }, { bags: 2 }]), 12);
+  assert.equal(tripBagSummary([{ bags: null }, { bags: undefined }]), "Not recorded");
+});
 
 test("financial report uses hosted sale snapshots and approved period expenses", () => {
   const result = financialSummary([

@@ -10,7 +10,7 @@ import { companyStockTotals, salesmanInventoryRows, warehouseRows } from "../uti
 import { useRemote } from "../hooks/useRemote";
 import { loadHostedDashboard } from "../services/dashboardService";
 import { activityDays, customerSales } from "../utils/hostedDashboard";
-import { collectibleSummary, financialSummary, salesByPlant, salesByProduct, sumBy } from "../utils/hostedReports";
+import { collectibleSummary, financialSummary, salesByPlant, salesByProduct, sumBy, tripBagSummary } from "../utils/hostedReports";
 
 function Section({ title, children, action }) {
   return <section className="report-section"><div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-bold">{title}</h2>{action}</div>{children}</section>;
@@ -62,7 +62,7 @@ export function TripSummary({ trips, previousTrips, inventoryRows }) {
         shortDate(trip.date) + " / " + trip.code, trip.plant,
         kg(sum(trip.products.filter(isWholeChicken), "originalQty")),
         kg(sum(trip.products.filter((item) => !isWholeChicken(item)), "originalQty")),
-        kg(sum(trip.products, "originalQty")), trip.products.every((item) => item.bags !== null) ? sum(trip.products, "bags") : "Not recorded",
+        kg(sum(trip.products, "originalQty")), tripBagSummary(trip.products),
         currency(tripAcquisitionCost(trip)), kg(sum(inventoryRows.filter((row) => row.tripId === trip.id), "remainingQty")),
       ])} /></div>
     <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

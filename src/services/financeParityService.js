@@ -84,9 +84,11 @@ function normalizeDcr(row) {
 
 export function normalizeHostedDcr(row, { collections = [], expenses = [], customers = [] } = {}) {
   const normalized = normalizeDcr(row);
+  const lockedCollections = row.locked_at ? collections.filter((item) => !item.createdAt || item.createdAt <= row.locked_at) : collections;
+  const lockedExpenses = row.locked_at ? expenses.filter((item) => !item.createdAt || item.createdAt <= row.locked_at) : expenses;
   const liveSnapshot = buildDcr({
-    collections,
-    expenses,
+    collections: lockedCollections,
+    expenses: lockedExpenses,
     customers,
     agentId: normalized.agentId,
     date: normalized.date,
@@ -155,6 +157,7 @@ export function normalizeHostedCollections(payments, sales, allocations) {
     reference: row.reference_number || "",
     notes: row.notes || "",
     verificationStatus: row.verification_status,
+    createdAt: row.created_at,
     allocations: allocationMap.get(row.id) || [],
   }));
 }
@@ -270,6 +273,7 @@ export async function loadHostedFinanceParity(organizationId, client = requireSu
     source: paymentSource(row.payment_source),
     description: row.description || "",
     status: title(row.approval_status),
+    createdAt: row.created_at,
   }));
   const dcrs = (operations.dcrs || []).map((row) => normalizeHostedDcr(row, { collections, expenses, customers }));
   const discrepancies = normalizeHostedDiscrepancies(discrepancyRows);
