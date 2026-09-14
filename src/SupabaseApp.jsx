@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Banknote, BarChart3, Building2, Clock3, FileClock, Home, LogOut, Menu, PackageCheck, ShoppingCart, Truck, Users, WalletCards, X } from "lucide-react";
+import { LogOut, Menu, Settings, X } from "lucide-react";
 import { AppProvider, useAppContext } from "./context/AppContext";
 import { AuthScreen } from "./components/AuthScreen";
 import { LivePlantManagement } from "./components/LivePlantManagement";
@@ -8,6 +8,7 @@ import { HostedReports } from "./components/HostedReports";
 import { HostedTrucks } from "./components/HostedTrucks";
 import { HostedDtr } from "./components/HostedDtr";
 import { HostedPayroll } from "./components/HostedPayroll";
+import { Brand, PrimaryNav, primaryNavigation } from "./components/ApplicationNavigation";
 import { Button, SectionHeader } from "./components/ui";
 import { supabaseConfigurationError } from "./lib/supabaseClient";
 import { canAccessScreen, initialScreenForRole } from "./lib/roleAccess";
@@ -44,68 +45,49 @@ function Workspace() {
   const [epoch, setEpoch] = useState(0);
   const changed = () => setEpoch((value) => value + 1);
   const navigate = (screen, customerId = "") => {
-    setPaymentCustomerId(screen === "payments" ? customerId : "");
-    setActive(screen);
+    const target = { payments: "collections", ledger: "customers", sales: "out", plants: "trips", "stock-in": "trips" }[screen] || screen;
+    setPaymentCustomerId(target === "collections" ? customerId : "");
+    setActive(target);
   };
   useEffect(() => { window.scrollTo({ top: 0 }); setMobileOpen(false); }, [active]);
-  const items = [
-    { id: "dashboard", label: "Dashboard", icon: Home },
-    { id: "plants", label: "Plant Configuration", icon: Building2 },
-    { id: "stock-in", label: "Stock In", icon: Truck },
-    { id: "warehouse", label: "Warehouse", icon: PackageCheck },
-    { id: "inventory", label: "Salesman Inventory", icon: PackageCheck },
-    { id: "customers", label: "Customers", icon: Users },
-    { id: "sales", label: "Sales", icon: ShoppingCart },
-    { id: "payments", label: "Payments", icon: WalletCards },
-    { id: "ledger", label: "Ledger", icon: Users },
-    { id: "collectibles", label: "Collectibles", icon: Banknote },
-    { id: "dcr", label: "Daily Cash Report", icon: FileClock },
-    { id: "dtr", label: "DTR", icon: Clock3 },
-    { id: "payroll", label: "Payroll", icon: Banknote },
-    { id: "reports", label: "Reports", icon: BarChart3 },
-    { id: "trucks", label: "Trucks", icon: Truck },
-  ].filter((item) => canAccessScreen(role, item.id));
+  const items = primaryNavigation.filter((item) => canAccessScreen(role, item.id));
   const screens = {
     dashboard: <LiveDashboard organizationId={organization.id} epoch={epoch} />,
-    plants: <LivePlantManagement organizationId={organization.id} role={role} />,
-    "stock-in": <StockInScreen organizationId={organization.id} onChanged={changed} />,
+    trips: <HostedPlantsWorkflow organizationId={organization.id} role={role} onChanged={changed} />,
     warehouse: <WarehouseScreen organizationId={organization.id} role={role} onChanged={changed} />,
     inventory: <SalesmanInventoryScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} />,
-    customers: <CustomersScreen organizationId={organization.id} onChanged={changed} />,
-    sales: <SalesScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} />,
-    payments: <FinanceScreen organizationId={organization.id} role={role} userId={user.id} view="payments" initialCustomerId={paymentCustomerId} onChanged={changed} onNavigate={navigate} />,
-    ledger: <FinanceScreen organizationId={organization.id} role={role} userId={user.id} view="ledger" onChanged={changed} onNavigate={navigate} />,
+    out: <SalesScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} />,
+    collections: <FinanceScreen organizationId={organization.id} role={role} userId={user.id} view="payments" initialCustomerId={paymentCustomerId} onChanged={changed} onNavigate={navigate} />,
+    customers: <FinanceScreen organizationId={organization.id} role={role} userId={user.id} view="ledger" onChanged={changed} onNavigate={navigate} />,
     collectibles: <FinanceScreen organizationId={organization.id} role={role} userId={user.id} view="collectibles" onChanged={changed} onNavigate={navigate} />,
     dcr: <DcrScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} />,
     dtr: <HostedDtr organizationId={organization.id} userId={user.id} role={role} />,
     payroll: <HostedPayroll organizationId={organization.id} userId={user.id} />,
     reports: <HostedReports organizationId={organization.id} epoch={epoch} />,
     trucks: <HostedTrucks organizationId={organization.id} userId={user.id} />,
+    discrepancies: <UnavailableScreen title="Discrepancies" />,
+    admin: <UnavailableScreen title="Administration" />,
   };
   const content = screens[active] || screens.dashboard;
 
   return <div className="min-h-screen bg-slate-100 text-slate-900">
-    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white">
-      <div className="flex min-h-16 items-center justify-between px-4 lg:px-6">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" className="lg:hidden" aria-label="Open navigation" onClick={() => setMobileOpen(true)}><Menu size={20} /></Button>
-          <div><p className="font-bold">Chicken Distributor</p><p className="text-xs text-slate-500">{organization.name} / Hosted DEV</p></div>
-        </div>
-        <div className="flex items-center gap-3 text-right">
-          <div className="hidden sm:block"><p className="text-sm font-bold">{profile?.full_name}</p><p className="text-xs text-slate-500">{roleLabels[role] || role}</p></div>
-          <Button variant="secondary" onClick={signOut}><LogOut size={16} />Sign out</Button>
-        </div>
-      </div>
-    </header>
-    <div className="flex">
-      {mobileOpen && <button className="fixed inset-0 z-30 bg-slate-950/30 lg:hidden" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />}
-      <aside className={`fixed inset-y-0 left-0 z-40 w-72 border-r border-slate-200 bg-white pt-4 transition-transform lg:sticky lg:top-16 lg:z-0 lg:h-[calc(100vh-4rem)] lg:w-64 ${mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
-        <div className="flex justify-end px-3 lg:hidden"><Button variant="ghost" aria-label="Close navigation" onClick={() => setMobileOpen(false)}><X size={20} /></Button></div>
-        <nav className="space-y-1 p-3">{items.map(({ id, label, icon: Icon }) => <button key={id} onClick={() => navigate(id)} className={`flex w-full items-center gap-3 px-3 py-3 text-left text-sm font-semibold ${active === id ? "bg-emerald-50 text-emerald-800" : "text-slate-600 hover:bg-slate-50"}`}><Icon size={18} />{label}</button>)}</nav>
-      </aside>
-      <main className="min-w-0 flex-1 p-4 lg:p-6">{content}</main>
-    </div>
+    <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 overflow-y-auto border-r border-slate-200 bg-white md:block"><Brand /><PrimaryNav active={active} setActive={navigate} items={items} /></aside>
+    {mobileOpen && <div className="fixed inset-0 z-40 bg-slate-950/35 md:hidden"><aside className="h-full w-80 max-w-[86vw] overflow-y-auto bg-white shadow-2xl"><div className="flex items-center justify-between border-b border-slate-200 pr-3"><Brand /><Button variant="ghost" className="h-11 w-11 px-0" onClick={() => setMobileOpen(false)} aria-label="Close menu"><X size={20} /></Button></div><PrimaryNav active={active} setActive={navigate} items={items} /></aside></div>}
+    <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur md:ml-64 md:px-7"><Button variant="ghost" className="h-11 w-11 px-0 md:hidden" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu size={22} /></Button><div className="hidden text-sm font-semibold text-slate-500 xl:block">{organization.name} / Hosted DEV</div><div className="flex items-center gap-2 text-right"><div className="hidden sm:block"><p className="text-sm font-bold">{profile?.full_name}</p><p className="text-xs text-slate-500">{roleLabels[role] || role}</p></div><Button variant="secondary" onClick={signOut}><LogOut size={16} />Sign out</Button></div></header>
+    <main className="pb-24 md:ml-64"><div className="mx-auto max-w-7xl px-4 py-6 md:px-7">{content}</div></main>
+    <nav className="mobile-nav fixed inset-x-0 bottom-0 z-30 flex gap-2 overflow-x-auto border-t border-slate-200 bg-white p-2 md:hidden">{items.map(({ id, label, icon: Icon }) => <button key={id} className={`flex min-w-20 flex-col items-center gap-1 rounded-lg px-2 py-2 text-xs font-semibold ${active === id ? "bg-blue-50 text-[#146ef5]" : "text-slate-500"}`} onClick={() => navigate(id)}><Icon size={18} /><span>{label}</span></button>)}</nav>
+    <footer className="border-t border-slate-200 bg-white px-4 py-4 text-center text-xs text-slate-500 md:ml-64">Fictional demonstration data and acquisition costs. Prototype by Noderno.</footer>
   </div>;
+}
+
+function HostedPlantsWorkflow({ organizationId, role, onChanged }) {
+  const [manage, setManage] = useState(false);
+  if (manage) return <LivePlantManagement organizationId={organizationId} role={role} onBack={() => setManage(false)} />;
+  return <div>{role === "owner_admin" && <div className="mb-4"><Button variant="secondary" onClick={() => setManage(true)}><Settings size={17} />Manage Plants</Button></div>}<StockInScreen organizationId={organizationId} onChanged={onChanged} /></div>;
+}
+
+function UnavailableScreen({ title }) {
+  return <div><SectionHeader title={title} /><p className="report-section text-slate-600">This original workflow is being connected to hosted data in the next parity checkpoint.</p></div>;
 }
 
 function CenteredState({ title, detail, action }) {

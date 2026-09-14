@@ -78,24 +78,7 @@ import { emptySalePayment, initialPaymentAmount, validateSalePayment, paymentAtS
 import { compareInventoryProducts, compareInventoryTrips } from "./utils/inventory";
 import { Warehouse, SalesmanInventory } from "./components/InventoryFlow";
 import { getSalesmanAvailableQty } from "./utils/inventoryFlow";
-
-const navItems = [
-  { id: "dashboard", label: "Dashboard", icon: Home },
-  { id: "trips", label: "Plants", icon: Truck },
-  { id: "warehouse", label: "Warehouse", icon: PackageCheck },
-  { id: "inventory", label: "Inventory", icon: PackageCheck },
-  { id: "out", label: "Sales", icon: ShoppingCart },
-  { id: "collections", label: "Payments", icon: WalletCards },
-  { id: "customers", label: "Ledger", icon: Users },
-  { id: "collectibles", label: "Collectibles", icon: Banknote },
-  { id: "dcr", label: "Daily Cash Report", icon: FileClock },
-  { id: "discrepancies", label: "Discrepancies", icon: AlertTriangle },
-  { id: "reports", label: "Reports", icon: BarChart3 },
-  { id: "dtr", label: "DTR", icon: FileClock },
-  { id: "payroll", label: "Payroll", icon: WalletCards },
-  { id: "trucks", label: "Trucks", icon: Truck },
-  { id: "admin", label: "Administration", icon: Settings },
-];
+import { Brand, PrimaryNav, primaryNavigation } from "./components/ApplicationNavigation";
 
 const today = demoToday;
 
@@ -288,7 +271,7 @@ export default function App() {
     <PlantContext.Provider value={plantConfigs}><UserContext.Provider value={userRecords}><div className="min-h-screen bg-slate-100 text-slate-900">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 overflow-y-auto border-r border-slate-200 bg-white md:block">
         <Brand />
-        <Nav active={active} setActive={setActive} />
+        <PrimaryNav active={active} setActive={setActive} />
       </aside>
 
       {mobileOpen && (
@@ -300,7 +283,7 @@ export default function App() {
                 <X size={20} />
               </Button>
             </div>
-            <Nav
+            <PrimaryNav
               active={active}
               setActive={(id) => {
                 setActive(id);
@@ -327,7 +310,7 @@ export default function App() {
       </main>
 
       <nav className="mobile-nav fixed inset-x-0 bottom-0 z-30 flex gap-2 overflow-x-auto border-t border-slate-200 bg-white p-2 md:hidden">
-        {navItems.map(({ id, label, icon: Icon }) => (
+        {primaryNavigation.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             className={`flex min-w-20 flex-col items-center gap-1 rounded-lg px-2 py-2 text-xs font-semibold ${active === id ? "bg-blue-50 text-[#146ef5]" : "text-slate-500"}`}
@@ -356,39 +339,6 @@ export default function App() {
         </Drawer>
       )}
     </div></UserContext.Provider></PlantContext.Provider>
-  );
-}
-
-function Brand() {
-  return (
-    <div className="p-5">
-      <div className="flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-[#146ef5] text-white">
-          <ClipboardCheck size={24} />
-        </div>
-        <div>
-          <p className="text-base font-bold text-slate-950">Chicken Distributor</p>
-          <p className="text-xs font-semibold text-slate-500">Concept Workflow Prototype by Noderno</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Nav({ active, setActive }) {
-  return (
-    <nav className="space-y-1 px-3 pb-5">
-      {navItems.map(({ id, label, icon: Icon }) => (
-        <button
-          key={id}
-          className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-base font-bold transition ${active === id ? "bg-blue-50 text-[#146ef5]" : "text-slate-600 hover:bg-slate-100"}`}
-          onClick={() => setActive(id)}
-        >
-          <Icon size={19} />
-          {label}
-        </button>
-      ))}
-    </nav>
   );
 }
 

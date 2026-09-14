@@ -179,7 +179,7 @@ test("hosted navigation exposes only the intended Phase 2 screens by role", () =
   assert.equal(initialScreenForRole("owner_admin"), "dashboard");
   assert.equal(initialScreenForRole("warehouse"), "warehouse");
   assert.equal(initialScreenForRole("salesman"), "inventory");
-  assert.equal(initialScreenForRole("cashier"), "payments");
+  assert.equal(initialScreenForRole("cashier"), "collections");
   assert.equal(initialScreenForRole("payroll_admin"), "dtr");
 
   for (const screen of ["plants", "stock-in", "warehouse", "customers", "reports", "trucks"]) assert.equal(canAccessScreen("owner_admin", screen), true);
@@ -192,6 +192,9 @@ test("hosted navigation exposes only the intended Phase 2 screens by role", () =
   for (const role of ["owner_admin", "warehouse", "salesman", "cashier", "payroll_admin"]) assert.equal(canAccessScreen(role, "dtr"), true);
   assert.equal(canAccessScreen("owner_admin", "payroll"), true);
   assert.equal(canAccessScreen("payroll_admin", "payroll"), true);
+  for (const screen of ["dashboard", "trips", "warehouse", "inventory", "out", "collections", "customers", "collectibles", "dcr", "discrepancies", "reports", "dtr", "payroll", "trucks", "admin"]) {
+    assert.equal(canAccessScreen("owner_admin", screen), true, `owner can access ${screen}`);
+  }
   assert.equal(canAccessScreen("cashier", "warehouse"), false);
   for (const role of ["warehouse", "salesman", "cashier"]) assert.equal(canAccessScreen(role, "payroll"), false);
 });
