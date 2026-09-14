@@ -84,7 +84,7 @@ const today = demoToday;
 
 const uid = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-const tripForm = (plant) => ({ plantId: plant?.id || "", plant: plant?.name || "", date: today, reference: "", deliveryNote: "", notes: "", products: activeProducts(plant).length ? [stockLine(activeProducts(plant)[0])] : [] });
+const tripForm = (plant, date = today) => ({ plantId: plant?.id || "", plant: plant?.name || "", date, reference: "", deliveryNote: "", notes: "", products: activeProducts(plant).length ? [stockLine(activeProducts(plant)[0])] : [] });
 
 const categories = ["Fuel", "Parking", "Toll", "Meals", "Repairs", "Delivery Expense", "Other"];
 const paymentMethods = ["Cash", "GCash", "Bank Deposit"];
@@ -342,8 +342,8 @@ export default function App() {
   );
 }
 
-function Trips({ trips, setTrips, addAudit, pushToast, plantConfigs }) {
-  const [form, setForm] = useState(() => tripForm(plantConfigs.find((p) => p.active)));
+export function Trips({ trips, setTrips, addAudit, pushToast, plantConfigs, onStockIn, currentDate = today }) {
+  const [form, setForm] = useState(() => tripForm(plantConfigs.find((p) => p.active), currentDate));
   const plant = plantConfigs.find((p) => p.id === form.plantId);
   const productOptions = activeProducts(plant);
   const [error, setError] = useState("");
@@ -351,7 +351,8 @@ function Trips({ trips, setTrips, addAudit, pushToast, plantConfigs }) {
   function updateProduct(index, patch) {
     setForm((current) => ({ ...current, products: current.products.map((item, i) => i === index ? { ...item, ...patch } : item) }));
   }
-  function confirmStockIn() {
+  const [busy, setBusy] = useState(false);
+  async function confirmStockIn() {
     const problem = validatePlantStock(form, plant) || validateStock(form);
     if (problem) return setError(problem);
     const trip = {
@@ -359,9 +360,22 @@ function Trips({ trips, setTrips, addAudit, pushToast, plantConfigs }) {
       plantId: plant.id, plant: plant.name, date: form.date, reference: form.reference, deliveryNote: form.deliveryNote, notes: form.notes,
       products: form.products.map((item) => stockSnapshot(item, plant)),
     };
-    setTrips((items) => [trip, ...items]); setError(""); setForm(tripForm(plant));
-    addAudit("Confirmed Stock In " + trip.code, "Owner / Admin");
-    pushToast(trip.code + " added to Warehouse");
+    setBusy(true);
+    try {
+      if (onStockIn) {
+        const saved = await onStockIn(trip);
+        trip.code = saved?.trip_number || trip.code;
+      } else {
+        setTrips((items) => [trip, ...items]);
+      }
+      setError(""); setForm(tripForm(plant, currentDate));
+      addAudit?.("Confirmed Stock In " + trip.code, "Owner / Admin");
+      pushToast?.(trip.code + " added to Warehouse");
+    } catch (reason) {
+      setError(reason?.message || "Unable to confirm Stock In. Please try again.");
+    } finally {
+      setBusy(false);
+    }
   }
   return <>
     <SectionHeader title="Plants" />
@@ -399,7 +413,7 @@ function Trips({ trips, setTrips, addAudit, pushToast, plantConfigs }) {
         <StatMini label="Free KG" value={kg(sum(form.products.filter((item) => item.acquisitionType === "Free from Plant"), "qty"))} />
       </div>
       {error && <p role="alert" className="mt-3 font-semibold text-rose-700">{error}</p>}
-      <Button className="mt-4" disabled={!plant?.active || !productOptions.length} onClick={confirmStockIn}><ClipboardCheck size={18} />Confirm Stock In</Button>
+      <Button className="mt-4" disabled={busy || !plant?.active || !productOptions.length} onClick={confirmStockIn}><ClipboardCheck size={18} />{busy ? "Confirming..." : "Confirm Stock In"}</Button>
     </section>
     <section className="report-section"><h2 className="mb-4 text-lg font-bold">Plant Trips</h2>
       {[...new Set(trips.map((trip) => trip.plant))].map((plant) => <div key={plant} className="mb-6">
@@ -668,7 +682,7 @@ function MovementRef({ movement }) {
   );
 }
 
-function InventoryDetail({ row }) {
+export function InventoryDetail({ row }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-500">
@@ -715,18 +729,18 @@ function InventoryDetail({ row }) {
   );
 }
 
-function OutOrders({ customers, trips, movements, receivingTransfers, salesmanTransfers, setMovements, outs, setOuts, ledgerEntries, setLedgerEntries, setDiscrepancies, addAudit, pushToast, onQuickAdd, collections, setCollections, registerPostDcrChange, onStockIn }) {
+export function OutOrders({ customers, trips, movements = [], receivingTransfers = [], salesmanTransfers = [], setMovements, outs = [], setOuts, ledgerEntries = [], setLedgerEntries, setDiscrepancies, addAudit, pushToast, onQuickAdd, collections = [], setCollections, registerPostDcrChange, onStockIn, getAvailable, onConfirmSale, currentDate = today, requireTrustReceipt = false, canSelectSalesman = true, initialSalesmanId = "" }) {
   const agents = useUsers();
   const [review, setReview] = useState(false);
   const [salePayment, setSalePayment] = useState(emptySalePayment);
   const [trustReceipt, setTrustReceipt] = useState("");
-  const [saleDate, setSaleDate] = useState(today);
-  const [saleAgent, setSaleAgent] = useState("");
+  const [saleDate, setSaleDate] = useState(currentDate);
+  const [saleAgent, setSaleAgent] = useState(initialSalesmanId);
   const defaultCustomerId = customers.find((c) => c.active)?.id || "";
   const [customerId, setCustomerId] = useState(defaultCustomerId);
   const selectedCustomer = customers.find((customer) => customer.id === customerId) || { name: "Select Customer", pricing: {}, active: false };
   const selectedAgentId = saleAgent || (agents.some((agent) => agent.id === selectedCustomer.agentId && agent.active && agent.role === "Agent") ? selectedCustomer.agentId : agents.find((agent) => agent.active && agent.role === "Agent")?.id || "");
-  const availableFor = (salesmanId, trip, item) => getSalesmanAvailableQty(receivingTransfers, salesmanTransfers, movements, salesmanId, trip.id, item.name, item.sizeCode, item.classType);
+  const availableFor = (salesmanId, trip, item) => getAvailable ? getAvailable(salesmanId, trip, item) : getSalesmanAvailableQty(receivingTransfers, salesmanTransfers, movements, salesmanId, trip.id, item.name, item.sizeCode, item.classType);
   const saleableTrips = trips.filter((trip) => trip.products.some((item) => availableFor(selectedAgentId, trip, item) > 0));
   const plantOptions = [...new Set(saleableTrips.map((trip) => trip.plant))];
   const [groups, setGroups] = useState(() => [
@@ -735,10 +749,15 @@ function OutOrders({ customers, trips, movements, receivingTransfers, salesmanTr
   const linesWithTrip = groups.flatMap((group) => group.lines.map((line) => ({ ...line, tripId: group.tripId, groupId: group.id })));
   const activeLinesWithTrip = linesWithTrip.filter((line) => Number(line.qty || 0) > 0);
   const duplicateSale = duplicateTrustReceipt(outs, trustReceipt);
-  const saleError = !selectedCustomer.active ? "Select an active customer." : duplicateSale ? `Trust Receipt Number already exists. ${trustReceipt.trim()} is already used by ${duplicateSale.ref}.` : validateSale(groups, trips, movements, saleDate, selectedAgentId, receivingTransfers, salesmanTransfers);
-  const hasInsufficient = Boolean(saleError);
   const hasEmptyOptionalGroup = groups.some((group) => group.lines.length === 0 || group.lines.every((line) => Number(line.qty || 0) <= 0));
   const hasEmptyGroup = groups.some((group) => group.lines.length === 0 || group.lines.every((line) => Number(line.qty || 0) <= 0));
+  const hostedStockError = getAvailable && activeLinesWithTrip.some((line) => {
+    const trip = trips.find((item) => item.id === line.tripId);
+    const stock = trip?.products.find((item) => item.lotId === line.lotId) || trip?.products.find((item) => item.name === line.product && (item.sizeCode || "") === (line.sizeCode || "") && (item.classType || "") === (line.classType || ""));
+    return !stock || Number(line.qty) > availableFor(selectedAgentId, trip, stock);
+  });
+  const saleError = !selectedCustomer.active ? "Select an active customer." : requireTrustReceipt && !trustReceipt.trim() ? "Enter a Trust Receipt Number." : duplicateSale ? `Trust Receipt Number already exists. ${trustReceipt.trim()} is already used by ${duplicateSale.ref}.` : getAvailable ? (hasEmptyGroup ? "Add products to each origin or remove the empty optional group." : hostedStockError ? "Insufficient Salesman Inventory." : "") : validateSale(groups, trips, movements, saleDate, selectedAgentId, receivingTransfers, salesmanTransfers);
+  const hasInsufficient = Boolean(saleError);
   const total = sum(activeLinesWithTrip, (line) => money(Number(line.qty || 0) * Number(line.price || 0)));
   const initialPaid = initialPaymentAmount(salePayment);
   const paymentError = validateSalePayment(salePayment, total);
@@ -777,7 +796,7 @@ function OutOrders({ customers, trips, movements, receivingTransfers, salesmanTr
       return {
         ...line,
         product,
-        sizeCode: exact?.sizeCode || "", sizeCodeLabel: exact?.sizeCodeLabel || "", classType: exact?.classType || "", classTypeLabel: exact?.classTypeLabel || "",
+        lotId: exact?.lotId || "", sizeCode: exact?.sizeCode || "", sizeCodeLabel: exact?.sizeCodeLabel || "", classType: exact?.classType || "", classTypeLabel: exact?.classTypeLabel || "",
         price: line.product === product ? line.price : customerPrice(customer, product),
       };
     });
@@ -800,7 +819,7 @@ function OutOrders({ customers, trips, movements, receivingTransfers, salesmanTr
   function resetOutForm() {
     const defaultCustomer = customers.find((item) => item.id === defaultCustomerId);
     setCustomerId(defaultCustomerId);
-    setTrustReceipt(""); setSaleDate(today); setReview(false); setSaleAgent("");
+    setTrustReceipt(""); setSaleDate(currentDate); setReview(false); setSaleAgent(initialSalesmanId);
     setSalePayment(emptySalePayment());
     setGroups([buildDefaultGroup(defaultCustomer)]);
   }
@@ -871,7 +890,8 @@ function OutOrders({ customers, trips, movements, receivingTransfers, salesmanTr
     setGroups((current) => current.filter((group, index) => index === 0 || group.id !== groupId));
   }
 
-  function confirmOut() {
+  const [busy, setBusy] = useState(false);
+  async function confirmOut() {
     if (saleError || paymentError || !selectedAgentId || total <= 0) return;
     const ref = "SALE-" + (1300 + outs.length + 1);
     const outGroups = groups.map((group) => {
@@ -887,6 +907,20 @@ function OutOrders({ customers, trips, movements, receivingTransfers, salesmanTr
       };
     }).filter((group) => group?.lines.length);
     const out = { id: uid("out"), ref, trustReceipt: trustReceipt.trim(), date: saleDate, customerId, agentId: selectedAgentId, total, groups: outGroups };
+    if (onConfirmSale) {
+      setBusy(true);
+      try {
+        const saved = await onConfirmSale({ customerId, salesmanId: selectedAgentId, date: saleDate, trustReceipt: trustReceipt.trim(), groups: outGroups, salePayment });
+        resetOutForm();
+        pushToast?.(`Sale ${saved.trust_receipt_number} confirmed successfully`);
+      } catch (reason) {
+        setReview(false);
+        pushToast?.(reason?.message || "Unable to confirm Sale.");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     const financial = saleFinancialEvents(out, salePayment, "PAY-" + (3000 + collections.length + 1), uid);
     if (exceedsCredit(selectedCustomer, ledgerEntries, total - initialPaid)) addAudit("Credit Limit Exceeded: " + ref + " / " + selectedCustomer.name + " (warning-only demo policy)", getAgentName(agents, selectedAgentId));
     setOuts((items) => [out, ...items]);
@@ -977,7 +1011,7 @@ function OutOrders({ customers, trips, movements, receivingTransfers, salesmanTr
           <div className="mt-4 grid gap-3 sm:grid-cols-3 2xl:grid-cols-1">
             <Field label="Trust Receipt No."><input className={inputClass()} placeholder="TR-001" value={trustReceipt} onChange={(e) => setTrustReceipt(e.target.value)} /></Field>
             <Field label="Sale Date"><input className={inputClass()} type="date" value={saleDate} onInput={(e) => setSaleDate(e.target.value)} /></Field>
-            <Field label="Salesman"><select className={inputClass()} value={selectedAgentId} onChange={(e) => { const id = e.target.value; setSaleAgent(id); const firstTrip = trips.find((trip) => trip.products.some((item) => availableFor(id, trip, item) > 0)); const firstItem = firstTrip?.products.find((item) => availableFor(id, firstTrip, item) > 0); setGroups([{ id: uid("group"), tripId: firstTrip?.id || "", lines: firstItem ? [{ product: firstItem.name, sizeCode: firstItem.sizeCode || "", sizeCodeLabel: firstItem.sizeCodeLabel || "", classType: firstItem.classType || "", classTypeLabel: firstItem.classTypeLabel || "", qty: 0, price: customerPrice(selectedCustomer, firstItem.name) }] : [] }]); }} >{agents.filter((agent) => agent.active && agent.role === "Agent").map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</select></Field>
+            <Field label="Salesman"><select disabled={!canSelectSalesman} className={inputClass()} value={selectedAgentId} onChange={(e) => { const id = e.target.value; setSaleAgent(id); const firstTrip = trips.find((trip) => trip.products.some((item) => availableFor(id, trip, item) > 0)); const firstItem = firstTrip?.products.find((item) => availableFor(id, firstTrip, item) > 0); setGroups([{ id: uid("group"), tripId: firstTrip?.id || "", lines: firstItem ? [{ product: firstItem.name, lotId: firstItem.lotId || "", sizeCode: firstItem.sizeCode || "", sizeCodeLabel: firstItem.sizeCodeLabel || "", classType: firstItem.classType || "", classTypeLabel: firstItem.classTypeLabel || "", qty: 0, price: customerPrice(selectedCustomer, firstItem.name) }] : [] }]); }} >{agents.filter((agent) => agent.active && agent.role === "Agent").map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</select></Field>
           </div>
         </div>
         <div className="space-y-4">
@@ -1019,20 +1053,21 @@ function OutOrders({ customers, trips, movements, receivingTransfers, salesmanTr
                 </div>
                 <div className="mt-2 space-y-2">
                   {group.lines.map((line, index) => {
-                    const available = getSalesmanAvailableQty(receivingTransfers, salesmanTransfers, movements, selectedAgentId, group.tripId, line.product, line.sizeCode, line.classType);
+                    const stockItem = availableItems.find((item) => item.lotId === line.lotId) || availableItems.find((item) => item.name === line.product && (item.sizeCode || "") === (line.sizeCode || "") && (item.classType || "") === (line.classType || ""));
+                    const available = stockItem ? availableFor(selectedAgentId, trip, stockItem) : 0;
                     const defaultPrice = customerPrice(selectedCustomer, line.product);
                     const changed = Number(line.price) !== defaultPrice;
                     const insufficient = Number(line.qty) > available;
                     return (
                       <div key={`${group.id}-${index}`} className={`rounded-lg border p-3 ${insufficient ? "border-rose-200 bg-rose-50" : "border-slate-200 bg-slate-50"}`}>
                         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(150px,1fr)_120px_120px_100px_130px_44px]">
-                          <Field label="Product"><select className={inputClass()} value={line.product} onChange={(e) => { const item = availableItems.find((stock) => stock.name === e.target.value); updateLine(group.id, index, { product: e.target.value, sizeCode: item?.sizeCode || "", sizeCodeLabel: item?.sizeCodeLabel || "", classType: item?.classType || "", classTypeLabel: item?.classTypeLabel || "", qty: 0, price: customerPrice(selectedCustomer, e.target.value) }); }}>
+                          <Field label="Product"><select className={inputClass()} value={line.product} onChange={(e) => { const item = availableItems.find((stock) => stock.name === e.target.value); updateLine(group.id, index, { product: e.target.value, lotId: item?.lotId || "", sizeCode: item?.sizeCode || "", sizeCodeLabel: item?.sizeCodeLabel || "", classType: item?.classType || "", classTypeLabel: item?.classTypeLabel || "", qty: 0, price: customerPrice(selectedCustomer, e.target.value) }); }}>
                             {[...new Set(availableItems.map((item) => item.name))].map((name) => <option key={name}>{name}</option>)}
                           </select></Field>
-                          {availableItems.some((item) => item.name === line.product && item.sizeCode) && <Field label="Size/Code"><select className={inputClass()} value={line.sizeCode || ""} onChange={(e) => { const item = availableItems.find((stock) => stock.name === line.product && stock.sizeCode === e.target.value); updateLine(group.id, index, { sizeCode: e.target.value, sizeCodeLabel: item?.sizeCodeLabel || "", classType: item?.classType || "", classTypeLabel: item?.classTypeLabel || "", qty: 0 }); }}>
+                          {availableItems.some((item) => item.name === line.product && item.sizeCode) && <Field label="Size/Code"><select className={inputClass()} value={line.sizeCode || ""} onChange={(e) => { const item = availableItems.find((stock) => stock.name === line.product && stock.sizeCode === e.target.value); updateLine(group.id, index, { lotId: item?.lotId || "", sizeCode: e.target.value, sizeCodeLabel: item?.sizeCodeLabel || "", classType: item?.classType || "", classTypeLabel: item?.classTypeLabel || "", qty: 0 }); }}>
                             {[...new Map(availableItems.filter((item) => item.name === line.product).map((item) => [item.sizeCode || "", item])).values()].map((item) => <option key={item.sizeCode || "uncoded"} value={item.sizeCode || ""}>{productLabel("", item.sizeCode, "", item.sizeCodeLabel)}</option>)}
                           </select></Field>}
-                          {availableItems.some((item) => item.name === line.product && item.classType) && <Field label="Class Type"><select className={inputClass()} value={line.classType || ""} onChange={(e) => { const item = availableItems.find((stock) => stock.name === line.product && (stock.sizeCode || "") === (line.sizeCode || "") && stock.classType === e.target.value); updateLine(group.id, index, { classType: e.target.value, classTypeLabel: item?.classTypeLabel || "", qty: 0 }); }}>{availableItems.filter((item) => item.name === line.product && (item.sizeCode || "") === (line.sizeCode || "")).map((item) => <option key={item.classType} value={item.classType}>{productLabel("", "", item.classType, "", item.classTypeLabel)}</option>)}</select></Field>}
+                          {availableItems.some((item) => item.name === line.product && item.classType) && <Field label="Class Type"><select className={inputClass()} value={line.classType || ""} onChange={(e) => { const item = availableItems.find((stock) => stock.name === line.product && (stock.sizeCode || "") === (line.sizeCode || "") && stock.classType === e.target.value); updateLine(group.id, index, { lotId: item?.lotId || "", classType: e.target.value, classTypeLabel: item?.classTypeLabel || "", qty: 0 }); }}>{availableItems.filter((item) => item.name === line.product && (item.sizeCode || "") === (line.sizeCode || "")).map((item) => <option key={item.classType} value={item.classType}>{productLabel("", "", item.classType, "", item.classTypeLabel)}</option>)}</select></Field>}
                           <Field label="KG"><input className={inputClass()} type="number" min="0" step="0.01" value={line.qty} onChange={(e) => updateLine(group.id, index, { qty: e.target.value })} /></Field>
                           <Field label="Selling Price/kg"><MoneyInput value={line.price} onChange={(e) => updateLine(group.id, index, { price: e.target.value })} /></Field>
                           <Button variant="ghost" className="px-0" disabled={group.lines.length === 1} onClick={() => updateGroup(group.id, { lines: group.lines.filter((_, lineIndex) => lineIndex !== index) })} aria-label="Remove line"><X size={18} /></Button>
@@ -1047,7 +1082,7 @@ function OutOrders({ customers, trips, movements, receivingTransfers, salesmanTr
                     );
                   })}
                 </div>
-                <Button variant="secondary" className="mt-3" onClick={() => { const item = availableItems[0]; if (item) updateGroup(group.id, { lines: [...group.lines, { product: item.name, sizeCode: item.sizeCode || "", sizeCodeLabel: item.sizeCodeLabel || "", classType: item.classType || "", classTypeLabel: item.classTypeLabel || "", qty: 0, price: customerPrice(selectedCustomer, item.name) }] }); }}>
+                <Button variant="secondary" className="mt-3" onClick={() => { const item = availableItems[0]; if (item) updateGroup(group.id, { lines: [...group.lines, { product: item.name, lotId: item.lotId || "", sizeCode: item.sizeCode || "", sizeCodeLabel: item.sizeCodeLabel || "", classType: item.classType || "", classTypeLabel: item.classTypeLabel || "", qty: 0, price: customerPrice(selectedCustomer, item.name) }] }); }}>
                   <Plus size={18} /> Add Product
                 </Button>
               </div>
@@ -1116,16 +1151,16 @@ function OutOrders({ customers, trips, movements, receivingTransfers, salesmanTr
           <div className="mt-4 grid gap-3 sm:grid-cols-2"><StatMini label="Payment" value={currency(Number.isFinite(initialPaid) ? initialPaid : 0)} /><StatMini label="Remaining Balance" value={currency(Math.max(0, total - (Number.isFinite(initialPaid) ? initialPaid : 0)))} /></div>
           {paymentError ? <p role="alert" className="mt-3 font-semibold text-rose-700">{paymentError}</p> : <div className="mt-3"><Badge tone={initialPaid >= total ? "green" : initialPaid > 0 ? "amber" : "slate"}>{paymentAtSaleStatus(total, initialPaid)}</Badge></div>}
         </section>
-        <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => setReview(false)}>Edit Sale</Button><Button disabled={hasInsufficient || !!paymentError || !selectedAgentId || total <= 0} onClick={confirmOut}><ClipboardCheck size={18} />Confirm Sale</Button></div>
+        <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => setReview(false)}>Edit Sale</Button><Button disabled={busy || hasInsufficient || !!paymentError || !selectedAgentId || total <= 0} onClick={confirmOut}><ClipboardCheck size={18} />{busy ? "Confirming..." : "Confirm Sale"}</Button></div>
       </Drawer>}
       <section className="report-section"><h2 className="mb-3 text-lg font-bold">Sales</h2>
-        <ResponsiveTable columns={["Date", "Sale", "Trust Receipt", "Customer", "Total", "Payment Status"]} rows={outs.slice().sort((a, b) => b.date.localeCompare(a.date)).map((out) => [shortDate(out.date), out.ref, out.trustReceipt || "-", getCustomerName(customers, out.customerId), currency(out.total), <Badge tone={salePaymentStatus(ledgerEntries, out.ref) === "Paid" ? "green" : "amber"}>{salePaymentStatus(ledgerEntries, out.ref)}</Badge>])} />
+        <ResponsiveTable columns={["Date", "Sale", "Trust Receipt", "Customer", "Total", "Payment Status"]} rows={outs.slice().sort((a, b) => b.date.localeCompare(a.date)).map((out) => { const paymentStatus = out.status ? ({ paid: "Paid", partially_paid: "Partially Paid", unpaid: "Unpaid" }[out.status] || out.status) : salePaymentStatus(ledgerEntries, out.ref); return [shortDate(out.date), out.ref, out.trustReceipt || "-", getCustomerName(customers, out.customerId), currency(out.total), <Badge tone={paymentStatus === "Paid" ? "green" : "amber"}>{paymentStatus}</Badge>]; })} />
       </section>
     </>
   );
 }
 
-function Customers({ initialCustomerId = "", customers, ledgerEntries, outs, collections, onSelect, canManage, onAdd, onEdit }) {
+export function Customers({ initialCustomerId = "", customers, ledgerEntries, outs, collections, onSelect, canManage, onAdd, onEdit }) {
   const agents = useUsers();
   const [selectedId, setSelectedId] = useState(initialCustomerId);
   const [balanceFilter, setBalanceFilter] = useState("All");
@@ -1184,19 +1219,27 @@ function Customers({ initialCustomerId = "", customers, ledgerEntries, outs, col
   );
 }
 
-function Collections({ initialCustomerId = "", customers, ledgerEntries, setLedgerEntries, collections, setCollections, expenses, setExpenses, setDiscrepancies, addAudit, pushToast, registerPostDcrChange }) {
-  const agents = useUsers();
-  const firstAgent = agents.find((agent) => agent.active && agent.role === "Agent")?.id || "";
-  const [collection, setCollection] = useState({ agentId: firstAgent, customerId: customers.some((c) => c.id === initialCustomerId) ? initialCustomerId : customers[0]?.id || "", amount: "", method: "Cash", date: today, reference: "", bank: "", notes: "", manual: false, allocations: [] });
-  const [expense, setExpense] = useState({ agentId: firstAgent, date: today, category: "Fuel", amount: "", source: "Cash Collection", description: "", status: "Approved" });
+export function Collections({ initialCustomerId = "", customers, ledgerEntries, setLedgerEntries, collections, setCollections, expenses, setExpenses, setDiscrepancies, addAudit, pushToast, registerPostDcrChange, users: providedUsers, currentDate = today, initialSalesmanId = "", canSelectSalesman = true, allowManualAllocation = true, onRecordPayment, onRecordExpense, busy = false }) {
+  const contextUsers = useUsers();
+  const agents = providedUsers || contextUsers;
+  const firstAgent = initialSalesmanId || agents.find((agent) => agent.active && agent.role === "Agent")?.id || "";
+  const [collection, setCollection] = useState({ agentId: firstAgent, customerId: customers.some((c) => c.id === initialCustomerId) ? initialCustomerId : customers[0]?.id || "", amount: "", method: "Cash", date: currentDate, reference: "", bank: "", notes: "", manual: false, allocations: [] });
+  const [expense, setExpense] = useState({ agentId: firstAgent, date: currentDate, category: "Fuel", amount: "", source: "Cash Collection", description: "", status: "Approved" });
   const autoAllocations = allocateOldestFirst(ledgerEntries, collection.customerId, collection.amount, collection.date);
   const allocations = collection.manual ? collection.allocations.filter((item) => Number(item.amount) > 0) : autoAllocations;
   const allocationTotal = allocations.reduce((sum, item) => sum + Number(item.amount || 0), 0);
   const paymentError = validatePayment(collection, ledgerEntries, allocations);
   const collectionInvalid = Boolean(paymentError) || !customers.some((c) => c.id === collection.customerId) || !agents.some((agent) => agent.id === collection.agentId && agent.active && agent.role === "Agent");
 
-  function recordCollection() {
+  async function recordCollection() {
     if (collectionInvalid) return;
+    if (onRecordPayment) {
+      const saved = await onRecordPayment({ ...collection, amount: Number(collection.amount), allocations });
+      if (!saved) return;
+      setCollection((current) => ({ ...current, amount: "", reference: "", notes: "", allocations: [] }));
+      pushToast?.(`${saved?.payment_number || "Payment"} recorded and allocated`);
+      return;
+    }
     const ref = `PAY-${3000 + collections.length + 1}`;
     const destination = collection.method === "Cash" ? "Cash held by Salesman until remittance" : collection.method === "GCash" ? "Owner GCash" : "Owner Bank Account";
     const newCollection = { ...collection, id: `col-${Date.now()}`, ref, amount: Number(collection.amount), destination, allocations };
@@ -1228,9 +1271,16 @@ function Collections({ initialCustomerId = "", customers, ledgerEntries, setLedg
     pushToast(`${ref} recorded and allocated`);
   }
 
-  function recordExpense() {
+  async function recordExpense() {
     if (!expense.date || !Number.isFinite(Number(expense.amount)) || Number(expense.amount) <= 0) return;
     const item = { ...expense, id: `exp-${Date.now()}`, amount: Number(expense.amount) };
+    if (onRecordExpense) {
+      const saved = await onRecordExpense(item);
+      if (!saved) return;
+      setExpense((current) => ({ ...current, amount: "", description: "" }));
+      pushToast?.(`${item.category} expense recorded`);
+      return;
+    }
     setExpenses((items) => [item, ...items]);
     addAudit(`Recorded ${currency(item.amount)} ${item.category.toLowerCase()} expense`, getAgentName(agents, item.agentId));
     registerPostDcrChange(item.agentId, item.date, `${item.category} expense was added after lock`);
@@ -1248,7 +1298,7 @@ function Collections({ initialCustomerId = "", customers, ledgerEntries, setLedg
           <h3 className="customer-name mb-4">{collection.customerId ? getCustomerName(customers, collection.customerId) : "Select Customer"}</h3>
           <div className="mb-4 grid gap-3 sm:grid-cols-2"><StatMini label="Current Balance" value={currency(customerBalance(ledgerEntries, collection.customerId))} /><StatMini label="Amount Applied" value={currency(allocationTotal)} /></div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Salesman"><select className={inputClass()} value={collection.agentId} onChange={(e) => setCollection({ ...collection, agentId: e.target.value })}>{agents.filter((agent) => agent.active && agent.role === "Agent").map((agent) => <option value={agent.id} key={agent.id}>{agent.name}</option>)}</select></Field>
+            <Field label="Salesman"><select disabled={!canSelectSalesman} className={inputClass()} value={collection.agentId} onChange={(e) => setCollection({ ...collection, agentId: e.target.value })}>{agents.filter((agent) => agent.active && agent.role === "Agent").map((agent) => <option value={agent.id} key={agent.id}>{agent.name}</option>)}</select></Field>
             <CustomerSelector label="Customer" customers={customers} value={collection.customerId} onChange={(id) => setCollection({ ...collection, customerId: id, allocations: [] })} />
             <Field label="Amount"><MoneyInput className={inputClass()} value={collection.amount} onChange={(e) => setCollection({ ...collection, amount: e.target.value })} /></Field>
             <Field label="Payment Method"><select className={inputClass()} value={collection.method} onChange={(e) => setCollection({ ...collection, method: e.target.value })}>{paymentMethods.map((method) => <option key={method}>{method}</option>)}</select></Field>
@@ -1260,20 +1310,20 @@ function Collections({ initialCustomerId = "", customers, ledgerEntries, setLedg
           </div>
           <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-700">Destination: {collection.method === "Cash" ? "Cash held by Salesman until remittance" : collection.method === "GCash" ? "Owner GCash" : "Owner Bank Account"}</div>
 
-          <div className="mt-4 flex items-center gap-3">
+          {allowManualAllocation && <div className="mt-4 flex items-center gap-3">
             <input id="manual" type="checkbox" checked={collection.manual} onChange={(e) => setCollection({ ...collection, manual: e.target.checked })} />
             <label htmlFor="manual" className="text-sm font-semibold">Allocate Manually</label>
-          </div>
+          </div>}
           <AllocationPreview collection={collection} ledgerEntries={ledgerEntries} allocations={allocations} setCollection={setCollection} />
           {allocationTotal > Number(collection.amount || 0) && <p className="mt-3 text-sm font-bold text-rose-700">Manual allocation cannot exceed the payment amount.</p>}
           {paymentError && collection.amount !== "" && <p role="alert" className="mt-3 text-sm font-semibold text-rose-700">{paymentError}</p>}
-          <Button className="mt-4 w-full" disabled={collectionInvalid} onClick={recordCollection}><Banknote size={18} />Record Payment</Button>
+          <Button className="mt-4 w-full" disabled={busy || collectionInvalid} onClick={recordCollection}><Banknote size={18} />{busy ? "Recording..." : "Record Payment"}</Button>
         </div>
         <div className="space-y-4">
           <div className="rounded-lg border border-slate-200 bg-white p-4">
             <h2 className="mb-4 font-bold">+ Record Expense</h2>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Salesman"><select className={inputClass()} value={expense.agentId} onChange={(e) => setExpense({ ...expense, agentId: e.target.value })}>{agents.filter((agent) => agent.active && agent.role === "Agent").map((agent) => <option value={agent.id} key={agent.id}>{agent.name}</option>)}</select></Field>
+              <Field label="Salesman"><select disabled={!canSelectSalesman} className={inputClass()} value={expense.agentId} onChange={(e) => setExpense({ ...expense, agentId: e.target.value })}>{agents.filter((agent) => agent.active && agent.role === "Agent").map((agent) => <option value={agent.id} key={agent.id}>{agent.name}</option>)}</select></Field>
               <Field label="Expense Date"><input className={inputClass()} type="date" value={expense.date} onInput={(e) => setExpense({ ...expense, date: e.target.value })} /></Field>
               <Field label="Approval"><select className={inputClass()} value={expense.status} onChange={(e) => setExpense({ ...expense, status: e.target.value })}><option>Approved</option><option>Pending</option></select></Field>
               <Field label="Category"><select className={inputClass()} value={expense.category} onChange={(e) => setExpense({ ...expense, category: e.target.value })}>{categories.map((category) => <option key={category}>{category}</option>)}</select></Field>
@@ -1283,7 +1333,7 @@ function Collections({ initialCustomerId = "", customers, ledgerEntries, setLedg
             <Field label="Description"><textarea className={`${inputClass()} min-h-20 py-3`} value={expense.description} onChange={(e) => setExpense({ ...expense, description: e.target.value })} /></Field>
 
             {expense.source === "Cash Collection" && <div className="mt-3 rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-900">Approved cash-paid expenses reduce expected physical cash remittance.</div>}
-            <Button className="mt-4 w-full" disabled={!expense.date || Number(expense.amount) <= 0 || !agents.some((agent) => agent.id === expense.agentId && agent.active && agent.role === "Agent")} onClick={recordExpense}><ReceiptText size={18} />Record Expense</Button>
+            <Button className="mt-4 w-full" disabled={busy || !expense.date || Number(expense.amount) <= 0 || !agents.some((agent) => agent.id === expense.agentId && agent.active && agent.role === "Agent")} onClick={recordExpense}><ReceiptText size={18} />{busy ? "Recording..." : "Record Expense"}</Button>
           </div>
           <div className="rounded-lg border border-slate-200 bg-white p-4">
             <h2 className="mb-3 font-bold">Recent Payments</h2>
@@ -1332,10 +1382,11 @@ function AllocationPreview({ collection, ledgerEntries, allocations, setCollecti
   );
 }
 
-function Dcr({ outs, customers, collections, expenses, dcrs, setDcrs, setDiscrepancies, addAudit, pushToast, postDcrAlert }) {
-  const agents = useUsers();
-  const [agentId, setAgentId] = useState(agents.find((agent) => agent.active && agent.role === "Agent")?.id || "");
-  const [date, setDate] = useState(today);
+export function Dcr({ outs, customers, collections, expenses, dcrs, setDcrs, setDiscrepancies, addAudit, pushToast, postDcrAlert, users: providedUsers, currentDate = today, initialSalesmanId = "", canSelectSalesman = true, onSubmitDcr, busy = false }) {
+  const contextUsers = useUsers();
+  const agents = providedUsers || contextUsers;
+  const [agentId, setAgentId] = useState(initialSalesmanId || agents.find((agent) => agent.active && agent.role === "Agent")?.id || "");
+  const [date, setDate] = useState(currentDate);
   const [actual, setActual] = useState(0);
   const [explanation, setExplanation] = useState("");
   const liveDcr = buildDcr({ collections, expenses, customers, agentId, date });
@@ -1343,9 +1394,15 @@ function Dcr({ outs, customers, collections, expenses, dcrs, setDcrs, setDiscrep
   const dcr = locked?.snapshot || liveDcr;
   const actualRemittance = locked ? locked.actual : actual;
   const diff = locked ? locked.diff : money(Number(actual || 0) - dcr.expectedCashRemittance);
-  const hasActivity = dcr.collections.length > 0 || dcr.expenses.length > 0 || outs.some((out) => out.agentId === agentId && out.date === date);
-  function submitDcr() {
+  const hasActivity = Boolean(locked) || dcr.collections.length > 0 || dcr.expenses.length > 0 || outs.some((out) => out.agentId === agentId && out.date === date);
+  async function submitDcr() {
     if (!hasActivity || !agentId || locked || !date || !Number.isFinite(Number(actual)) || Number(actual) < 0 || (diff !== 0 && !explanation.trim())) return;
+    if (onSubmitDcr) {
+      const saved = await onSubmitDcr({ agentId, date, actual: Number(actual), explanation });
+      if (!saved) return;
+      pushToast?.(`DCR locked. Difference: ${currency(saved?.difference || 0)}.`);
+      return;
+    }
     const saved = { id: `dcr-${Date.now()}`, agentId, date, actual: Number(actual), diff, status: "LOCKED", explanation, snapshot: structuredClone(liveDcr) };
     setDcrs((items) => [saved, ...items.filter((item) => !(item.agentId === agentId && item.date === date))]);
     if (diff !== 0) {
@@ -1359,12 +1416,12 @@ function Dcr({ outs, customers, collections, expenses, dcrs, setDcrs, setDiscrep
   }
   return (
     <>
-      <SectionHeader title="Daily Cash Report" eyebrow="System-generated from Salesman transactions" action={<Button disabled={!hasActivity || !agentId || Boolean(locked) || !date || actual === "" || Number(actual) < 0 || (diff !== 0 && !explanation.trim())} onClick={submitDcr}><FileClock size={18} />Submit DCR</Button>} />
+      <SectionHeader title="Daily Cash Report" eyebrow="System-generated from Salesman transactions" action={<Button disabled={busy || !hasActivity || !agentId || Boolean(locked) || !date || actual === "" || Number(actual) < 0 || (diff !== 0 && !explanation.trim())} onClick={submitDcr}><FileClock size={18} />{busy ? "Submitting..." : "Submit DCR"}</Button>} />
       {!hasActivity && <p className="mb-4 text-slate-500">No transactions for this date.</p>}
       <div className="grid gap-5 xl:grid-cols-[330px_1fr]">
         <div className="rounded-lg border border-slate-200 bg-white p-4">
           <div className="grid gap-3">
-            <Field label="Salesman"><select className={inputClass()} value={agentId} onChange={(e) => setAgentId(e.target.value)}>{agents.filter((agent) => agent.role === "Agent" || dcrs.some((item) => item.agentId === agent.id)).map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</select></Field>
+            <Field label="Salesman"><select disabled={!canSelectSalesman} className={inputClass()} value={agentId} onChange={(e) => setAgentId(e.target.value)}>{agents.filter((agent) => agent.role === "Agent" || dcrs.some((item) => item.agentId === agent.id)).map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</select></Field>
             <Field label="Date"><input className={inputClass()} type="date" value={date} onInput={(e) => setDate(e.target.value)} /></Field>
             <Button disabled={Boolean(locked) || !hasActivity} variant="secondary" onClick={() => setActual(Math.max(0, dcr.expectedCashRemittance))}><FileText size={18} />Generate DCR</Button>
           </div>
@@ -1408,13 +1465,15 @@ function Dcr({ outs, customers, collections, expenses, dcrs, setDcrs, setDiscrep
   );
 }
 
-function Discrepancies({ discrepancies, setDiscrepancies, customers }) {
-  const agents = useUsers();
+export function Discrepancies({ discrepancies, setDiscrepancies, customers, users: providedUsers, onMark }) {
+  const contextUsers = useUsers();
+  const agents = providedUsers || contextUsers;
   const counts = ["Open", "Resolved", "Cash", "Inventory", "Payment Verification"].map((key) => ({
     key,
     count: key === "Open" || key === "Resolved" ? discrepancies.filter((item) => item.status === key).length : discrepancies.filter((item) => item.type === key).length,
   }));
-  function mark(id, status) {
+  async function mark(id, status) {
+    if (onMark) return onMark(id, status);
     setDiscrepancies((items) => items.map((item) => (item.id === id ? { ...item, status } : item)));
   }
   return (
@@ -1431,6 +1490,9 @@ function Discrepancies({ discrepancies, setDiscrepancies, customers }) {
             </div>
             <div className="space-y-2 text-sm">
               {item.agentId && <Info label="Salesman" value={getAgentName(agents, item.agentId)} />}
+              {item.severity && <Info label="Severity" value={item.severity} />}
+              {item.createdAt && <Info label="Created" value={new Date(item.createdAt).toLocaleString("en-PH")} />}
+              {item.relatedEntityType && <Info label="Related Transaction" value={`${item.relatedEntityType}${item.relatedEntityId ? ` / ${item.relatedEntityId}` : ""}`} />}
               {item.customerId && <Info label="Customer" value={getCustomerName(customers, item.customerId)} />}
               {item.plant && <Info label="Plant" value={item.plant} />}
               {item.tripDate && <Info label="Trip" value={shortDate(item.tripDate)} />}
@@ -1447,10 +1509,10 @@ function Discrepancies({ discrepancies, setDiscrepancies, customers }) {
               {item.difference !== undefined && <Info label="Difference" value={item.type === "Inventory" ? kg(item.difference) : item.type === "Price" ? `${currency(item.difference)}/kg` : currency(item.difference)} />}
               {item.details && <p className="rounded-lg bg-slate-50 p-2 font-semibold text-slate-700">{item.details}</p>}
             </div>
-            <div className="mt-4 flex gap-2">
+            {(setDiscrepancies || onMark) && <div className="mt-4 flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={() => mark(item.id, "Reviewed")}>Reviewed</Button>
               <Button className="flex-1" onClick={() => mark(item.id, "Resolved")}>Resolved</Button>
-            </div>
+            </div>}
           </div>
         ))}
       </div>
@@ -1458,7 +1520,7 @@ function Discrepancies({ discrepancies, setDiscrepancies, customers }) {
   );
 }
 
-function OutDetail({ out, customers }) {
+export function OutDetail({ out, customers }) {
   if (!out) return <p className="text-sm text-slate-500">Transaction details are not available in this demo record.</p>;
   return (
     <div className="space-y-4">
@@ -1481,7 +1543,7 @@ function OutDetail({ out, customers }) {
   );
 }
 
-function PaymentDetail({ payment }) {
+export function PaymentDetail({ payment }) {
   const agents = useUsers();
   return (
     <div className="space-y-3">

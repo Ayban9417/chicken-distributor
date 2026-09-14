@@ -2,8 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { collectibleSummary, dcrSummary, financialSummary, inDateRange, salesByPlant, salesByProduct } from "../src/utils/hostedReports.js";
 import { loadHostedReports } from "../src/services/reportingService.js";
+import { loadHostedDashboard } from "../src/services/dashboardService.js";
+import { activityDays, customerSales, normalizeHostedTrips } from "../src/utils/hostedDashboard.js";
+import { normalizePlantConfiguration, stockInValuesFromPrototype } from "../src/services/plantsParityService.js";
 
-function recordingClient() {
+function recordingClient(dataByTable = {}) {
   const queries = [];
   class Query {
     constructor(table) { this.table = table; this.steps = []; queries.push(this); }
@@ -15,7 +18,7 @@ function recordingClient() {
     gte(column, value) { this.steps.push(["gte", column, value]); return this; }
     lte(column, value) { this.steps.push(["lte", column, value]); return this; }
     order(column, value) { this.steps.push(["order", column, value]); return this; }
-    then(resolve) { resolve({ data: [], error: null }); }
+    then(resolve) { resolve({ data: dataByTable[this.table] || [], error: null }); }
   }
   return { queries, from: (table) => new Query(table) };
 }
@@ -96,4 +99,83 @@ test("hosted reporting service applies inclusive database date filters", async (
   const paymentQueries = client.queries.filter((item) => item.table === "payments");
   assert.equal(paymentQueries.length, 2);
   assert.ok(paymentQueries.some((query) => query.steps.some((step) => step[0] === "gte" && step[1] === "payment_date")));
+});
+
+test("hosted inventory report reads acquisition type from the stock trip line", async () => {
+  const client = recordingClient({
+    warehouse_stock_summary: [{ inventory_lot_id: "lot-1", available_quantity_kg: 4 }],
+    inventory_lots: [{ id: "lot-1", stock_trip_line_id: "line-1", original_quantity_kg: 10 }],
+    stock_trip_lines: [{ id: "line-1", stock_trip_id: "trip-1", acquisition_type: "free_from_plant" }],
+    stock_trips: [{ id: "trip-1", trip_number: "ST-001", trip_date: "2026-09-14" }],
+  });
+  const result = await loadHostedReports("org-1", { start: "2026-09-01", end: "2026-09-30" }, client);
+  assert.equal(result.warehouseStock[0].acquisition_type, "free_from_plant");
+  assert.equal(result.warehouseStock[0].original_quantity_kg, 10);
+  const lotProjection = client.queries.find((query) => query.table === "inventory_lots" && query.steps.some((step) => step[0] === "select" && step[1].includes("original_quantity_kg")));
+  assert.ok(lotProjection);
+  assert.equal(lotProjection.steps[0][1].includes("acquisition_type"), false);
+});
+
+test("hosted Dashboard normalizes coded, uncoded, and sold-out Trip products", () => {
+  const trips = normalizeHostedTrips({
+    trips: [
+      { id: "t1", plant_id: "b", trip_number: "ST-001", trip_date: "2026-09-14" },
+      { id: "t2", plant_id: "m", trip_number: "ST-002", trip_date: "2026-09-15" },
+    ],
+    lines: [
+      { id: "l1", stock_trip_id: "t1", plant_product_id: "pp1", code_id: "p1", quantity_kg: 100, bags: 5, acquisition_type: "purchased", cost_per_kg: 142 },
+      { id: "l2", stock_trip_id: "t2", plant_product_id: "pp2", code_id: null, quantity_kg: 20, bags: null, acquisition_type: "free_from_plant", cost_per_kg: 0 },
+    ],
+    plantProducts: [{ id: "pp1", product_id: "whole" }, { id: "pp2", product_id: "liver" }],
+    products: [{ id: "whole", name: "Whole Dressed Chicken", category: "whole_chicken" }, { id: "liver", name: "Liver", category: "by_product" }],
+    plants: [{ id: "b", name: "Bounty" }, { id: "m", name: "Magnolia" }],
+    warehouseStock: [{ stock_trip_id: "t1", available_quantity_kg: 0 }, { stock_trip_id: "t2", available_quantity_kg: 8 }],
+    salesmanStock: [],
+  });
+
+  assert.equal(trips[0].products[0].category, "Whole Chicken");
+  assert.equal(trips[0].remainingQty, 0);
+  assert.equal(trips[1].products[0].acquisitionType, "Free from Plant");
+  assert.equal(trips[1].products[0].costPerKg, 0);
+  assert.equal(trips[1].remainingQty, 8);
+});
+
+test("hosted Dashboard activity and customer profitability derive from transaction records", () => {
+  const range = { start: "2026-09-14", end: "2026-09-16" };
+  assert.deepEqual(activityDays(range, [
+    { sale_date: "2026-09-14", net_sales: 1000 },
+    { sale_date: "2026-09-14", net_sales: 500 },
+  ], [{ payment_date: "2026-09-15", amount: 700 }]), [
+    { date: "2026-09-14", sales: 1500, payments: 0 },
+    { date: "2026-09-15", sales: 0, payments: 700 },
+    { date: "2026-09-16", sales: 0, payments: 0 },
+  ]);
+  assert.deepEqual(customerSales([
+    { customer_id: "c1", net_sales: 1500, total_cogs: 1000, gross_profit: 500 },
+    { customer_id: "c1", net_sales: 500, total_cogs: 300, gross_profit: 200 },
+  ], [{ id: "c1", name: "ABC Restaurant" }]), [{ key: "ABC Restaurant", revenue: 2000, cogs: 1300, profit: 700 }]);
+});
+
+test("hosted Dashboard service requests current, previous, and today's Trips", async () => {
+  const client = recordingClient();
+  const range = { start: "2026-09-14", end: "2026-09-20" };
+  const result = await loadHostedDashboard("org-1", range, "2026-09-14", client);
+
+  assert.equal(result.trips.length, 0);
+  assert.equal(result.previousTrips.length, 0);
+  assert.equal(result.todayTrips.length, 0);
+  const tripQueries = client.queries.filter((item) => item.table === "stock_trips");
+  assert.equal(tripQueries.length, 3);
+  assert.ok(tripQueries.some((query) => query.steps.some((step) => step[0] === "gte" && step[2] === "2026-09-07")));
+  assert.ok(tripQueries.some((query) => query.steps.some((step) => step[0] === "gte" && step[2] === "2026-09-14") && query.steps.some((step) => step[0] === "lte" && step[2] === "2026-09-14")));
+});
+
+test("Plants parity adapter keeps display codes separate from backend identities", () => {
+  const [plant] = normalizePlantConfiguration({ plants: [{ id: "p", name: "Fkidz", short_code: "FK", active: true, products: [{ id: "pp", product_id: "whole", active: true, uses_size_codes: true, uses_class_types: false, uses_bags: true, uses_head_count: false, allows_free_from_plant: true, product: { name: "Whole Dressed Chicken", category: "whole_chicken" }, codes: [{ id: "code-uuid", code: "C1", display_name: "Cat1", active: true }], classTypes: [] }] }] });
+  assert.equal(plant.products[0].sizeCodes[0].id, "C1");
+  assert.equal(plant.products[0].sizeCodes[0].backendId, "code-uuid");
+  const values = stockInValuesFromPrototype({ plantId: "p", date: "2026-09-14", products: [{ productId: "pp", codeId: "code-uuid", classTypeId: "", bags: 2, headCount: null, originalQty: 10, acquisitionType: "Purchased", costPerKg: 142 }] });
+  assert.equal(values.lines[0].plantProductId, "pp");
+  assert.equal(values.lines[0].codeId, "code-uuid");
+  assert.equal(values.lines[0].quantity, 10);
 });

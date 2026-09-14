@@ -19,10 +19,10 @@ async function selectIn(client, table, columns, key, values) {
 
 export async function loadHostedReports(organizationId, range, client = requireSupabase()) {
   const base = [
-    period(client.from("sales").select("id, sale_date, gross_sales, sales_deductions, net_sales, total_cogs, gross_profit").eq("organization_id", organizationId).neq("status", "voided"), "sale_date", range).order("sale_date", { ascending: false }),
-    period(client.from("expenses").select("expense_date, amount, approval_status").eq("organization_id", organizationId), "expense_date", range).order("expense_date", { ascending: false }),
-    period(client.from("payments").select("id, customer_id, payment_date, amount, method, voided_at").eq("organization_id", organizationId).is("voided_at", null), "payment_date", range).order("payment_date", { ascending: false }),
-    client.from("payments").select("customer_id, payment_date, amount, method, voided_at").eq("organization_id", organizationId).is("voided_at", null).order("payment_date", { ascending: false }),
+    period(client.from("sales").select("id, customer_id, salesman_user_id, trust_receipt_number, sale_date, gross_sales, sales_deductions, net_sales, total_cogs, gross_profit").eq("organization_id", organizationId).neq("status", "voided"), "sale_date", range).order("sale_date", { ascending: false }),
+    period(client.from("expenses").select("id, salesman_user_id, expense_date, category, amount, payment_source, description, approval_status").eq("organization_id", organizationId), "expense_date", range).order("expense_date", { ascending: false }),
+    period(client.from("payments").select("id, customer_id, salesman_user_id, payment_number, payment_date, amount, method, reference_number, notes, verification_status, voided_at").eq("organization_id", organizationId).is("voided_at", null), "payment_date", range).order("payment_date", { ascending: false }),
+    client.from("payments").select("id, customer_id, salesman_user_id, payment_number, payment_date, amount, method, reference_number, notes, verification_status, voided_at").eq("organization_id", organizationId).is("voided_at", null).order("payment_date", { ascending: false }),
     period(client.from("sales_by_plant").select("*").eq("organization_id", organizationId), "sale_date", range),
     period(client.from("daily_cash_reports").select("*").eq("organization_id", organizationId), "report_date", range).order("report_date", { ascending: false }),
     client.from("collectibles").select("*").eq("organization_id", organizationId).order("sale_date"),
@@ -34,9 +34,10 @@ export async function loadHostedReports(organizationId, range, client = requireS
     client.from("plant_product_codes").select("id, code"),
     client.from("plant_product_class_types").select("id, class_type"),
     client.from("profiles").select("id, full_name"),
+    client.from("customers").select("id, name").eq("organization_id", organizationId),
   ];
 
-  const [salesResult, expensesResult, paymentsResult, allPaymentsResult, plantSalesResult, dcrResult, collectiblesResult, warehouseResult, salesmanResult, movementsResult, productsResult, plantsResult, codesResult, classesResult, profilesResult] = await Promise.all(base);
+  const [salesResult, expensesResult, paymentsResult, allPaymentsResult, plantSalesResult, dcrResult, collectiblesResult, warehouseResult, salesmanResult, movementsResult, productsResult, plantsResult, codesResult, classesResult, profilesResult, customersResult] = await Promise.all(base);
   const sales = fail(salesResult);
   const expenses = fail(expensesResult);
   const payments = fail(paymentsResult);
@@ -52,12 +53,14 @@ export async function loadHostedReports(organizationId, range, client = requireS
   const codes = fail(codesResult);
   const classes = fail(classesResult);
   const profiles = fail(profilesResult);
+  const customers = fail(customersResult);
 
   const saleLines = await selectIn(client, "sale_lines", "sale_id, product_id, code_id, class_type_id, quantity_kg, line_sales, line_cogs, line_gross_profit", "sale_id", ids(sales, "id"));
   const lotRows = await selectIn(client, "inventory_lots", "id, stock_trip_line_id, plant_id, product_id, code_id, class_type_id", "id", ids(movements, "inventory_lot_id"));
   const receivingReceipts = await selectIn(client, "receiving_receipts", "id, receipt_number, salesman_user_id", "id", ids(movements.filter((row) => row.reference_type === "receiving_receipt"), "reference_id"));
   const transferReceipts = await selectIn(client, "transfer_receipts", "id, receipt_number, from_salesman_user_id, to_salesman_user_id", "id", ids(movements.filter((row) => row.reference_type === "transfer_receipt"), "reference_id"));
-  const tripLines = await selectIn(client, "stock_trip_lines", "id, stock_trip_id", "id", ids(lotRows, "stock_trip_line_id"));
+  const stockLots = await selectIn(client, "inventory_lots", "id, stock_trip_line_id, original_quantity_kg", "id", ids([...warehouseStock, ...salesmanStock], "inventory_lot_id"));
+  const tripLines = await selectIn(client, "stock_trip_lines", "id, stock_trip_id, acquisition_type", "id", ids([...lotRows, ...stockLots], "stock_trip_line_id"));
   const trips = await selectIn(client, "stock_trips", "id, trip_number, trip_date", "id", ids(tripLines, "stock_trip_id"));
 
   const productMap = mapBy(products);
@@ -70,13 +73,19 @@ export async function loadHostedReports(organizationId, range, client = requireS
   const tripMap = mapBy(trips);
   const receivingMap = mapBy(receivingReceipts);
   const transferMap = mapBy(transferReceipts);
+  const stockLotMap = mapBy(stockLots);
+  const customerMap = mapBy(customers);
   const namedDcrs = dcrs.map((row) => ({
     ...row,
     salesman_name: profileMap.get(row.salesman_user_id)?.full_name || "-",
   }));
 
+  const namedSales = sales.map((row) => ({ ...row, customer_name: customerMap.get(row.customer_id)?.name || "-" }));
+  const saleMap = mapBy(namedSales);
   const productSales = saleLines.map((row) => ({
     ...row,
+    customer_id: saleMap.get(row.sale_id)?.customer_id,
+    sale_date: saleMap.get(row.sale_id)?.sale_date,
     product_name: productMap.get(row.product_id)?.name,
     category: productMap.get(row.product_id)?.category,
     product_code: codeMap.get(row.code_id)?.code,
@@ -103,5 +112,14 @@ export async function loadHostedReports(organizationId, range, client = requireS
     };
   });
 
-  return { sales, expenses, payments, allPayments, plantSales, productSales, dcrs: namedDcrs, collectibles, warehouseStock, salesmanStock, transfers };
+  const withStockMetadata = (row) => {
+    const lot = stockLotMap.get(row.inventory_lot_id) || {};
+    const tripLine = tripLineMap.get(lot.stock_trip_line_id) || {};
+    return {
+      ...row,
+      acquisition_type: tripLine.acquisition_type || "purchased",
+      original_quantity_kg: lot.original_quantity_kg || 0,
+    };
+  };
+  return { sales: namedSales, expenses, payments, allPayments, plantSales, productSales, dcrs: namedDcrs, collectibles, warehouseStock: warehouseStock.map(withStockMetadata), salesmanStock: salesmanStock.map(withStockMetadata), transfers };
 }

@@ -16,39 +16,60 @@ function Editor({ title, children }) {
 function EmployeeSelect({ users, value, onChange }) {
   return <Field label="Employee"><select className={inputClass()} value={value} onChange={(e) => onChange(e.target.value)}>{users.map((user) => <option key={user.id} value={user.id}>{user.name}{user.active ? "" : " (Inactive)"}</option>)}</select></Field>;
 }
-export function Administration({ state, setUsers, addAudit, pushToast }) {
+export function Administration({ state, setUsers, addAudit, pushToast, onSaveUser, onToggleUser, onDeleteUser, canProvision = true, canEditNames = true, provisioningNotice = "" }) {
   const [editing, setEditing] = useState(null);
   const [error, setError] = useState("");
-  const roles = ["Owner / Admin", "Agent", "Cashier", "Warehouse"];
-  const historical = (user) => [state.outs, state.collections, state.expenses, state.dcrs].some((records) => records.some((item) => item.agentId === user.id)) ||
-    state.auditLog.some((item) => item.userId === user.id || item.actor === user.name) ||
-    state.attendance.some((item) => item.employeeId === user.id) || state.payroll.some((item) => item.employeeId === user.id);
+  const [busy, setBusy] = useState(false);
+  const roles = ["Owner / Admin", "Agent", "Cashier", "Warehouse", "Payroll Admin"];
+  const historical = (user) => [state.outs || [], state.collections || [], state.expenses || [], state.dcrs || []].some((records) => records.some((item) => item.agentId === user.id)) ||
+    (state.auditLog || []).some((item) => item.userId === user.id || item.actor === user.name) ||
+    (state.attendance || []).some((item) => item.employeeId === user.id) || (state.payroll || []).some((item) => item.employeeId === user.id);
   const lastOwner = (user) => user.active && user.role === "Owner / Admin" && state.users.filter((item) => item.active && item.role === "Owner / Admin").length === 1;
-  function save() {
+  async function save() {
     if (!editing.name.trim()) return setError("Enter a user name.");
     const old = state.users.find((item) => item.id === editing.id);
     if (old && lastOwner(old) && (!editing.active || editing.role !== "Owner / Admin")) return setError("Keep at least one active Owner / Admin.");
     const user = { ...editing, name: editing.name.trim(), id: editing.id || uid("user") };
+    if (onSaveUser) {
+      setBusy(true);
+      try {
+        const saved = await onSaveUser(user, old);
+        if (!saved) return;
+        setEditing(null); setError(""); pushToast?.("User saved");
+      } catch (reason) {
+        setError(reason?.message || "Unable to save user.");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     setUsers((items) => old ? items.map((item) => item.id === user.id ? user : item) : [...items, user]);
     addAudit((old ? "Edited user " : "Added user ") + user.name, "Owner / Admin");
     setEditing(null); setError(""); pushToast("User saved");
   }
-  function remove(user) {
+  async function remove(user) {
     if (historical(user) || lastOwner(user)) return;
+    if (onDeleteUser) {
+      setBusy(true);
+      try { await onDeleteUser(user); } catch (reason) { setError(reason?.message || "Unable to delete user."); } finally { setBusy(false); }
+      return;
+    }
     setUsers((items) => items.filter((item) => item.id !== user.id));
     addAudit("Deleted unused demo user " + user.name, "Owner / Admin");
     pushToast("Unused demo user deleted");
   }
   return <>
-    <SectionHeader title="Administration" action={<Button onClick={() => { setError(""); setEditing({ name: "", role: "Agent", active: true }); }}><Plus size={17} />Add User</Button>} />
+    <SectionHeader title="Administration" action={<Button disabled={!canProvision || busy} title={!canProvision ? "User provisioning requires a secure admin-side action." : ""} onClick={() => { setError(""); setEditing({ name: "", role: "Agent", active: true }); }}><Plus size={17} />Add User</Button>} />
+    {provisioningNotice && <p className="mb-4 border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">{provisioningNotice}</p>}
     {editing && <Editor title={editing.id ? "Edit User" : "Add User"}><div className="grid gap-3 sm:grid-cols-3">
-      <Field label="Name"><input className={inputClass()} value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} /></Field>
+      <Field label="Name"><input disabled={!canEditNames && Boolean(editing.id)} className={inputClass()} value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} /></Field>
       <Field label="Role"><select className={inputClass()} value={editing.role} onChange={(e) => setEditing({ ...editing, role: e.target.value })}>{roles.map((role) => <option key={role} value={role}>{role === "Agent" ? "Salesman" : role}</option>)}</select></Field>
       <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={editing.active} onChange={(e) => setEditing({ ...editing, active: e.target.checked })} />Active</label>
-    </div>{error && <p role="alert" className="mt-3 text-rose-700">{error}</p>}<Actions onSave={save} onCancel={() => setEditing(null)} /></Editor>}
+    </div>{error && <p role="alert" className="mt-3 text-rose-700">{error}</p>}<Actions onSave={save} onCancel={() => setEditing(null)} disabled={busy} /></Editor>}
+    {!editing && error && <p role="alert" className="mb-4 text-rose-700">{error}</p>}
     <ResponsiveTable columns={["User", "Role", "Status", "Actions"]} rows={state.users.map((user) => [user.name, user.role === "Agent" ? "Salesman / DCR" : user.role, <Badge tone={user.active ? "green" : "slate"}>{user.active ? "Active" : "Inactive"}</Badge>,
       <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => { setError(""); setEditing({ ...user }); }}><Pencil size={16} />Edit</Button>
-        <Button variant="secondary" disabled={lastOwner(user)} onClick={() => { setUsers((items) => items.map((item) => item.id === user.id ? { ...item, active: !item.active } : item)); addAudit((user.active ? "Deactivated " : "Activated ") + user.name, "Owner / Admin"); }}>{user.active ? "Deactivate" : "Activate"}</Button>
+        <Button variant="secondary" disabled={busy || lastOwner(user)} onClick={async () => { if (onToggleUser) { setBusy(true); setError(""); try { await onToggleUser(user); } catch (reason) { setError(reason?.message || "Unable to update user."); } finally { setBusy(false); } return; } setUsers((items) => items.map((item) => item.id === user.id ? { ...item, active: !item.active } : item)); addAudit((user.active ? "Deactivated " : "Activated ") + user.name, "Owner / Admin"); }}>{user.active ? "Deactivate" : "Activate"}</Button>
         <Button variant="ghost" aria-label={"Delete " + user.name} title={historical(user) ? "Historical records: deactivate this user instead." : "Delete unused user"} disabled={historical(user) || lastOwner(user)} onClick={() => remove(user)}><Trash2 size={17} /></Button>
         {historical(user) && <span className="basis-full text-sm text-slate-500">Historical records retained; deactivate instead of deleting.</span>}
       </div>])} />

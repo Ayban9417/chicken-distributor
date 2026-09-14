@@ -80,8 +80,8 @@ export function stockSnapshot(line, plant) {
   const p = plant.products.find((p) => p.productId === line.productId);
   const code = p.usesSizeCodes ? p.sizeCodes.find((c) => c.id === line.sizeCode) : null;
   const classType = p.usesClassTypes ? p.classTypes.find((c) => c.id === line.classType) : null;
-  return { productId: p.productId, name: p.productName, category: p.category, codeId: code?.id || "", sizeCode: code?.id || "", sizeCodeLabel: code?.displayName?.trim() || "",
-    classTypeId: classType?.id || "", classType: classType?.id || "", classTypeLabel: classType?.displayName?.trim() || "",
+  return { productId: p.productId, name: p.productName, category: p.category, codeId: code?.backendId || code?.id || "", sizeCode: code?.id || "", sizeCodeLabel: code?.displayName?.trim() || "",
+    classTypeId: classType?.backendId || classType?.id || "", classType: classType?.id || "", classTypeLabel: classType?.displayName?.trim() || "",
     defaultUnit: p.defaultUnit, bags: p.usesBags && line.bags !== "" ? Number(line.bags) : null, headCount: p.usesHeadCount && line.headCount !== "" ? Number(line.headCount) : null, originalQty: Number(line.qty), acquisitionType: line.acquisitionType,
     costPerKg: line.acquisitionType === "Free from Plant" ? 0 : Number(line.costPerKg) };
 }

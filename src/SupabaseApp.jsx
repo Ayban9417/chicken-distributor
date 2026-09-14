@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react";
-import { LogOut, Menu, Settings, X } from "lucide-react";
+import { LogOut, Menu, X } from "lucide-react";
 import { AppProvider, useAppContext } from "./context/AppContext";
 import { AuthScreen } from "./components/AuthScreen";
-import { LivePlantManagement } from "./components/LivePlantManagement";
-import { CustomersScreen, DcrScreen, FinanceScreen, LiveDashboard, SalesmanInventoryScreen, SalesScreen, StockInScreen, WarehouseScreen } from "./components/CoreOperations";
+import { HostedDashboard } from "./components/Reporting";
+import { HostedAdministration, HostedFinanceScreen, HostedInventoryScreen, HostedPlantsScreen, HostedSalesScreen, HostedWarehouseScreen } from "./components/HostedParityScreens";
 import { HostedReports } from "./components/HostedReports";
 import { HostedTrucks } from "./components/HostedTrucks";
 import { HostedDtr } from "./components/HostedDtr";
 import { HostedPayroll } from "./components/HostedPayroll";
 import { Brand, PrimaryNav, primaryNavigation } from "./components/ApplicationNavigation";
-import { Button, SectionHeader } from "./components/ui";
+import { Button } from "./components/ui";
 import { supabaseConfigurationError } from "./lib/supabaseClient";
 import { canAccessScreen, initialScreenForRole } from "./lib/roleAccess";
 
@@ -40,33 +40,33 @@ function ProtectedApplication() {
 function Workspace() {
   const { organization, profile, role, signOut, user } = useAppContext();
   const [active, setActive] = useState(() => initialScreenForRole(role));
-  const [paymentCustomerId, setPaymentCustomerId] = useState("");
+  const [financeCustomerId, setFinanceCustomerId] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [epoch, setEpoch] = useState(0);
   const changed = () => setEpoch((value) => value + 1);
   const navigate = (screen, customerId = "") => {
     const target = { payments: "collections", ledger: "customers", sales: "out", plants: "trips", "stock-in": "trips" }[screen] || screen;
-    setPaymentCustomerId(target === "collections" ? customerId : "");
+    setFinanceCustomerId(target === "collections" || target === "customers" ? customerId : "");
     setActive(target);
   };
   useEffect(() => { window.scrollTo({ top: 0 }); setMobileOpen(false); }, [active]);
   const items = primaryNavigation.filter((item) => canAccessScreen(role, item.id));
   const screens = {
-    dashboard: <LiveDashboard organizationId={organization.id} epoch={epoch} />,
-    trips: <HostedPlantsWorkflow organizationId={organization.id} role={role} onChanged={changed} />,
-    warehouse: <WarehouseScreen organizationId={organization.id} role={role} onChanged={changed} />,
-    inventory: <SalesmanInventoryScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} />,
-    out: <SalesScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} />,
-    collections: <FinanceScreen organizationId={organization.id} role={role} userId={user.id} view="payments" initialCustomerId={paymentCustomerId} onChanged={changed} onNavigate={navigate} />,
-    customers: <FinanceScreen organizationId={organization.id} role={role} userId={user.id} view="ledger" onChanged={changed} onNavigate={navigate} />,
-    collectibles: <FinanceScreen organizationId={organization.id} role={role} userId={user.id} view="collectibles" onChanged={changed} onNavigate={navigate} />,
-    dcr: <DcrScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} />,
+    dashboard: <HostedDashboard organizationId={organization.id} epoch={epoch} onNavigate={navigate} onPayment={(customerId) => navigate("collections", customerId)} onLedger={(customerId) => navigate("customers", customerId)} />,
+    trips: <HostedPlantsScreen organizationId={organization.id} role={role} onChanged={changed} />,
+    warehouse: <HostedWarehouseScreen organizationId={organization.id} onChanged={changed} />,
+    inventory: <HostedInventoryScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} onWarehouse={() => navigate("warehouse")} />,
+    out: <HostedSalesScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} onStockIn={() => navigate("trips")} />,
+    collections: <HostedFinanceScreen organizationId={organization.id} role={role} userId={user.id} view="payments" initialCustomerId={financeCustomerId} onChanged={changed} onNavigate={navigate} />,
+    customers: <HostedFinanceScreen organizationId={organization.id} role={role} userId={user.id} view="ledger" initialCustomerId={financeCustomerId} onChanged={changed} onNavigate={navigate} />,
+    collectibles: <HostedFinanceScreen organizationId={organization.id} role={role} userId={user.id} view="collectibles" onChanged={changed} onNavigate={navigate} />,
+    dcr: <HostedFinanceScreen organizationId={organization.id} role={role} userId={user.id} view="dcr" onChanged={changed} onNavigate={navigate} />,
     dtr: <HostedDtr organizationId={organization.id} userId={user.id} role={role} />,
     payroll: <HostedPayroll organizationId={organization.id} userId={user.id} />,
     reports: <HostedReports organizationId={organization.id} epoch={epoch} />,
     trucks: <HostedTrucks organizationId={organization.id} userId={user.id} />,
-    discrepancies: <UnavailableScreen title="Discrepancies" />,
-    admin: <UnavailableScreen title="Administration" />,
+    discrepancies: <HostedFinanceScreen organizationId={organization.id} role={role} userId={user.id} view="discrepancies" onChanged={changed} onNavigate={navigate} />,
+    admin: <HostedAdministration organizationId={organization.id} role={role} onChanged={changed} onNavigate={navigate} />,
   };
   const content = screens[active] || screens.dashboard;
 
@@ -78,16 +78,6 @@ function Workspace() {
     <nav className="mobile-nav fixed inset-x-0 bottom-0 z-30 flex gap-2 overflow-x-auto border-t border-slate-200 bg-white p-2 md:hidden">{items.map(({ id, label, icon: Icon }) => <button key={id} className={`flex min-w-20 flex-col items-center gap-1 rounded-lg px-2 py-2 text-xs font-semibold ${active === id ? "bg-blue-50 text-[#146ef5]" : "text-slate-500"}`} onClick={() => navigate(id)}><Icon size={18} /><span>{label}</span></button>)}</nav>
     <footer className="border-t border-slate-200 bg-white px-4 py-4 text-center text-xs text-slate-500 md:ml-64">Fictional demonstration data and acquisition costs. Prototype by Noderno.</footer>
   </div>;
-}
-
-function HostedPlantsWorkflow({ organizationId, role, onChanged }) {
-  const [manage, setManage] = useState(false);
-  if (manage) return <LivePlantManagement organizationId={organizationId} role={role} onBack={() => setManage(false)} />;
-  return <div>{role === "owner_admin" && <div className="mb-4"><Button variant="secondary" onClick={() => setManage(true)}><Settings size={17} />Manage Plants</Button></div>}<StockInScreen organizationId={organizationId} onChanged={onChanged} /></div>;
-}
-
-function UnavailableScreen({ title }) {
-  return <div><SectionHeader title={title} /><p className="report-section text-slate-600">This original workflow is being connected to hosted data in the next parity checkpoint.</p></div>;
 }
 
 function CenteredState({ title, detail, action }) {

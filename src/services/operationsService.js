@@ -11,7 +11,10 @@ export async function loadPeople(organizationId) {
   const ids = memberships.map((item) => item.user_id);
   if (!ids.length) return [];
   const profiles = fail(await client.from("profiles").select("id, full_name, active").in("id", ids));
-  return memberships.map((membership) => ({ ...membership, ...profiles.find((profile) => profile.id === membership.user_id) })).filter((item) => item.id);
+  return memberships.map((membership) => {
+    const profile = profiles.find((item) => item.id === membership.user_id);
+    return { ...membership, ...profile, membership_active: membership.active, profile_active: profile?.active, active: membership.active && profile?.active !== false };
+  }).filter((item) => item.id);
 }
 
 export async function loadStockFormData(organizationId) {
@@ -114,8 +117,8 @@ export async function saveCustomer(organizationId, values) {
     address: values.address?.trim() || null,
     customer_type: values.customerType || "other",
     payment_type: values.paymentType || "cash",
-    credit_limit: values.creditLimit === "" ? null : Number(values.creditLimit),
-    payment_terms_days: values.paymentTerms === "" ? null : Number(values.paymentTerms),
+    credit_limit: hasValue(values.creditLimit) ? Number(values.creditLimit) : null,
+    payment_terms_days: hasValue(values.paymentTerms) ? Number(values.paymentTerms) : null,
     active: values.active !== false,
   };
   const query = values.id ? client.from("customers").update(payload).eq("id", values.id) : client.from("customers").insert(payload);
@@ -211,7 +214,7 @@ export async function loadOperationsSummary(organizationId) {
     client.from("stock_trips").select("id, trip_date").eq("organization_id", organizationId),
     client.from("sales").select("sale_date, net_sales, total_cogs, gross_profit").eq("organization_id", organizationId).neq("status", "voided"),
     client.from("payments").select("payment_date, amount, method, salesman_user_id").eq("organization_id", organizationId).is("voided_at", null),
-    client.from("expenses").select("expense_date, amount, approval_status, salesman_user_id, payment_source").eq("organization_id", organizationId),
+    client.from("expenses").select("id, expense_date, category, amount, payment_source, description, approval_status, salesman_user_id, created_by").eq("organization_id", organizationId),
     client.from("daily_cash_reports").select("*").eq("organization_id", organizationId).order("report_date", { ascending: false }),
     client.from("sales_by_plant").select("*").eq("organization_id", organizationId),
     client.from("sales_by_product").select("*").eq("organization_id", organizationId),

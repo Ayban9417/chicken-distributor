@@ -1,4 +1,4 @@
-import { requireSupabase } from "../lib/supabaseClient";
+import { requireSupabase } from "../lib/supabaseClient.js";
 
 const ordered = (rows, key = "name") => [...(rows || [])].sort((a, b) => String(a[key] || "").localeCompare(String(b[key] || "")));
 

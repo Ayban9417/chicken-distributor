@@ -46,7 +46,7 @@ export function HostedDtr({ organizationId, userId, role }) {
   };
 
   return <div>
-    <SectionHeader title="DTR" eyebrow="Hosted attendance" action={<div className="flex flex-wrap gap-2"><Button variant="secondary" aria-label="Refresh DTR" title="Refresh DTR" onClick={entries.refresh}><RefreshCw size={17} /></Button><Button onClick={startNew}><Plus size={17} />New Entry</Button></div>} />
+    <SectionHeader title="DTR" eyebrow="Attendance records" action={<div className="flex flex-wrap gap-2"><Button variant="secondary" aria-label="Refresh DTR" title="Refresh DTR" onClick={entries.refresh}><RefreshCw size={17} /></Button><Button onClick={startNew}><Plus size={17} />New Entry</Button></div>} />
     {(status.error || entries.error || people.error) && <p role="alert" className="mb-4 border border-rose-200 bg-rose-50 p-3 font-semibold text-rose-800">{status.error || entries.error || people.error}</p>}
     {status.notice && <p className="mb-4 border border-emerald-200 bg-emerald-50 p-3 font-semibold text-emerald-800">{status.notice}</p>}
     <div className="grid gap-3 sm:grid-cols-3"><StatCard label="Entries" value={records.length} icon={Clock3} /><StatCard label="Completed Time" value={formatDtrMinutes(completeMinutes)} icon={Clock3} tone="green" /><StatCard label="Open Entries" value={records.filter((row) => !row.time_out).length} icon={Clock3} tone="amber" /></div>
