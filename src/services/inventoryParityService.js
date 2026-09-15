@@ -10,8 +10,10 @@ const number = (value) => Number(value || 0);
 export const parityUsers = (people = []) => people.map((person) => ({
   id: person.user_id,
   name: person.full_name || "Unnamed User",
+  username: person.username || "",
   role: ({ owner_admin: "Owner / Admin", salesman: "Agent", cashier: "Legacy / Deprecated", warehouse: "Warehouse", payroll_admin: "Payroll Admin" })[person.role] || person.role,
   active: person.active !== false,
+  mustChangePassword: person.must_change_password === true,
 }));
 
 export async function loadHostedWarehouse(organizationId, client = requireSupabase()) {

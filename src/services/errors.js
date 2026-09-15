@@ -4,7 +4,7 @@ const messages = [
   [/insufficient warehouse stock/i, "There is not enough Warehouse inventory for this stock."],
   [/active customer not found/i, "This customer is inactive or unavailable."],
   [/not authorized|permission denied|row-level security/i, "You do not have permission to perform this action."],
-  [/invalid login credentials/i, "Email or password is incorrect."],
+  [/invalid login credentials|username or password is incorrect/i, "Username or password is incorrect."],
 ];
 
 export function readableError(error, fallback = "The request could not be completed.") {

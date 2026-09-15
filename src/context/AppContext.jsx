@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { loadAccess, onAuthChange, restoreSession, signIn, signOut } from "../services/authService";
+import { changeOwnPassword, loadAccess, onAuthChange, restoreSession, signIn, signOut } from "../services/authService";
 import { readableError } from "../services/errors";
 
 const AppContext = createContext(null);
@@ -36,7 +36,13 @@ export function AppProvider({ children }) {
         setLoading(false);
       }
     });
-    const subscription = onAuthChange(resolve);
+    const subscription = onAuthChange((nextSession, event) => {
+      if (event === "USER_UPDATED") {
+        setSession(nextSession);
+        return;
+      }
+      resolve(nextSession);
+    });
     return () => {
       active = false;
       subscription.unsubscribe();
@@ -53,6 +59,7 @@ export function AppProvider({ children }) {
       error,
       signIn,
       signOut,
+      changePassword: changeOwnPassword,
       refreshAccess: async () => setAccess(await loadAccess(session.user.id)),
     }),
     [session, access, loading, error],

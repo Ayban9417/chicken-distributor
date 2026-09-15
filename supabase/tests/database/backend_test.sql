@@ -14,11 +14,11 @@ insert into auth.users (
   ('00000000-0000-0000-0000-000000000000', 'a0000000-0000-4000-8000-000000000103', 'authenticated', 'authenticated', 'sales2@test.invalid', '', now(), '{}', '{}', now(), now(), '', '', '', ''),
   ('00000000-0000-0000-0000-000000000000', 'a0000000-0000-4000-8000-000000000104', 'authenticated', 'authenticated', 'outsider@test.invalid', '', now(), '{}', '{}', now(), now(), '', '', '', '');
 
-insert into public.profiles (id, full_name) values
-  ('a0000000-0000-4000-8000-000000000101', 'Test Owner'),
-  ('a0000000-0000-4000-8000-000000000102', 'Test Sales One'),
-  ('a0000000-0000-4000-8000-000000000103', 'Test Sales Two'),
-  ('a0000000-0000-4000-8000-000000000104', 'Test Outsider');
+insert into public.profiles (id, full_name, username) values
+  ('a0000000-0000-4000-8000-000000000101', 'Test Owner', 'backend.owner'),
+  ('a0000000-0000-4000-8000-000000000102', 'Test Sales One', 'backend.sales1'),
+  ('a0000000-0000-4000-8000-000000000103', 'Test Sales Two', 'backend.sales2'),
+  ('a0000000-0000-4000-8000-000000000104', 'Test Outsider', 'backend.outsider');
 insert into public.organizations (id, name, slug) values
   ('a0000000-0000-4000-8000-000000000001', 'Test Organization A', 'test-organization-a'),
   ('a0000000-0000-4000-8000-000000000002', 'Test Organization B', 'test-organization-b');

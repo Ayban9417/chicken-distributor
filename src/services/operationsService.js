@@ -10,7 +10,7 @@ export async function loadPeople(organizationId) {
   const memberships = fail(await client.from("organization_memberships").select("user_id, role, active").eq("organization_id", organizationId));
   const ids = memberships.map((item) => item.user_id);
   if (!ids.length) return [];
-  const profiles = fail(await client.from("profiles").select("id, full_name, active").in("id", ids));
+  const profiles = fail(await client.from("profiles").select("id, full_name, username, active, must_change_password").in("id", ids));
   return memberships.map((membership) => {
     const profile = profiles.find((item) => item.id === membership.user_id);
     return { ...membership, ...profile, membership_active: membership.active, profile_active: profile?.active, active: membership.active && profile?.active !== false };

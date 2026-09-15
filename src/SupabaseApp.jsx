@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LogOut, Menu, X } from "lucide-react";
+import { KeyRound, LogOut, Menu, X } from "lucide-react";
 import { AppProvider, useAppContext } from "./context/AppContext";
 import { AuthScreen } from "./components/AuthScreen";
 import { HostedDashboard } from "./components/Reporting";
@@ -8,8 +8,9 @@ import { HostedReports } from "./components/HostedReports";
 import { HostedTrucks } from "./components/HostedTrucks";
 import { HostedDtr } from "./components/HostedDtr";
 import { HostedPayroll } from "./components/HostedPayroll";
+import { ChangePasswordForm } from "./components/AccountSecurity";
 import { Brand, PrimaryNav, primaryNavigation } from "./components/ApplicationNavigation";
-import { Button } from "./components/ui";
+import { Button, Drawer } from "./components/ui";
 import { supabaseConfigurationError } from "./lib/supabaseClient";
 import { canAccessScreen, initialScreenForRole, isOperationalRole } from "./lib/roleAccess";
 
@@ -36,15 +37,22 @@ function ProtectedApplication() {
   if (!isOperationalRole(context.role)) {
     return <CenteredState title="Access not configured" detail="This membership uses a retired role. Ask an Owner / Admin to assign a current operational role." action={<Button onClick={context.signOut}>Sign out</Button>} />;
   }
+  if (context.profile.must_change_password) return <RequiredPasswordChange />;
   return <Workspace />;
 }
 
+function RequiredPasswordChange() {
+  const { changePassword, refreshAccess, signOut } = useAppContext();
+  return <main className="grid min-h-screen place-items-center bg-slate-100 p-5"><section className="w-full max-w-lg border border-slate-200 bg-white p-6 shadow-sm"><p className="text-sm font-bold uppercase text-emerald-700">Account security</p><h1 className="mt-1 text-2xl font-bold">Change your temporary password</h1><div className="mt-5"><ChangePasswordForm forced onChangePassword={changePassword} onDone={refreshAccess} /></div><Button className="mt-3 w-full" variant="ghost" onClick={signOut}><LogOut size={16} />Sign out</Button></section></main>;
+}
+
 function Workspace() {
-  const { organization, profile, role, signOut, user } = useAppContext();
+  const { changePassword, organization, profile, refreshAccess, role, signOut, user } = useAppContext();
   const [active, setActive] = useState(() => initialScreenForRole(role));
   const [financeCustomerId, setFinanceCustomerId] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [epoch, setEpoch] = useState(0);
+  const [securityOpen, setSecurityOpen] = useState(false);
   const changed = () => setEpoch((value) => value + 1);
   const navigate = (screen, customerId = "") => {
     const target = { payments: "collections", ledger: "customers", sales: "out", plants: "trips", "stock-in": "trips" }[screen] || screen;
@@ -75,10 +83,11 @@ function Workspace() {
   return <div className="min-h-screen bg-slate-100 text-slate-900">
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 overflow-y-auto border-r border-slate-200 bg-white md:block"><Brand /><PrimaryNav active={active} setActive={navigate} items={items} /></aside>
     {mobileOpen && <div className="fixed inset-0 z-40 bg-slate-950/35 md:hidden"><aside className="h-full w-80 max-w-[86vw] overflow-y-auto bg-white shadow-2xl"><div className="flex items-center justify-between border-b border-slate-200 pr-3"><Brand /><Button variant="ghost" className="h-11 w-11 px-0" onClick={() => setMobileOpen(false)} aria-label="Close menu"><X size={20} /></Button></div><PrimaryNav active={active} setActive={navigate} items={items} /></aside></div>}
-    <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur md:ml-64 md:px-7"><Button variant="ghost" className="h-11 w-11 px-0 md:hidden" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu size={22} /></Button><div className="hidden text-sm font-semibold text-slate-500 xl:block">{organization.name} / Hosted DEV</div><div className="flex items-center gap-2 text-right"><div className="hidden sm:block"><p className="text-sm font-bold">{profile?.full_name}</p><p className="text-xs text-slate-500">{roleLabels[role] || role}</p></div><Button variant="secondary" onClick={signOut}><LogOut size={16} />Sign out</Button></div></header>
+    <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur md:ml-64 md:px-7"><Button variant="ghost" className="h-11 w-11 px-0 md:hidden" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu size={22} /></Button><div className="hidden text-sm font-semibold text-slate-500 xl:block">{organization.name} / Hosted DEV</div><div className="flex items-center gap-2 text-right"><div className="hidden sm:block"><p className="text-sm font-bold">{profile?.full_name}</p><p className="text-xs text-slate-500">{roleLabels[role] || role}</p></div><Button variant="secondary" className="h-11 px-3" onClick={() => setSecurityOpen(true)} aria-label="Change password"><KeyRound size={16} /><span className="hidden lg:inline">Change password</span></Button><Button variant="secondary" className="h-11 px-3" onClick={signOut}><LogOut size={16} /><span className="hidden lg:inline">Sign out</span></Button></div></header>
     <main className="pb-24 md:ml-64"><div className="mx-auto max-w-7xl px-4 py-6 md:px-7">{content}</div></main>
     <nav className="mobile-nav fixed inset-x-0 bottom-0 z-30 flex gap-2 overflow-x-auto border-t border-slate-200 bg-white p-2 md:hidden">{items.map(({ id, label, icon: Icon }) => <button key={id} className={`flex min-w-20 flex-col items-center gap-1 rounded-lg px-2 py-2 text-xs font-semibold ${active === id ? "bg-blue-50 text-[#146ef5]" : "text-slate-500"}`} onClick={() => navigate(id)}><Icon size={18} /><span>{label}</span></button>)}</nav>
     <footer className="border-t border-slate-200 bg-white px-4 py-4 text-center text-xs text-slate-500 md:ml-64">Fictional demonstration data and acquisition costs. Prototype by Noderno.</footer>
+    {securityOpen && <Drawer title="Change Password" onClose={() => setSecurityOpen(false)}><ChangePasswordForm onChangePassword={changePassword} onDone={async () => { await refreshAccess(); setSecurityOpen(false); }} /></Drawer>}
   </div>;
 }
 

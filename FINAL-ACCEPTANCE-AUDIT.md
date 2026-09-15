@@ -3,11 +3,11 @@
 **Audit date:** September 15, 2026
 **Project:** Chicken Distributor
 **Branch:** `feature/supabase-frontend`
-**Validated base checkpoint:** `13b9aad5db12336822dc1ef7de1c1cfdca44a89a`
+**Pre-account-management checkpoint:** `85a79b9b19a5af9045fb0507386d0761663620d9`
 **Environment:** Hosted Supabase DEV plus local-data mode
 **Overall result:** **PASS**
 
-The end-to-end operating workflow, financial reconciliation, inventory traceability, role isolation, responsive layouts, and local fallback mode passed acceptance testing. The final role-model correction makes Stock In Owner/Admin-only in both the UI and database RPC, removes Cashier from the operational application, and limits collections to Owner/Admin and the responsible Salesman.
+The end-to-end operating workflow, financial reconciliation, inventory traceability, role isolation, responsive layouts, local fallback mode, and secure hosted account lifecycle passed acceptance testing. The final role-model correction makes Stock In Owner/Admin-only in both the UI and database RPC, removes Cashier from the operational application, and limits collections to Owner/Admin and the responsible Salesman.
 
 Customer collections are performed by Salesmen or the Owner/Admin. The client does not use a Cashier role.
 
@@ -46,7 +46,20 @@ No deployment or merge to `main` was performed.
 | DTR | PASS | Existing empty state and role visibility worked; no migration or feature changes were made. |
 | Payroll | PASS | Owner-only visibility and empty state worked; no migration or feature changes were made. |
 | Trucks | PASS | Existing empty state worked; no migration or feature changes were made. |
-| Administration | PASS with provisioning note | Owner could review roles/statuses, edit/deactivate memberships, and inspect audit activity. Cashier is not assignable; an existing legacy membership can only remain inactive. Secure account provisioning remains a server-side follow-up. |
+| Administration | PASS | Owner can create, edit, activate, deactivate, and reset Salesman accounts. The UI has no role selector and cannot create privileged roles. Cashier is not assignable. |
+
+## Account Management Acceptance
+
+- Client login accepts Username and Password only; no email address is displayed or returned by the resolver.
+- The username resolver returns one generic response for an unknown username and an incorrect password, and anonymous profile enumeration is denied.
+- Owner/Admin created `salesman01` through the deployed DEV Edge Function. A deliberately supplied `owner_admin` browser payload was ignored and the database created only a Salesman membership.
+- Duplicate normalized username creation was rejected.
+- Salesman first login required a temporary-password change. Current-password verification, successful replacement, and clearing the required-change flag passed.
+- Owner/Admin password reset set a new temporary password and restored the required-change flag.
+- Salesman attempts to create/reset accounts, edit Plant configuration, rewrite profile identity, or promote their own role were denied.
+- Deactivation blocked a new username login and removed organization visibility from an already issued session. Reactivation restored access.
+- Passwords were absent from profile rows and audit payloads. Account creation, password change/reset, activation, and deactivation produced audit events without secret values.
+- Username login and both account-management Edge Functions were deployed only to the linked hosted DEV project.
 
 ## Hosted Scenario Reconciliation
 
@@ -145,15 +158,17 @@ Expected RLS denials were observed and counted as successful security checks. Th
 **Actual:** The entire trip displayed `Not recorded`.
 **Fix:** Display the total of recorded bag lines as `N recorded`; display a number when every line is recorded and `Not recorded` only when none are recorded. No bags-to-kilos relationship is inferred.
 
+### 5. Password Change Event Race
+
+**Classification:** BUG
+**Severity:** Low
+**Module:** Account security
+**Reproduction:** Complete the first-login password change while Supabase emits `USER_UPDATED` before the required-change database flag is cleared.
+**Expected:** The success confirmation remains visible and Continue refreshes the access record once.
+**Actual:** The access record could reload early and remount the forced form.
+**Fix:** Treat `USER_UPDATED` as a session-only refresh. The explicit completion RPC clears the flag, and Continue performs the authoritative access reload. Added a regression assertion.
+
 ## Remaining Non-Blocking Items
-
-### Secure User Provisioning
-
-**Classification:** CLIENT DECISION REQUIRED
-**Severity:** Medium
-**Module:** Administration
-**Current behavior:** The frontend can review, edit, activate, and deactivate organization memberships but intentionally does not create Auth users with privileged keys.
-**Recommended resolution:** Provision users through a secured Edge Function or trusted server using the Supabase Admin API. Never place a service-role key in the frontend.
 
 ### Hosted Discrepancy Resolution
 
@@ -183,12 +198,16 @@ Local-data mode started successfully. Owner/Admin retained the complete workflow
 - Database lint passed for application schemas `api`, `private`, and `public` at error level.
 - An all-schema lint run reported only managed pgTAP self-reference noise under the `extensions` schema; this is not an application schema defect.
 - Migration `20260914173236_align_roles_with_client_workflow.sql` was applied to hosted DEV and the remote migration state is current.
+- Migration `20260915074952_secure_username_account_management.sql` was applied to hosted DEV; a final linked dry run confirmed no pending migrations.
+- The `username-login` and `manage-salesman-account` Edge Functions were deployed to DEV and passed the hosted account lifecycle/security scenario.
+- Database advisors returned no error-level findings. The warning for authenticated execution of `complete_own_password_change()` is intentional: it is a targetless `SECURITY DEFINER` RPC bound to `auth.uid()` and an active membership. Remaining warnings are the project-level leaked-password-protection setting and pre-existing RLS performance suggestions.
 - The migration preserves `cashier` only as an inactive legacy text value while preventing operational assignment or access.
-- The updated pgTAP role files could not be launched by the CLI because Docker/Podman is unavailable on this machine. Equivalent role and RLS paths passed against hosted DEV through the disposable direct integration scenario.
+- The updated pgTAP role and account-security files could not be launched by the CLI because Docker/Podman is unavailable on this machine. Equivalent role, account, and RLS paths passed against hosted DEV through the disposable direct integration scenario.
 
 ## Cleanup And Security
 
 - Temporary hosted QA users remaining: **0**
+- Retained configured DEV accounts: **1 Owner/Admin and 1 Salesman**
 - Temporary customers remaining: **0**
 - Temporary trips remaining: **0**
 - Temporary sales/payments/expenses/DCRs remaining: **0**
@@ -198,7 +217,7 @@ Local-data mode started successfully. Owner/Admin retained the complete workflow
 
 ## Final Verification
 
-- Automated tests: **86 passed, 0 failed**
+- Automated tests: **94 passed, 0 failed**
 - Production build: **PASS**
 - Application-schema database lint: **PASS**
 - Hosted browser console: **PASS, no errors/warnings**
@@ -208,4 +227,4 @@ Local-data mode started successfully. Owner/Admin retained the complete workflow
 
 ## Acceptance Recommendation
 
-Accept the audited workflow as a **client-ready role-corrected checkpoint**. The implementation is functionally coherent, reconciles end to end, and now matches the confirmed operational roles. Keep secure user provisioning and discrepancy resolution as explicitly scoped follow-up work rather than exposing privileged credentials or weakening RLS in the frontend.
+Accept the audited workflow as a **client-ready account-management checkpoint**. The implementation is functionally coherent, reconciles end to end, and now matches the confirmed operational roles. Keep hosted discrepancy resolution as an explicitly scoped follow-up instead of weakening RLS without an approved ownership and audit design.

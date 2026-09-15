@@ -9,11 +9,11 @@ insert into auth.users (id, email) values
   ('d0000000-0000-4000-8000-000000000103', 'frontend-sales-one@test.invalid'),
   ('d0000000-0000-4000-8000-000000000104', 'frontend-sales-two@test.invalid');
 
-insert into public.profiles (id, full_name) values
-  ('d0000000-0000-4000-8000-000000000101', 'Frontend Owner'),
-  ('d0000000-0000-4000-8000-000000000102', 'Frontend Warehouse'),
-  ('d0000000-0000-4000-8000-000000000103', 'Frontend Sales One'),
-  ('d0000000-0000-4000-8000-000000000104', 'Frontend Sales Two');
+insert into public.profiles (id, full_name, username) values
+  ('d0000000-0000-4000-8000-000000000101', 'Frontend Owner', 'frontend.owner'),
+  ('d0000000-0000-4000-8000-000000000102', 'Frontend Warehouse', 'frontend.warehouse'),
+  ('d0000000-0000-4000-8000-000000000103', 'Frontend Sales One', 'frontend.sales1'),
+  ('d0000000-0000-4000-8000-000000000104', 'Frontend Sales Two', 'frontend.sales2');
 
 insert into public.organizations (id, name, slug) values
   ('d0000000-0000-4000-8000-000000000001', 'Frontend Role Organization', 'frontend-role-organization');

@@ -15,6 +15,14 @@ Customer collections are performed by Salesmen or the Owner / Admin. The client 
 
 Local mode keeps its data in React state and resets on refresh. Hosted mode uses the linked Supabase DEV project with Auth, RLS, and transactional RPCs. This remains a prototype, not a production deployment.
 
+## Hosted Accounts
+
+Hosted users sign in with an assigned Username and Password. Supabase Auth remains the identity provider; its internal email identifiers are never shown in the client UI. Username resolution runs in the `username-login` Edge Function and returns the same generic error for an unknown username or incorrect password.
+
+Owner / Admin can open Administration > Salesman Accounts to add a Salesman, edit the Salesman's name or username, reset a temporary password, and activate or deactivate access. The browser cannot choose or submit a role during provisioning: the Edge Function and database transaction always create a `salesman` membership. Temporary passwords require an in-app password change at the next login. Owner / Admin and Salesman accounts can also change their own password by entering the current password and confirming the replacement.
+
+Account management uses the secured `manage-salesman-account` Edge Function and service-role-only database functions. Service credentials remain server-side. Deactivation updates the profile and organization membership so stale sessions lose operational access through RLS.
+
 ## Tech Stack
 
 - React
@@ -55,7 +63,7 @@ The local business date is fixed at September 13, 2026 for a repeatable presenta
    then Submit. Later payments/expenses flag changes after lock without rewriting it.
 10. Daily Summary, Dashboard and Reports keep Sales, Payments, costs and receivables
     separate. Switch date ranges to inspect only actual recorded activity.
-11. Administration manages plants, customers and users. DTR/Payroll and Trucks remain
+11. Administration manages plants, customers and Salesman accounts. DTR/Payroll and Trucks remain
     available for manual setup and activity; none has preloaded runs or history.
 12. Administration > Reset Operational Data requires confirmation. It clears all
     operational data, customers and trucks, while keeping current Plant/product/code

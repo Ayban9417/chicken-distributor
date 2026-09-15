@@ -10,13 +10,13 @@ insert into auth.users (id, email) values
   ('c0000000-0000-4000-8000-000000000104', 'rls-sales-two@test.invalid'),
   ('c0000000-0000-4000-8000-000000000105', 'rls-legacy-role@test.invalid'),
   ('c0000000-0000-4000-8000-000000000106', 'rls-outsider@test.invalid');
-insert into public.profiles (id, full_name) values
-  ('c0000000-0000-4000-8000-000000000101', 'RLS Owner'),
-  ('c0000000-0000-4000-8000-000000000102', 'RLS Warehouse'),
-  ('c0000000-0000-4000-8000-000000000103', 'RLS Sales One'),
-  ('c0000000-0000-4000-8000-000000000104', 'RLS Sales Two'),
-  ('c0000000-0000-4000-8000-000000000105', 'RLS Legacy Role'),
-  ('c0000000-0000-4000-8000-000000000106', 'RLS Outsider');
+insert into public.profiles (id, full_name, username) values
+  ('c0000000-0000-4000-8000-000000000101', 'RLS Owner', 'rls.owner'),
+  ('c0000000-0000-4000-8000-000000000102', 'RLS Warehouse', 'rls.warehouse'),
+  ('c0000000-0000-4000-8000-000000000103', 'RLS Sales One', 'rls.sales1'),
+  ('c0000000-0000-4000-8000-000000000104', 'RLS Sales Two', 'rls.sales2'),
+  ('c0000000-0000-4000-8000-000000000105', 'RLS Legacy Role', 'rls.legacy'),
+  ('c0000000-0000-4000-8000-000000000106', 'RLS Outsider', 'rls.outsider');
 insert into public.organizations (id, name, slug) values
   ('c0000000-0000-4000-8000-000000000001', 'RLS Organization A', 'rls-organization-a'),
   ('c0000000-0000-4000-8000-000000000002', 'RLS Organization B', 'rls-organization-b');

@@ -8,13 +8,14 @@ import { readableError } from "../services/errors";
 import { createHostedSale, loadHostedSales } from "../services/salesParityService";
 import { loadHostedFinanceParity, recordHostedExpense, recordHostedPayment, saveHostedCustomer, submitHostedDcr } from "../services/financeParityService";
 import { saveCustomer } from "../services/operationsService";
-import { deleteUnusedHostedCustomer, loadHostedAdministration, setHostedCustomerActive, updateHostedMembership } from "../services/administrationService";
+import { deleteUnusedHostedCustomer, loadHostedAdministration, setHostedCustomerActive } from "../services/administrationService";
+import { createSalesmanAccount, resetSalesmanPassword, setSalesmanAccountActive, updateSalesmanAccount } from "../services/accountService";
 import { Button, Drawer, PlantContext, UserContext } from "./ui";
 import { Collectibles } from "./Reporting";
-import { Administration } from "./Supporting";
 import { LivePlantManagement } from "./LivePlantManagement";
 import { SalesmanInventory, Warehouse } from "./InventoryFlow";
 import { CustomerEditor } from "./CustomerManagement";
+import { SalesmanAccounts } from "./SalesmanAccounts";
 
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date());
 
@@ -337,15 +338,12 @@ export function HostedAdministration({ organizationId, role, onChanged, onNaviga
   return <UserContext.Provider value={data.users}>
     {feedback}
     <div className="mb-4 flex flex-wrap gap-3"><Button variant="secondary" onClick={() => setMode("plants")}><Settings size={17} />Manage Plants</Button><Button variant="secondary" onClick={() => setMode("customers")}><Users size={17} />Manage Customers</Button></div>
-    <Administration
-      state={state}
-      canProvision={false}
-      canEditNames={false}
-      provisioningNotice="Add User and password setup require a secure Supabase Auth admin action. This browser UI can safely edit existing organization roles and activation only."
-      pushToast={setNotice}
-      onSaveUser={(user, old) => old ? run(() => updateHostedMembership(organizationId, user), "User membership updated.") : Promise.reject(new Error("Provision this user through a secure admin-side Auth workflow first."))}
-      onToggleUser={(user) => run(() => updateHostedMembership(organizationId, { ...user, active: !user.active }), `${user.name} ${user.active ? "deactivated" : "activated"}.`)}
-      onDeleteUser={() => Promise.reject(new Error("Safe Auth-user deletion requires a secure admin-side workflow."))}
+    <SalesmanAccounts
+      users={data.users}
+      onCreate={(values) => run(() => createSalesmanAccount(organizationId, values), "Salesman account created.")}
+      onUpdate={(user, values) => run(() => updateSalesmanAccount(organizationId, { ...user, name: values.fullName, username: values.username }), "Salesman account updated.")}
+      onToggle={(user) => run(() => setSalesmanAccountActive(organizationId, user.id, !user.active), `${user.name} ${user.active ? "deactivated" : "activated"}.`)}
+      onReset={(user, values) => run(() => resetSalesmanPassword(organizationId, user.id, values), "Temporary password set. The Salesman must change it after signing in.")}
     />
   </UserContext.Provider>;
 }
