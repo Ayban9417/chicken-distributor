@@ -14,7 +14,7 @@ import {
   transferSalesmanStock,
   transferWarehouseStock,
 } from "../src/services/operationsService.js";
-import { canAccessScreen, initialScreenForRole } from "../src/lib/roleAccess.js";
+import { canAccessScreen, initialScreenForRole, isOperationalRole, screenRoles } from "../src/lib/roleAccess.js";
 
 const ids = {
   organization: "10000000-0000-4000-8000-000000000001",
@@ -175,26 +175,26 @@ test("RPC failures remain recoverable service errors", async () => {
   );
 });
 
-test("hosted navigation exposes only the intended Phase 2 screens by role", () => {
+test("hosted navigation matches the final client role model", () => {
   assert.equal(initialScreenForRole("owner_admin"), "dashboard");
   assert.equal(initialScreenForRole("warehouse"), "warehouse");
   assert.equal(initialScreenForRole("salesman"), "inventory");
-  assert.equal(initialScreenForRole("cashier"), "collections");
   assert.equal(initialScreenForRole("payroll_admin"), "dtr");
+  assert.equal(isOperationalRole("cashier"), false);
+  assert.equal(isOperationalRole("salesman"), true);
 
   for (const screen of ["plants", "stock-in", "warehouse", "customers", "reports", "trucks"]) assert.equal(canAccessScreen("owner_admin", screen), true);
   assert.equal(canAccessScreen("warehouse", "warehouse"), true);
   assert.equal(canAccessScreen("warehouse", "trucks"), true);
-  assert.equal(canAccessScreen("warehouse", "sales"), false);
+  for (const screen of ["dashboard", "plants", "stock-in", "sales", "payments", "dcr", "discrepancies", "reports"]) assert.equal(canAccessScreen("warehouse", screen), false);
   for (const screen of ["inventory", "sales", "payments", "dcr"]) assert.equal(canAccessScreen("salesman", screen), true);
   assert.equal(canAccessScreen("salesman", "warehouse"), false);
-  for (const screen of ["ledger", "collectibles", "payments"]) assert.equal(canAccessScreen("cashier", screen), true);
-  for (const role of ["owner_admin", "warehouse", "salesman", "cashier", "payroll_admin"]) assert.equal(canAccessScreen(role, "dtr"), true);
+  for (const screen of Object.keys(screenRoles)) assert.equal(canAccessScreen("cashier", screen), false);
+  for (const role of ["owner_admin", "warehouse", "salesman", "payroll_admin"]) assert.equal(canAccessScreen(role, "dtr"), true);
   assert.equal(canAccessScreen("owner_admin", "payroll"), true);
   assert.equal(canAccessScreen("payroll_admin", "payroll"), true);
   for (const screen of ["dashboard", "trips", "warehouse", "inventory", "out", "collections", "customers", "collectibles", "dcr", "discrepancies", "reports", "dtr", "payroll", "trucks", "admin"]) {
     assert.equal(canAccessScreen("owner_admin", screen), true, `owner can access ${screen}`);
   }
-  assert.equal(canAccessScreen("cashier", "warehouse"), false);
   for (const role of ["warehouse", "salesman", "cashier"]) assert.equal(canAccessScreen(role, "payroll"), false);
 });

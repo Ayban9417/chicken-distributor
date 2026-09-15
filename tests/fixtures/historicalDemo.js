@@ -14,7 +14,6 @@ export const agents = [
 export const users = [
   { id: "owner", name: "Owner / Admin", role: "Owner / Admin" },
   ...agents,
-  { id: "cashier", name: "Ana Dela Cruz", role: "Cashier" },
 ].map((user) => ({ ...user, active: true }));
 
 export const initialCustomers = [

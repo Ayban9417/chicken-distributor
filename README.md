@@ -1,21 +1,19 @@
 # Chicken Distribution Workflow Prototype
 
-This is a standalone concept workflow prototype for a whole-dressed chicken distributor. It is designed for client presentation and workflow validation only.
+This is a concept workflow prototype for a whole-dressed chicken distributor. It supports a local React-state demonstration and an authenticated Supabase DEV mode for client acceptance testing.
 
 It is not the production system.
 
-## What this prototype does not include
+## Operational roles
 
-- No database
-- No backend
-- No authentication
-- No persistence
-- No Supabase
-- No external APIs
+- Owner / Admin: full oversight, Stock In, sales, collections, reporting, and administration.
+- Warehouse: Warehouse inventory, Receiving Receipts, and Warehouse-to-Salesman transfers. Warehouse cannot Stock In or record customer payments.
+- Salesman: own assigned inventory, Sales, customer collections, own expenses and DCR, and permitted Salesman transfers.
+- Payroll Admin: DTR/Payroll access where configured.
 
-All data is demo/mock data held in local React state. Data resets on page refresh.
-Startup is genuinely empty: no customers, stock, transactions, DTR, payroll or trucks.
-Plant/product/code configurations and Owner/Admin, Agent and Cashier users remain.
+Customer collections are performed by Salesmen or the Owner / Admin. The client does not use a Cashier role. The historical database value is retained only as a disabled legacy value and is not assignable in the application.
+
+Local mode keeps its data in React state and resets on refresh. Hosted mode uses the linked Supabase DEV project with Auth, RLS, and transactional RPCs. This remains a prototype, not a production deployment.
 
 ## Tech Stack
 
@@ -23,7 +21,8 @@ Plant/product/code configurations and Owner/Admin, Agent and Cashier users remai
 - Vite
 - Tailwind CSS
 - Lucide React icons
-- Local React state only
+- Supabase Auth/Postgres/RLS in hosted DEV mode
+- Local React state fallback mode
 
 ## Launch
 
@@ -34,10 +33,11 @@ npm run dev
 
 Then open the local URL shown in the terminal.
 
+Set `VITE_DATA_MODE=local` for the standalone local demonstration. Hosted mode additionally requires the project URL and publishable/anon browser key in an ignored `.env.local`. Never place a service-role or secret key in the frontend.
+
 ## Demo Flow
 
-The business date is fixed at September 6, 2026 for a repeatable presentation.
-The default business week is August 31 through September 6.
+The local business date is fixed at September 13, 2026 for a repeatable presentation.
 
 1. Dashboard starts at zero. Open Ledger > Add Customer, or Quick Add in Sales.
 2. Add Golden Chicken House, Cash / Credit, optional PHP 100,000 credit limit.
@@ -51,7 +51,7 @@ The default business week is August 31 through September 6.
 7. Confirm once. Ledger shows a PHP 50,000 charge and a separate PHP 20,000 payment.
 8. Collectibles shows PHP 30,000. Payments can settle it later, including two
    PHP 15,000 FIFO payments. GCash/Bank Deposit require external references.
-9. Payments: enter an Agent Expense. DCR: Generate, enter/check actual remittance,
+9. Payments: enter a Salesman Expense. DCR: Generate, enter/check actual remittance,
    then Submit. Later payments/expenses flag changes after lock without rewriting it.
 10. Daily Summary, Dashboard and Reports keep Sales, Payments, costs and receivables
     separate. Switch date ranges to inspect only actual recorded activity.
@@ -123,14 +123,9 @@ later Payments retain FIFO allocation. Sales never become cash receipts automati
 See [CLEAN-START-PAYMENTS-REPORT.md](./CLEAN-START-PAYMENTS-REPORT.md) for the latest
 implementation and verification. Earlier reports describe previous prototype stages.
 
-## Supabase Backend Foundation (Phase 1)
+## Supabase Hosted Mode
 
-The `feature/supabase-backend` branch contains a development-only Supabase foundation.
-The React prototype is still local-state only; this phase does not connect the UI,
-add authentication screens, or import demo operations. See
-[SUPABASE-BACKEND-PLAN.md](./SUPABASE-BACKEND-PLAN.md) and
-[BACKEND-AUDIT.md](./BACKEND-AUDIT.md) for the schema, RLS, RPC, ledger, concurrency,
-and migration notes.
+The `feature/supabase-frontend` branch connects the parity frontend to the development-only Supabase foundation. Authentication, role-scoped navigation, RLS, transactional inventory, sales, payments, DCR, and reports are integrated. See [FINAL-ACCEPTANCE-AUDIT.md](./FINAL-ACCEPTANCE-AUDIT.md) for the current acceptance evidence and [BACKEND-AUDIT.md](./BACKEND-AUDIT.md) for the schema and security model.
 
 With Docker installed, the local workflow is:
 
@@ -141,8 +136,4 @@ supabase test db
 supabase db lint --local
 ```
 
-The Phase 1 backend foundation has been validated against its dedicated hosted
-development project. See [PHASE-1-EXECUTION-REPORT.md](./PHASE-1-EXECUTION-REPORT.md)
-for the hosted test, concurrency, lint and advisor results. Never put a database
-password, service-role key or access token in the repository. The React app remains
-entirely local-state based until Phase 2 is explicitly approved.
+The hosted foundation and frontend parity flow are validated against a dedicated development project. Never put a database password, service-role key, or access token in the repository.

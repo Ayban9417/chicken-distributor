@@ -3,11 +3,13 @@
 **Audit date:** September 15, 2026
 **Project:** Chicken Distributor
 **Branch:** `feature/supabase-frontend`
-**Validated checkpoint:** `928e44d4bf6ea38113ce7941d61cf7cefd981b1c`
+**Validated base checkpoint:** `13b9aad5db12336822dc1ef7de1c1cfdca44a89a`
 **Environment:** Hosted Supabase DEV plus local-data mode
-**Overall result:** **CONDITIONAL PASS**
+**Overall result:** **PASS**
 
-The end-to-end operating workflow, financial reconciliation, inventory traceability, role isolation, responsive layouts, and local fallback mode passed acceptance testing. Three presentation/data-adapter defects and one minor reporting defect were found and fixed. One high-priority authorization requirement remains unresolved because the current implementation deliberately permits Warehouse users to create Stock In trips while the acceptance brief describes Stock In as Admin-only. That policy difference requires a client decision before changing UI and RLS together.
+The end-to-end operating workflow, financial reconciliation, inventory traceability, role isolation, responsive layouts, and local fallback mode passed acceptance testing. The final role-model correction makes Stock In Owner/Admin-only in both the UI and database RPC, removes Cashier from the operational application, and limits collections to Owner/Admin and the responsible Salesman.
+
+Customer collections are performed by Salesmen or the Owner/Admin. The client does not use a Cashier role.
 
 No deployment or merge to `main` was performed.
 
@@ -16,7 +18,8 @@ No deployment or merge to `main` was performed.
 - Reviewed the current branch and uncommitted parity work before testing.
 - Ran the complete automated test suite before and after fixes.
 - Created an isolated, disposable hosted QA scenario in the existing DEV organization.
-- Tested Owner/Admin, Warehouse, two Salesmen, and Cashier accounts through UI and direct service/RLS checks.
+- Tested Owner/Admin, Warehouse, and two Salesmen through UI and direct service/RLS checks.
+- Probed the inactive legacy `cashier` database value to confirm that it cannot be activated or used for operational access.
 - Exercised coded, uncoded, purchased, free-from-plant, bag-count, head-count, sold-out, transfer, sale, payment, expense, DCR, discrepancy, and reporting paths.
 - Reconciled inventory and finance independently from stored records.
 - Checked every visible module at desktop, tablet, and mobile widths.
@@ -29,7 +32,7 @@ No deployment or merge to `main` was performed.
 | Area | Result | Evidence |
 | --- | --- | --- |
 | Plant configuration | PASS | Owner could manage coded and uncoded products, class/code options, bags, heads, purchased/free acquisition, and costs. |
-| Stock In / Trips | PASS, policy caveat | Coded and uncoded trips posted with exact Plant + Trip + Product + Code/Class traceability. Warehouse authorization conflict is documented below. |
+| Stock In / Trips | PASS | Coded and uncoded trips posted with exact Plant + Trip + Product + Code/Class traceability. Owner/Admin could Stock In; Warehouse and Salesman were denied by both UI access and RPC authorization. |
 | Warehouse inventory | PASS | Grouping, original quantity, transfers, remaining stock, cost, and sold-out zero rows rendered correctly. |
 | Warehouse to Salesman | PASS | RR transfers preserved kilos, bags, heads, origin, code/class, and cost. |
 | Salesman to Salesman | PASS | TF transfer moved only the selected Salesman's exact inventory allocation. |
@@ -43,7 +46,7 @@ No deployment or merge to `main` was performed.
 | DTR | PASS | Existing empty state and role visibility worked; no migration or feature changes were made. |
 | Payroll | PASS | Owner-only visibility and empty state worked; no migration or feature changes were made. |
 | Trucks | PASS | Existing empty state worked; no migration or feature changes were made. |
-| Administration | PASS with provisioning note | Owner could review roles/statuses, edit/deactivate memberships, and inspect audit activity. Secure account provisioning remains a server-side follow-up. |
+| Administration | PASS with provisioning note | Owner could review roles/statuses, edit/deactivate memberships, and inspect audit activity. Cashier is not assignable; an existing legacy membership can only remain inactive. Secure account provisioning remains a server-side follow-up. |
 
 ## Hosted Scenario Reconciliation
 
@@ -71,16 +74,18 @@ The disposable scenario used a newly configured uncoded plant plus a coded Fkidz
 
 The 2 kg coded lot sold to zero and continued to render as a sold-out row. The 5 kg free by-product retained its class, head count, zero acquisition cost, and origin traceability.
 
+The final role-model regression scenario independently stocked 100 kg as Owner/Admin, transferred 80 kg from Warehouse to Salesman A, transferred 20 kg from Salesman A to Salesman B, and sold 20 kg from Salesman A's own stock. A PHP 4,000 receivable was settled through Cash, GCash, and Bank payments attributed to Salesman A. Notes and electronic references were retained, DCR locking passed, and all unauthorized role probes were rejected.
+
 ## Role And RLS Verification
 
 | Role | Result |
 | --- | --- |
 | Owner/Admin | PASS: Plant management, Stock In, Warehouse, customers, reports, Payroll, and Administration were accessible. |
-| Warehouse | PASS except policy conflict: Warehouse and discrepancies were accessible; Payroll and Administration data were blocked. Plant configuration mutation was denied. The current UI and RPC allowed Stock In. |
+| Warehouse | PASS: Warehouse inventory, receiving history, Warehouse-to-Salesman transfers, DTR, and Trucks were accessible. Stock In, payments, Plant configuration, DCR, reports, discrepancies, Payroll, and Administration were blocked. |
 | Salesman | PASS: only own assigned inventory was visible; Salesman selection was locked; own sales, payments, expenses, and DCR worked. Selling another Salesman's stock, arbitrary inventory movement, and Plant edits were denied. |
-| Cashier | PASS: Payments, Ledger, Collectibles, DCR, Discrepancies, and Reports were visible. Inventory and Plant mutations were denied. |
+| Legacy `cashier` value | PASS: no application role or navigation is exposed. Existing memberships are deactivated by migration, activation is denied, and direct payment/data access is rejected. |
 
-Expected RLS denials were observed and counted as successful security checks. No broad RLS changes were made during this audit.
+Expected RLS denials were observed and counted as successful security checks. The corrective migration narrowed Stock In, payment, DCR, financial, and membership policies to the final client role model.
 
 ## Edge-Case Results
 
@@ -140,17 +145,7 @@ Expected RLS denials were observed and counted as successful security checks. No
 **Actual:** The entire trip displayed `Not recorded`.
 **Fix:** Display the total of recorded bag lines as `N recorded`; display a number when every line is recorded and `Not recorded` only when none are recorded. No bags-to-kilos relationship is inferred.
 
-## Unresolved Findings
-
-### Warehouse Stock In Authorization
-
-**Classification:** SECURITY ISSUE / CLIENT DECISION REQUIRED
-**Severity:** High
-**Module:** Plant Stock In / RPC authorization
-**Reproduction:** Sign in as Warehouse, open Plants, and submit a valid Stock In.
-**Expected from acceptance brief:** Stock In is Admin-only.
-**Actual:** The UI displays `NEW TRIP / STOCK IN`, and `api.create_stock_trip` accepts both `owner_admin` and `warehouse`. The hosted authorization probe succeeded.
-**Recommended resolution:** Confirm the intended business owner of receiving. If Stock In must be Admin-only, make a coordinated follow-up change that removes the Warehouse control and changes RPC authorization to `owner_admin`, then rerun role/RLS validation. This audit did not unilaterally change an established role policy.
+## Remaining Non-Blocking Items
 
 ### Secure User Provisioning
 
@@ -168,14 +163,6 @@ Expected RLS denials were observed and counted as successful security checks. No
 **Current behavior:** Hosted discrepancies are intentionally read-only under current policies.
 **Recommended resolution:** Define approval ownership and audit requirements before adding a secured resolution workflow.
 
-### README Status
-
-**Classification:** MINOR UI ISSUE
-**Severity:** Low
-**Module:** Repository documentation
-**Current behavior:** The README still describes the earlier local-only/Phase 1 state.
-**Recommended resolution:** Update onboarding and environment documentation in a dedicated documentation pass after the Warehouse Stock In policy is decided.
-
 ## Usability And Responsive Results
 
 - Desktop 1440 x 960: PASS across all 15 modules; no page-level overflow.
@@ -188,14 +175,16 @@ Expected RLS denials were observed and counted as successful security checks. No
 
 ## Local Mode
 
-Local-data mode started successfully and all 15 modules opened. Existing local workflow fixtures, empty states, navigation, and report screens remained functional. No hosted credentials are required for local mode.
+Local-data mode started successfully. Owner/Admin retained the complete workflow; Warehouse was limited to Warehouse, DTR, and Trucks; Salesman had own-inventory, Sales, Payments, Ledger, Collectibles, DCR, and DTR access. The role selector exposes no Cashier option, and Salesman selectors are locked in Sales and Payments. No hosted credentials are required for local mode.
 
 ## Database And Tooling Checks
 
 - Supabase changelog was reviewed before hosted validation. The project runtime uses Node.js 24, so the announced Node.js 20 deprecation is not a blocker.
 - Database lint passed for application schemas `api`, `private`, and `public` at error level.
 - An all-schema lint run reported only managed pgTAP self-reference noise under the `extensions` schema; this is not an application schema defect.
-- No database schema or RLS migration was introduced by this audit.
+- Migration `20260914173236_align_roles_with_client_workflow.sql` was applied to hosted DEV and the remote migration state is current.
+- The migration preserves `cashier` only as an inactive legacy text value while preventing operational assignment or access.
+- The updated pgTAP role files could not be launched by the CLI because Docker/Podman is unavailable on this machine. Equivalent role and RLS paths passed against hosted DEV through the disposable direct integration scenario.
 
 ## Cleanup And Security
 
@@ -219,4 +208,4 @@ Local-data mode started successfully and all 15 modules opened. Existing local w
 
 ## Acceptance Recommendation
 
-Accept the audited workflow as a **conditional client-ready checkpoint**. The implementation is functionally coherent and reconciles end to end. Before declaring final role-policy acceptance, obtain a written decision on whether Warehouse users may perform Stock In. Keep secure user provisioning and discrepancy resolution as explicitly scoped follow-up work rather than exposing privileged credentials or weakening RLS in the frontend.
+Accept the audited workflow as a **client-ready role-corrected checkpoint**. The implementation is functionally coherent, reconciles end to end, and now matches the confirmed operational roles. Keep secure user provisioning and discrepancy resolution as explicitly scoped follow-up work rather than exposing privileged credentials or weakening RLS in the frontend.

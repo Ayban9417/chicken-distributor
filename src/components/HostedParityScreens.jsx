@@ -30,6 +30,7 @@ export function HostedPlantsScreen({ organizationId, role, onChanged }) {
   const [notice, setNotice] = useState("");
   const remote = useRemote(() => loadHostedPlants(organizationId), `${organizationId}-${epoch}`);
   const refresh = () => { setEpoch((value) => value + 1); onChanged?.(); };
+  if (role !== "owner_admin") return <RemoteState error="Stock In and Plant configuration are available only to the Owner / Admin." />;
   if (manage) return <LivePlantManagement organizationId={organizationId} role={role} onBack={() => { setManage(false); refresh(); }} />;
   if (!remote.data) return <RemoteState loading={remote.loading} error={remote.error} onRefresh={remote.refresh} />;
   const { plantConfigs, trips } = remote.data;
@@ -212,7 +213,7 @@ export function HostedFinanceScreen({ organizationId, role, userId, view, initia
   const data = remote.data;
   const firstSalesman = data.users.find((person) => person.active && person.role === "Agent")?.id || "";
   const selectedSalesman = role === "salesman" ? userId : firstSalesman;
-  const canManageCustomers = role === "owner_admin" || role === "cashier";
+  const canManageCustomers = role === "owner_admin";
   const feedback = <>{remote.error && <RemoteState error={remote.error} onRefresh={remote.refresh} />}{error && <p role="alert" className="mb-4 border border-rose-200 bg-rose-50 p-3 font-semibold text-rose-800">{error}</p>}{notice && <p role="status" className="mb-4 border border-emerald-200 bg-emerald-50 p-3 font-semibold text-emerald-800">{notice}</p>}</>;
   const baseState = { ...data, trips: [], inventoryRows: [], receivingTransfers: [], salesmanTransfers: [], movements: [], attendance: [], payroll: [], trucks: [] };
 

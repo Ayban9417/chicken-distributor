@@ -101,7 +101,7 @@ export function DailySummary({ state, compact = false }) {
   const [date, setDate] = useState(demoToday);
   const summary = periodSummary(state, { start: date, end: date });
   const agents = agentPeriodRows(state.users, state, { start: date, end: date });
-  return <Section title={compact ? "Today's Operations" : "Daily Summary / Cashier Daily Report"} action={!compact && <label className="text-sm font-semibold">Date <input className="min-h-11 rounded-lg border border-slate-200 px-3" aria-label="Daily summary date" type="date" value={date} onInput={(e) => e.target.value && setDate(e.target.value)} /></label>}>
+  return <Section title={compact ? "Today's Operations" : "Daily Summary / Daily Cash Report"} action={!compact && <label className="text-sm font-semibold">Date <input className="min-h-11 rounded-lg border border-slate-200 px-3" aria-label="Daily summary date" type="date" value={date} onInput={(e) => e.target.value && setDate(e.target.value)} /></label>}>
     <p className="mb-3 text-sm text-slate-500">{shortDate(date)}</p>
     {!summary.lines.length && !summary.payments.length && !summary.recordedExpenses.length && !summary.trips.length && <p className="mb-4 text-slate-500">No transactions for this date.</p>}
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

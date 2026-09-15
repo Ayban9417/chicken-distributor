@@ -20,7 +20,7 @@ test("runtime startup contains only Fkidz stock while reset is operationally cle
   assert.equal(another.trips.length, 0);
   assert.ok(demo.users.some((u) => u.active && u.role === "Owner / Admin"));
   assert.ok(demo.users.some((u) => u.active && u.role === "Agent"));
-  assert.ok(demo.users.some((u) => u.active && u.role === "Cashier"));
+  assert.equal(demo.users.some((u) => u.role === "Cashier"), false);
   assert.deepEqual(demo.initialPlantConfigs.find((p) => p.name === "Bounty").products[0].sizeCodes.map((c) => c.displayName), ["P1", "P2", "G"]);
   assert.equal(demo.initialPlantConfigs.find((p) => p.name === "Fkidz").shortCode, "FKIDZ");
   const state = { ...another, users: demo.users };

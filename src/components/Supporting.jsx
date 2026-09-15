@@ -20,13 +20,16 @@ export function Administration({ state, setUsers, addAudit, pushToast, onSaveUse
   const [editing, setEditing] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const roles = ["Owner / Admin", "Agent", "Cashier", "Warehouse", "Payroll Admin"];
+  const roles = ["Owner / Admin", "Agent", "Warehouse", "Payroll Admin"];
+  const legacyRole = (role) => role === "Cashier" || role === "Legacy / Deprecated";
+  const roleLabel = (role) => role === "Agent" ? "Salesman / DCR" : legacyRole(role) ? "Legacy / Deprecated" : role;
   const historical = (user) => [state.outs || [], state.collections || [], state.expenses || [], state.dcrs || []].some((records) => records.some((item) => item.agentId === user.id)) ||
     (state.auditLog || []).some((item) => item.userId === user.id || item.actor === user.name) ||
     (state.attendance || []).some((item) => item.employeeId === user.id) || (state.payroll || []).some((item) => item.employeeId === user.id);
   const lastOwner = (user) => user.active && user.role === "Owner / Admin" && state.users.filter((item) => item.active && item.role === "Owner / Admin").length === 1;
   async function save() {
     if (!editing.name.trim()) return setError("Enter a user name.");
+    if (legacyRole(editing.role)) return setError("Choose a current operational role.");
     const old = state.users.find((item) => item.id === editing.id);
     if (old && lastOwner(old) && (!editing.active || editing.role !== "Owner / Admin")) return setError("Keep at least one active Owner / Admin.");
     const user = { ...editing, name: editing.name.trim(), id: editing.id || uid("user") };
@@ -63,13 +66,13 @@ export function Administration({ state, setUsers, addAudit, pushToast, onSaveUse
     {provisioningNotice && <p className="mb-4 border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">{provisioningNotice}</p>}
     {editing && <Editor title={editing.id ? "Edit User" : "Add User"}><div className="grid gap-3 sm:grid-cols-3">
       <Field label="Name"><input disabled={!canEditNames && Boolean(editing.id)} className={inputClass()} value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} /></Field>
-      <Field label="Role"><select className={inputClass()} value={editing.role} onChange={(e) => setEditing({ ...editing, role: e.target.value })}>{roles.map((role) => <option key={role} value={role}>{role === "Agent" ? "Salesman" : role}</option>)}</select></Field>
+      <Field label="Role"><select className={inputClass()} value={editing.role} onChange={(e) => setEditing({ ...editing, role: e.target.value })}>{legacyRole(editing.role) && <option value={editing.role} disabled>Legacy / Deprecated</option>}{roles.map((role) => <option key={role} value={role}>{role === "Agent" ? "Salesman" : role}</option>)}</select></Field>
       <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={editing.active} onChange={(e) => setEditing({ ...editing, active: e.target.checked })} />Active</label>
     </div>{error && <p role="alert" className="mt-3 text-rose-700">{error}</p>}<Actions onSave={save} onCancel={() => setEditing(null)} disabled={busy} /></Editor>}
     {!editing && error && <p role="alert" className="mb-4 text-rose-700">{error}</p>}
-    <ResponsiveTable columns={["User", "Role", "Status", "Actions"]} rows={state.users.map((user) => [user.name, user.role === "Agent" ? "Salesman / DCR" : user.role, <Badge tone={user.active ? "green" : "slate"}>{user.active ? "Active" : "Inactive"}</Badge>,
+    <ResponsiveTable columns={["User", "Role", "Status", "Actions"]} rows={state.users.map((user) => [user.name, roleLabel(user.role), <Badge tone={user.active ? "green" : "slate"}>{user.active ? "Active" : "Inactive"}</Badge>,
       <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => { setError(""); setEditing({ ...user }); }}><Pencil size={16} />Edit</Button>
-        <Button variant="secondary" disabled={busy || lastOwner(user)} onClick={async () => { if (onToggleUser) { setBusy(true); setError(""); try { await onToggleUser(user); } catch (reason) { setError(reason?.message || "Unable to update user."); } finally { setBusy(false); } return; } setUsers((items) => items.map((item) => item.id === user.id ? { ...item, active: !item.active } : item)); addAudit((user.active ? "Deactivated " : "Activated ") + user.name, "Owner / Admin"); }}>{user.active ? "Deactivate" : "Activate"}</Button>
+        <Button variant="secondary" title={legacyRole(user.role) && !user.active ? "Assign a current operational role before activation." : ""} disabled={busy || lastOwner(user) || (legacyRole(user.role) && !user.active)} onClick={async () => { if (onToggleUser) { setBusy(true); setError(""); try { await onToggleUser(user); } catch (reason) { setError(reason?.message || "Unable to update user."); } finally { setBusy(false); } return; } setUsers((items) => items.map((item) => item.id === user.id ? { ...item, active: !item.active } : item)); addAudit((user.active ? "Deactivated " : "Activated ") + user.name, "Owner / Admin"); }}>{user.active ? "Deactivate" : "Activate"}</Button>
         <Button variant="ghost" aria-label={"Delete " + user.name} title={historical(user) ? "Historical records: deactivate this user instead." : "Delete unused user"} disabled={historical(user) || lastOwner(user)} onClick={() => remove(user)}><Trash2 size={17} /></Button>
         {historical(user) && <span className="basis-full text-sm text-slate-500">Historical records retained; deactivate instead of deleting.</span>}
       </div>])} />

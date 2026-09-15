@@ -11,13 +11,12 @@ import { HostedPayroll } from "./components/HostedPayroll";
 import { Brand, PrimaryNav, primaryNavigation } from "./components/ApplicationNavigation";
 import { Button } from "./components/ui";
 import { supabaseConfigurationError } from "./lib/supabaseClient";
-import { canAccessScreen, initialScreenForRole } from "./lib/roleAccess";
+import { canAccessScreen, initialScreenForRole, isOperationalRole } from "./lib/roleAccess";
 
 const roleLabels = {
   owner_admin: "Owner / Admin",
   warehouse: "Warehouse",
   salesman: "Salesman",
-  cashier: "Cashier",
   payroll_admin: "Payroll Admin",
 };
 
@@ -33,6 +32,9 @@ function ProtectedApplication() {
   if (context.error) return <CenteredState title="Unable to load access" detail={context.error} action={<Button onClick={context.signOut}>Sign out</Button>} />;
   if (!context.membership || !context.organization) {
     return <CenteredState title="Access not configured" detail="Your login is valid, but it has no active organization membership. Ask an Owner / Admin to provision access." action={<Button onClick={context.signOut}>Sign out</Button>} />;
+  }
+  if (!isOperationalRole(context.role)) {
+    return <CenteredState title="Access not configured" detail="This membership uses a retired role. Ask an Owner / Admin to assign a current operational role." action={<Button onClick={context.signOut}>Sign out</Button>} />;
   }
   return <Workspace />;
 }

@@ -79,6 +79,7 @@ import { compareInventoryProducts, compareInventoryTrips } from "./utils/invento
 import { Warehouse, SalesmanInventory } from "./components/InventoryFlow";
 import { getSalesmanAvailableQty } from "./utils/inventoryFlow";
 import { Brand, PrimaryNav, primaryNavigation } from "./components/ApplicationNavigation";
+import { canAccessScreen, initialScreenForRole } from "./lib/roleAccess";
 
 const today = demoToday;
 
@@ -123,6 +124,9 @@ export default function App() {
   const [drawer, setDrawer] = useState(null);
   const [toast, setToast] = useState("");
   const [postDcrAlert, setPostDcrAlert] = useState("");
+  const demoBackendRole = demoRole === "Owner / Admin" ? "owner_admin" : demoRole === "Agent" ? "salesman" : "warehouse";
+  const demoSalesmanId = agents.find((agent) => agent.active)?.id || "";
+  const navigationItems = primaryNavigation.filter((item) => canAccessScreen(demoBackendRole, item.id));
 
   const inventoryRows = useMemo(() => getInventoryRows(trips, movements), [trips, movements]);
   const state = { trips, inventoryRows, outs, ledgerEntries, collections, expenses, discrepancies, dcrs, customers, users: userRecords, auditLog, attendance, payroll, trucks, receivingTransfers, salesmanTransfers, movements };
@@ -213,6 +217,8 @@ export default function App() {
         setDiscrepancies={setDiscrepancies}
         addAudit={addAudit}
         pushToast={pushToast}
+        initialSalesmanId={demoRole === "Agent" ? demoSalesmanId : ""}
+        canSelectSalesman={demoRole === "Owner / Admin"}
       />
     ),
     customers: (
@@ -238,6 +244,8 @@ export default function App() {
         addAudit={addAudit}
         pushToast={pushToast}
         registerPostDcrChange={registerPostDcrChange}
+        initialSalesmanId={demoRole === "Agent" ? demoSalesmanId : ""}
+        canSelectSalesman={demoRole === "Owner / Admin"}
       />
     ),
     dcr: (
@@ -251,6 +259,8 @@ export default function App() {
         addAudit={addAudit}
         pushToast={pushToast}
         postDcrAlert={postDcrAlert}
+        initialSalesmanId={demoRole === "Agent" ? demoSalesmanId : ""}
+        canSelectSalesman={demoRole === "Owner / Admin"}
       />
     ),
     discrepancies: (
@@ -271,7 +281,7 @@ export default function App() {
     <PlantContext.Provider value={plantConfigs}><UserContext.Provider value={userRecords}><div className="min-h-screen bg-slate-100 text-slate-900">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 overflow-y-auto border-r border-slate-200 bg-white md:block">
         <Brand />
-        <PrimaryNav active={active} setActive={setActive} />
+        <PrimaryNav active={active} setActive={setActive} items={navigationItems} />
       </aside>
 
       {mobileOpen && (
@@ -285,6 +295,7 @@ export default function App() {
             </div>
             <PrimaryNav
               active={active}
+              items={navigationItems}
               setActive={(id) => {
                 setActive(id);
                 setMobileOpen(false);
@@ -300,7 +311,7 @@ export default function App() {
         </Button>
         <div className="hidden text-sm font-semibold text-slate-500 xl:block">Concept Workflow Prototype by Noderno</div>
         <div className="flex items-center gap-2">
-          <select aria-label="Demo Role" className="min-h-11 max-w-40 rounded-lg border border-slate-200 bg-white px-2 text-sm" value={demoRole} onChange={(e) => { setDemoRole(e.target.value); setManagePlants(false); setManageCustomers(false); setCustomerEditor(null); }}><option>Owner / Admin</option><option value="Agent">Salesman</option><option>Cashier</option><option>Warehouse</option></select>
+          <select aria-label="Demo Role" className="min-h-11 max-w-40 rounded-lg border border-slate-200 bg-white px-2 text-sm" value={demoRole} onChange={(e) => { const nextRole = e.target.value; const backendRole = nextRole === "Owner / Admin" ? "owner_admin" : nextRole === "Agent" ? "salesman" : "warehouse"; setDemoRole(nextRole); setActive(initialScreenForRole(backendRole)); setManagePlants(false); setManageCustomers(false); setCustomerEditor(null); }}><option>Owner / Admin</option><option value="Agent">Salesman</option><option>Warehouse</option></select>
           <Badge tone="blue">Demo: {shortDate(today)}</Badge>
         </div>
       </header>
@@ -310,7 +321,7 @@ export default function App() {
       </main>
 
       <nav className="mobile-nav fixed inset-x-0 bottom-0 z-30 flex gap-2 overflow-x-auto border-t border-slate-200 bg-white p-2 md:hidden">
-        {primaryNavigation.map(({ id, label, icon: Icon }) => (
+        {navigationItems.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             className={`flex min-w-20 flex-col items-center gap-1 rounded-lg px-2 py-2 text-xs font-semibold ${active === id ? "bg-blue-50 text-[#146ef5]" : "text-slate-500"}`}

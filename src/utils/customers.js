@@ -3,7 +3,6 @@ import { customerBalance, money } from "./business.js";
 export const customerPermissions = {
   "Owner / Admin": { manage: true, quickAdd: true },
   Agent: { manage: false, quickAdd: true },
-  Cashier: { manage: false, quickAdd: false },
   Warehouse: { manage: false, quickAdd: false },
 };
 export const emptyCustomer = () => ({ name: "", contactPerson: "", mobile: "", address: "", type: "Other", paymentType: "Cash", creditLimit: "", paymentDays: "", active: true, pricing: {}, agentId: "", creditStatus: "Good" });

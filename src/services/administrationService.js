@@ -4,7 +4,7 @@ import { loadHostedFinanceParity } from "./financeParityService.js";
 const roleValue = (role) => ({
   "Owner / Admin": "owner_admin",
   Agent: "salesman",
-  Cashier: "cashier",
+  "Legacy / Deprecated": "cashier",
   Warehouse: "warehouse",
   "Payroll Admin": "payroll_admin",
 })[role] || role;
@@ -20,6 +20,7 @@ export function loadHostedAdministration(organizationId) {
 
 export async function updateHostedMembership(organizationId, user, client = requireSupabase()) {
   const role = roleValue(user.role);
+  if (role === "cashier" && user.active !== false) throw new Error("Assign a current operational role before activating this membership.");
   const current = fail(await client.from("organization_memberships").select("id, role, active").eq("organization_id", organizationId).eq("user_id", user.id).single());
   if (current.role === "owner_admin" && current.active && (role !== "owner_admin" || user.active === false)) {
     const owners = fail(await client.from("organization_memberships").select("id").eq("organization_id", organizationId).eq("role", "owner_admin").eq("active", true));

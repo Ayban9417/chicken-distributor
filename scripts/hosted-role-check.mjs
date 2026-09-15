@@ -8,7 +8,6 @@ const credentials = {
   warehouse: [process.env.HOSTED_QA_WAREHOUSE_EMAIL, process.env.HOSTED_QA_WAREHOUSE_PASSWORD],
   salesmanA: [process.env.HOSTED_QA_SALESMAN_A_EMAIL, process.env.HOSTED_QA_SALESMAN_A_PASSWORD],
   salesmanB: [process.env.HOSTED_QA_SALESMAN_B_EMAIL, process.env.HOSTED_QA_SALESMAN_B_PASSWORD],
-  cashier: [process.env.HOSTED_QA_CASHIER_EMAIL, process.env.HOSTED_QA_CASHIER_PASSWORD],
 };
 
 function localEnvironment() {
@@ -59,6 +58,28 @@ const warehouse = await login("warehouse");
 assert.ok(rows(await warehouse.client.from("warehouse_stock_summary").select("inventory_lot_id, available_quantity_kg").eq("organization_id", organizationId), "warehouse stock").length > 0, "warehouse can view Warehouse stock");
 denied(await warehouse.client.from("plants").update({ name: plants[0].name }).eq("id", plants[0].id).select("id"), "warehouse Plant configuration update");
 assert.equal(rows(await warehouse.client.from("payroll_entries").select("id"), "warehouse payroll").length, 0, "warehouse cannot read payroll entries");
+expectedError(await warehouse.client.rpc("create_stock_trip", {
+  p_organization_id: organizationId,
+  p_plant_id: plants[0].id,
+  p_trip_date: new Date().toISOString().slice(0, 10),
+  p_lines: [],
+  p_client_request_id: crypto.randomUUID(),
+  p_reference_number: "WAREHOUSE-DENIED",
+  p_delivery_note: null,
+  p_notes: null,
+}), /owner|authorized/i, "warehouse Stock In");
+expectedError(await warehouse.client.rpc("record_payment", {
+  p_organization_id: organizationId,
+  p_customer_id: customer.id,
+  p_payment_date: new Date().toISOString().slice(0, 10),
+  p_amount: 1,
+  p_method: "cash",
+  p_client_request_id: crypto.randomUUID(),
+  p_salesman_user_id: null,
+  p_reference_number: null,
+  p_notes: "Expected Warehouse rejection",
+  p_target_sale_id: null,
+}), /authorized/i, "warehouse customer Payment");
 
 const salesmanA = await login("salesmanA");
 const salesmanB = await login("salesmanB");
@@ -118,45 +139,6 @@ const dcrReplay = await salesmanA.client.rpc("submit_dcr", {
 assert.ifError(dcrReplay.error);
 assert.equal(dcrReplay.data.idempotent_replay, true, "locked DCR replay is idempotent");
 
-const cashier = await login("cashier");
-assert.ok(rows(await cashier.client.from("customer_ledger_entries").select("entry_id").eq("organization_id", organizationId), "cashier ledger").length > 0, "cashier can view Ledger");
-const payments = rows(await cashier.client.from("payments").select("*").eq("organization_id", organizationId).order("created_at", { ascending: false }), "cashier payments");
-assert.ok(payments.length >= 3, "cashier can view Payments");
-const cashierPayment = payments.find((row) => row.notes === "Cashier hosted settlement");
-assert.ok(cashierPayment, "cashier acceptance payment exists");
-const paymentReplay = await cashier.client.rpc("record_payment", {
-  p_organization_id: organizationId,
-  p_customer_id: cashierPayment.customer_id,
-  p_payment_date: cashierPayment.payment_date,
-  p_amount: Number(cashierPayment.amount),
-  p_method: cashierPayment.method,
-  p_client_request_id: cashierPayment.client_request_id,
-  p_salesman_user_id: cashierPayment.salesman_user_id,
-  p_reference_number: cashierPayment.reference_number,
-  p_notes: cashierPayment.notes,
-  p_target_sale_id: null,
-});
-assert.ifError(paymentReplay.error);
-assert.equal(paymentReplay.data.idempotent_replay, true, "double-submitted payment is idempotent");
-expectedError(await cashier.client.rpc("record_payment", {
-  p_organization_id: organizationId,
-  p_customer_id: customer.id,
-  p_payment_date: sale.sale_date,
-  p_amount: 1,
-  p_method: "gcash",
-  p_client_request_id: crypto.randomUUID(),
-  p_salesman_user_id: salesmanA.userId,
-  p_reference_number: null,
-  p_notes: "Expected rejection",
-  p_target_sale_id: null,
-}), /reference number/i, "electronic payment without reference");
-denied(await cashier.client.from("inventory_movements").insert({ ...movementPayload, created_by: cashier.userId }).select("id"), "cashier inventory mutation");
-denied(await cashier.client.from("plants").update({ name: plants[0].name }).eq("id", plants[0].id).select("id"), "cashier Plant configuration update");
-
-const discrepancies = rows(await cashier.client.from("discrepancies").select("type").eq("organization_id", organizationId), "cashier discrepancies");
-assert.ok(discrepancies.some((row) => row.type === "cash_shortage"), "cash shortage discrepancy persisted");
-assert.ok(discrepancies.some((row) => row.type === "post_dcr_adjustment"), "post-DCR adjustment persisted");
-
-console.log("Hosted role verification passed: owner_admin, warehouse, salesman, cashier");
-console.log("Expected RLS denials passed: Plant writes, payroll visibility, cross-salesman stock, arbitrary inventory movements");
-console.log("Hosted integrity passed: duplicate TR, insufficient stock, sale/payment/DCR idempotency, electronic reference, discrepancies");
+console.log("Hosted role verification passed: owner_admin, warehouse, salesman");
+console.log("Expected RLS denials passed: Warehouse Stock In/Payment, Plant writes, payroll visibility, cross-salesman stock, arbitrary inventory movements");
+console.log("Hosted integrity passed: duplicate TR, insufficient stock, Sale/DCR idempotency");

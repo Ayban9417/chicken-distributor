@@ -58,5 +58,5 @@ test("historical customers cannot be deleted; editing selling prices never chang
   const cost = getAcquisitionCost(initialTrips, "trip-bty-0906", "Whole Dressed Chicken", "P1");
   const edited = { ...normalizeCustomer(initialCustomers[0]), active: false, pricing: { "Whole Dressed Chicken": 200 } };
   assert.equal(customerPrice(edited, "Whole Dressed Chicken"), 200); assert.equal(getAcquisitionCost(initialTrips, "trip-bty-0906", "Whole Dressed Chicken", "P1"), cost);
-  assert.equal(customerPermissions.Agent.manage, false); assert.equal(customerPermissions.Agent.quickAdd, true); assert.equal(customerPermissions.Cashier.quickAdd, false);
+  assert.equal(customerPermissions.Agent.manage, false); assert.equal(customerPermissions.Agent.quickAdd, true); assert.equal("Cashier" in customerPermissions, false);
 });

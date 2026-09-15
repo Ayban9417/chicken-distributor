@@ -5,8 +5,7 @@ export const agents = [
   { id: "agent-maria", name: "Maria Santos", role: "Agent" },
   { id: "agent-juan", name: "Juan Cruz", role: "Agent" },
 ];
-export const users = [{ id: "owner", name: "Owner / Admin", role: "Owner / Admin" }, ...agents,
-  { id: "cashier", name: "Ana Dela Cruz", role: "Cashier" }].map((user) => ({ ...user, active: true }));
+export const users = [{ id: "owner", name: "Owner / Admin", role: "Owner / Admin" }, ...agents].map((user) => ({ ...user, active: true }));
 export const truckRules = { ltoDays: 30, renewalMonths: 3, renewalSoonDays: 30, oilSoonKm: 500, oilSoonDays: 14, oilIntervalKm: 5000, oilIntervalMonths: 6 };
 export function cleanOperationalData() {
   return { trips: [], movements: [], outs: [], customers: [], collections: [], ledgerEntries: [],
