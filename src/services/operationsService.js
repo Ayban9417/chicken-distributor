@@ -5,8 +5,7 @@ const fail = (result) => { if (result.error) throw result.error; return result.d
 const hasValue = (value) => value !== "" && value !== null && value !== undefined;
 const optionalNumber = (key, value) => hasValue(value) ? { [key]: Number(value) } : {};
 
-export async function loadPeople(organizationId) {
-  const client = requireSupabase();
+export async function loadPeople(organizationId, client = requireSupabase()) {
   const memberships = fail(await client.from("organization_memberships").select("user_id, role, active").eq("organization_id", organizationId));
   const ids = memberships.map((item) => item.user_id);
   if (!ids.length) return [];
@@ -68,12 +67,12 @@ export const buildStockTripArgs = (organizationId, values, clientRequestId) => (
 export const createStockTrip = (organizationId, values, clientRequestId = requestId(), client = requireSupabase()) =>
   rpc(client, "create_stock_trip", buildStockTripArgs(organizationId, values, clientRequestId));
 
-export async function loadWarehouseStock(organizationId) {
-  return fail(await requireSupabase().from("warehouse_stock_summary").select("*").eq("organization_id", organizationId).order("trip_date", { ascending: false }));
+export async function loadWarehouseStock(organizationId, client = requireSupabase()) {
+  return fail(await client.from("warehouse_stock_summary").select("*").eq("organization_id", organizationId).order("trip_date", { ascending: false }));
 }
 
-export async function loadSalesmanStock(organizationId, salesmanId = null) {
-  let query = requireSupabase().from("salesman_stock_summary").select("*").eq("organization_id", organizationId).order("trip_date", { ascending: false });
+export async function loadSalesmanStock(organizationId, salesmanId = null, client = requireSupabase()) {
+  let query = client.from("salesman_stock_summary").select("*").eq("organization_id", organizationId).order("trip_date", { ascending: false });
   if (salesmanId) query = query.eq("salesman_user_id", salesmanId);
   return fail(await query);
 }

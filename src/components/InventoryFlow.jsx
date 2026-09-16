@@ -11,23 +11,24 @@ const stockName = (row) => productLabel(row.product, row.sizeCode, row.classType
 const activeSalesmen = (users) => users.filter((user) => user.active && user.role === "Agent");
 const initialTransfer = () => ({ rowId: "", toSalesmanId: "", qty: "", bags: "", notes: "" });
 
-function StockTable({ rows, warehouse, onTransfer, onOpen }) {
-  return <ResponsiveTable columns={warehouse
-    ? ["Product / Code / Class", "Bags", "Heads", "Original KG", "Transferred KG", "Warehouse KG", "Cost/kg", "Status", "Action"]
-    : ["Product / Code / Class", "Bags", "Heads", "Assigned KG", "Remaining KG", "Cost/kg", "Status", "Action"]}
+function StockTable({ rows, warehouse, onTransfer, onOpen, showCost = true }) {
+  const columns = warehouse
+    ? ["Product / Code / Class", "Bags", "Heads", "Original KG", "Transferred KG", "Warehouse KG", ...(showCost ? ["Cost/kg"] : []), "Status", "Action"]
+    : ["Product / Code / Class", "Bags", "Heads", "Assigned KG", "Remaining KG", ...(showCost ? ["Cost/kg"] : []), "Status", "Action"];
+  return <ResponsiveTable columns={columns}
     rows={rows.map((row) => [
       <button className="text-left font-extrabold uppercase text-slate-950" onClick={() => onOpen(row)}>{stockName(row)}</button>,
       row.bags ?? "Not recorded", row.headCount ?? "Not recorded",
       warehouse ? kg(row.originalQty) : kg(row.assignedQty),
       warehouse ? kg(row.transferredQty) : kg(row.remainingQty),
       ...(warehouse ? [kg(row.warehouseAvailable)] : []),
-      currency(row.costPerKg),
+      ...(showCost ? [currency(row.costPerKg)] : []),
       <Badge tone={(warehouse ? row.warehouseAvailable : row.remainingQty) === 0 ? "red" : "green"}>{(warehouse ? row.warehouseAvailable : row.remainingQty) === 0 ? "SOLD OUT" : "AVAILABLE"}</Badge>,
       <Button variant="secondary" disabled={(warehouse ? row.warehouseAvailable : row.remainingQty) <= 0} onClick={() => onTransfer(row)}><ArrowRightLeft size={16} />Transfer</Button>,
     ])} />;
 }
 
-function TripStock({ rows, warehouse, onTransfer, onOpen }) {
+function TripStock({ rows, warehouse, onTransfer, onOpen, showCost = true }) {
   const trips = [...rows.reduce((map, row) => {
     const current = map.get(row.tripId) || { tripId: row.tripId, tripDate: row.tripDate, tripCode: row.tripCode, plant: row.plant, rows: [] };
     current.rows.push(row); map.set(row.tripId, current); return map;
@@ -40,8 +41,8 @@ function TripStock({ rows, warehouse, onTransfer, onOpen }) {
       <summary className="cursor-pointer"><span className="font-extrabold uppercase">{shortDate(trip.tripDate)} / {trip.tripCode}</span><span className="ml-2 text-sm text-slate-500">{kg(sum(sorted, remainingKey))} remaining</span></summary>
       {!!whole.length && <section className="mt-4"><h3 className="mb-3 text-lg font-extrabold uppercase">Whole Dressed Chicken</h3>
         <div className="mb-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><StatMini label="Total Original KG" value={kg(sum(whole, "originalQty"))} /><StatMini label="Total Sold" value={kg(sum(whole, "totalOut"))} />{warehouse && <StatMini label="Transferred to Salesmen" value={kg(sum(whole, "transferredQty"))} />}<StatMini label={warehouse ? "Warehouse Remaining" : "Salesman Remaining"} value={kg(sum(whole, remainingKey))} /></div>
-        <StockTable rows={whole} warehouse={warehouse} onTransfer={onTransfer} onOpen={onOpen} /></section>}
-      {!!byproducts.length && <section className="mt-5"><h3 className="mb-3 text-lg font-extrabold uppercase">By-products</h3><StockTable rows={byproducts} warehouse={warehouse} onTransfer={onTransfer} onOpen={onOpen} /></section>}
+        <StockTable rows={whole} warehouse={warehouse} onTransfer={onTransfer} onOpen={onOpen} showCost={showCost} /></section>}
+      {!!byproducts.length && <section className="mt-5"><h3 className="mb-3 text-lg font-extrabold uppercase">By-products</h3><StockTable rows={byproducts} warehouse={warehouse} onTransfer={onTransfer} onOpen={onOpen} showCost={showCost} /></section>}
     </details>;
   })}</div>;
 }
@@ -91,7 +92,7 @@ export function Warehouse({ inventoryRows = [], trips = [], movements = [], rece
   </>;
 }
 
-export function SalesmanInventory({ inventoryRows = [], receivingTransfers = [], salesmanTransfers = [], setSalesmanTransfers, movements = [], users = [], addAudit, pushToast, onOpen, onWarehouse, hostedRows, onTransfer, currentDate = demoToday, initialSalesmanId = "", canSelectSalesman = true }) {
+export function SalesmanInventory({ inventoryRows = [], receivingTransfers = [], salesmanTransfers = [], setSalesmanTransfers, movements = [], users = [], addAudit, pushToast, onOpen, onWarehouse, hostedRows, onTransfer, currentDate = demoToday, initialSalesmanId = "", canSelectSalesman = true, showCost = false }) {
   const salesmen = activeSalesmen(users); const [salesmanId, setSalesmanId] = useState(initialSalesmanId || salesmen[0]?.id || "");
   const rows = useMemo(() => hostedRows ? hostedRows.filter((item) => item.salesmanId === salesmanId) : salesmanInventoryRows(inventoryRows, receivingTransfers, salesmanTransfers, movements, salesmanId), [hostedRows, inventoryRows, receivingTransfers, salesmanTransfers, movements, salesmanId]);
   const [transfer, setTransfer] = useState(initialTransfer); const [error, setError] = useState(""); const row = rows.find((item) => item.id === transfer.rowId);
@@ -121,7 +122,7 @@ export function SalesmanInventory({ inventoryRows = [], receivingTransfers = [],
   return <><SectionHeader title="INVENTORY" eyebrow="SALESMAN INVENTORY" action={<Field label="Salesman"><select disabled={!canSelectSalesman} className={inputClass()} value={salesmanId} onChange={(e) => { setSalesmanId(e.target.value); setTransfer(initialTransfer()); }}>{salesmen.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></Field>} />
     <h2 className="mb-4 text-2xl font-extrabold uppercase text-slate-950">{salesmen.find((user) => user.id === salesmanId)?.name}</h2>
     {transfer.rowId && <section className="report-section"><h2 className="mb-3 text-lg font-extrabold uppercase">Transfer to Salesman</h2><p className="mb-3 font-bold uppercase">{row && stockName(row)}</p><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Field label="To Salesman"><select className={inputClass()} value={transfer.toSalesmanId} onChange={(e) => setTransfer({ ...transfer, toSalesmanId: e.target.value })}>{salesmen.filter((user) => user.id !== salesmanId).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></Field><Field label="Quantity KG"><MoneyInput value={transfer.qty} onChange={(e) => setTransfer({ ...transfer, qty: e.target.value })} /></Field><Field label="Bags (Optional)"><input className={inputClass()} type="number" min="0" step="1" value={transfer.bags} onChange={(e) => setTransfer({ ...transfer, bags: e.target.value })} /></Field><Field label="Notes"><input className={inputClass()} value={transfer.notes} onChange={(e) => setTransfer({ ...transfer, notes: e.target.value })} /></Field></div>{error && <p role="alert" className="mt-2 font-semibold text-rose-700">{error}</p>}<div className="mt-3 flex gap-2"><Button disabled={busy} onClick={confirm}>{busy ? "Creating..." : "Create Transfer Receipt"}</Button><Button variant="secondary" onClick={() => setTransfer(initialTransfer())}>Cancel</Button></div></section>}
-    {!rows.length ? <div className="rounded-lg border border-slate-200 bg-white p-5"><p className="text-slate-500">No inventory assigned to this Salesman yet.</p><Button className="mt-3" onClick={onWarehouse}>Receive from Warehouse</Button></div> : [...new Set(rows.map((item) => item.plant))].map((plant) => <section key={plant} className="report-section"><h2 className="mb-4"><PlantName name={plant} /></h2><TripStock rows={rows.filter((item) => item.plant === plant)} warehouse={false} onTransfer={openTransfer} onOpen={onOpen} /></section>)}
+    {!rows.length ? <div className="rounded-lg border border-slate-200 bg-white p-5"><p className="text-slate-500">No inventory assigned to this Salesman yet.</p><Button className="mt-3" onClick={onWarehouse}>Receive from Warehouse</Button></div> : [...new Set(rows.map((item) => item.plant))].map((plant) => <section key={plant} className="report-section"><h2 className="mb-4"><PlantName name={plant} /></h2><TripStock rows={rows.filter((item) => item.plant === plant)} warehouse={false} onTransfer={openTransfer} onOpen={onOpen} showCost={showCost} /></section>)}
     <section className="report-section"><h2 className="mb-3 text-lg font-extrabold uppercase">Transfer Receipts</h2><ResponsiveTable columns={["Receipt", "Date", "From", "To", "Plant / Trip", "Product / Code / Class", "KG", "Bags", "Heads", "Notes"]} rows={salesmanTransfers.map((item) => [item.receipt, shortDate(item.date), users.find((user) => user.id === item.fromSalesmanId)?.name || "-", users.find((user) => user.id === item.toSalesmanId)?.name || "-", item.plant + " / " + item.tripCode, productLabel(item.product, item.sizeCode, item.classType, item.sizeCodeLabel, item.classTypeLabel), kg(item.qty), item.bags ?? "Not recorded", item.headCount ?? "Not recorded", item.notes || "-"])} /></section>
   </>;
 }

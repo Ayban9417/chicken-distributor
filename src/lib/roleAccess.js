@@ -5,6 +5,7 @@ export const screenRoles = {
   "stock-in": ["owner_admin"],
   warehouse: ["owner_admin", "warehouse"],
   inventory: ["owner_admin", "salesman"],
+  "salesman-inventory": ["owner_admin"],
   out: ["owner_admin", "salesman"],
   customers: ["owner_admin", "salesman"],
   sales: ["owner_admin", "salesman"],

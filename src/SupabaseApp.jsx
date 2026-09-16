@@ -3,7 +3,7 @@ import { KeyRound, LogOut, Menu, X } from "lucide-react";
 import { AppProvider, useAppContext } from "./context/AppContext";
 import { AuthScreen } from "./components/AuthScreen";
 import { HostedDashboard } from "./components/Reporting";
-import { HostedAdministration, HostedFinanceScreen, HostedInventoryScreen, HostedPlantsScreen, HostedSalesScreen, HostedWarehouseScreen } from "./components/HostedParityScreens";
+import { HostedAdministration, HostedCompanyInventoryScreen, HostedFinanceScreen, HostedInventoryScreen, HostedPlantsScreen, HostedSalesScreen, HostedWarehouseScreen } from "./components/HostedParityScreens";
 import { HostedReports } from "./components/HostedReports";
 import { HostedTrucks } from "./components/HostedTrucks";
 import { HostedDtr } from "./components/HostedDtr";
@@ -60,12 +60,15 @@ function Workspace() {
     setActive(target);
   };
   useEffect(() => { window.scrollTo({ top: 0 }); setMobileOpen(false); }, [active]);
-  const items = primaryNavigation.filter((item) => canAccessScreen(role, item.id));
+  const items = primaryNavigation.filter((item) => canAccessScreen(role, item.id)).map((item) => role === "salesman" && item.id === "inventory" ? { ...item, label: "My Inventory" } : item);
   const screens = {
     dashboard: <HostedDashboard organizationId={organization.id} epoch={epoch} onNavigate={navigate} onPayment={(customerId) => navigate("collections", customerId)} onLedger={(customerId) => navigate("customers", customerId)} />,
     trips: <HostedPlantsScreen organizationId={organization.id} role={role} onChanged={changed} />,
     warehouse: <HostedWarehouseScreen organizationId={organization.id} onChanged={changed} />,
-    inventory: <HostedInventoryScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} onWarehouse={() => navigate("warehouse")} />,
+    inventory: role === "owner_admin"
+      ? <HostedCompanyInventoryScreen organizationId={organization.id} role={role} onStockIn={() => navigate("trips")} />
+      : <HostedInventoryScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} onWarehouse={() => navigate("warehouse")} />,
+    "salesman-inventory": <HostedInventoryScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} onWarehouse={() => navigate("warehouse")} />,
     out: <HostedSalesScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} onStockIn={() => navigate("trips")} />,
     collections: <HostedFinanceScreen organizationId={organization.id} role={role} userId={user.id} view="payments" initialCustomerId={financeCustomerId} onChanged={changed} onNavigate={navigate} />,
     customers: <HostedFinanceScreen organizationId={organization.id} role={role} userId={user.id} view="ledger" initialCustomerId={financeCustomerId} onChanged={changed} onNavigate={navigate} />,

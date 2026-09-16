@@ -5,6 +5,7 @@ export const primaryNavigation = [
   { id: "trips", label: "Plants", icon: Truck },
   { id: "warehouse", label: "Warehouse", icon: PackageCheck },
   { id: "inventory", label: "Inventory", icon: PackageCheck },
+  { id: "salesman-inventory", label: "Salesman Inventory", icon: PackageCheck },
   { id: "out", label: "Sales", icon: ShoppingCart },
   { id: "collections", label: "Payments", icon: WalletCards },
   { id: "customers", label: "Ledger", icon: Users },

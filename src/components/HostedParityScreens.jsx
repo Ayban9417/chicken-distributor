@@ -3,7 +3,7 @@ import { RefreshCw, Settings, Users } from "lucide-react";
 import { Collections, Customers, Dcr, Discrepancies, InventoryDetail, OutDetail, OutOrders, PaymentDetail, Trips } from "../App";
 import { useRemote } from "../hooks/useRemote";
 import { createHostedStockIn, loadHostedPlants } from "../services/plantsParityService";
-import { createHostedSalesmanTransfer, createHostedWarehouseTransfer, loadHostedSalesmanInventory, loadHostedWarehouse } from "../services/inventoryParityService";
+import { createHostedSalesmanTransfer, createHostedWarehouseTransfer, loadHostedInventoryOverview, loadHostedSalesmanInventory, loadHostedWarehouse } from "../services/inventoryParityService";
 import { readableError } from "../services/errors";
 import { createHostedSale, loadHostedSales } from "../services/salesParityService";
 import { loadHostedFinanceParity, recordHostedExpense, recordHostedPayment, saveHostedCustomer, submitHostedDcr } from "../services/financeParityService";
@@ -14,6 +14,7 @@ import { Button, Drawer, PlantContext, UserContext } from "./ui";
 import { Collectibles } from "./Reporting";
 import { LivePlantManagement } from "./LivePlantManagement";
 import { SalesmanInventory, Warehouse } from "./InventoryFlow";
+import { InventoryOverview } from "./InventoryOverview";
 import { CustomerEditor } from "./CustomerManagement";
 import { SalesmanAccounts } from "./SalesmanAccounts";
 
@@ -84,6 +85,18 @@ export function HostedWarehouseScreen({ organizationId, onChanged }) {
   </>;
 }
 
+export function HostedCompanyInventoryScreen({ organizationId, role, onStockIn }) {
+  const [detail, setDetail] = useState(null);
+  const remote = useRemote(() => loadHostedInventoryOverview(organizationId), organizationId);
+  if (role !== "owner_admin") return <RemoteState error="Company Inventory is available only to the Owner / Admin." />;
+  if (!remote.data) return <RemoteState loading={remote.loading} error={remote.error} onRefresh={remote.refresh} />;
+  return <>
+    {remote.error && <RemoteState error={remote.error} onRefresh={remote.refresh} />}
+    <InventoryOverview rows={remote.data} onSelect={setDetail} onStockIn={onStockIn} />
+    {detail && <Drawer title="Inventory Movement History" onClose={() => setDetail(null)}><InventoryDetail row={detail} /></Drawer>}
+  </>;
+}
+
 export function HostedInventoryScreen({ organizationId, role, userId, onChanged, onWarehouse }) {
   const [epoch, setEpoch] = useState(0);
   const [notice, setNotice] = useState("");
@@ -112,8 +125,9 @@ export function HostedInventoryScreen({ organizationId, role, userId, onChanged,
         return saved;
       }}
       pushToast={setNotice}
+      showCost={role === "owner_admin"}
     />
-    {detail && <Drawer title="Inventory Detail" onClose={() => setDetail(null)}><InventoryDetail row={detail} /></Drawer>}
+    {detail && <Drawer title="Inventory Detail" onClose={() => setDetail(null)}><InventoryDetail row={detail} showCost={role !== "salesman"} /></Drawer>}
   </>;
 }
 

@@ -78,6 +78,8 @@ import { emptySalePayment, initialPaymentAmount, validateSalePayment, paymentAtS
 import { compareInventoryProducts, compareInventoryTrips } from "./utils/inventory";
 import { Warehouse, SalesmanInventory } from "./components/InventoryFlow";
 import { getSalesmanAvailableQty } from "./utils/inventoryFlow";
+import { InventoryOverview } from "./components/InventoryOverview";
+import { buildLocalInventoryOverviewRows } from "./utils/inventoryOverview";
 import { Brand, PrimaryNav, primaryNavigation } from "./components/ApplicationNavigation";
 import { canAccessScreen, initialScreenForRole } from "./lib/roleAccess";
 
@@ -126,9 +128,10 @@ export default function App() {
   const [postDcrAlert, setPostDcrAlert] = useState("");
   const demoBackendRole = demoRole === "Owner / Admin" ? "owner_admin" : demoRole === "Agent" ? "salesman" : "warehouse";
   const demoSalesmanId = agents.find((agent) => agent.active)?.id || "";
-  const navigationItems = primaryNavigation.filter((item) => canAccessScreen(demoBackendRole, item.id));
+  const navigationItems = primaryNavigation.filter((item) => canAccessScreen(demoBackendRole, item.id)).map((item) => demoBackendRole === "salesman" && item.id === "inventory" ? { ...item, label: "My Inventory" } : item);
 
   const inventoryRows = useMemo(() => getInventoryRows(trips, movements), [trips, movements]);
+  const inventoryOverviewRows = useMemo(() => buildLocalInventoryOverviewRows({ inventoryRows, receivingTransfers, salesmanTransfers, movements, users: userRecords }), [inventoryRows, receivingTransfers, salesmanTransfers, movements, userRecords]);
   const state = { trips, inventoryRows, outs, ledgerEntries, collections, expenses, discrepancies, dcrs, customers, users: userRecords, auditLog, attendance, payroll, trucks, receivingTransfers, salesmanTransfers, movements };
   function goCustomer(view, id) { setTargetCustomer(id); setActive(view); }
   function resetOperationalData() {
@@ -199,7 +202,10 @@ export default function App() {
       />
     ),
     warehouse: <Warehouse inventoryRows={inventoryRows} trips={trips} movements={movements} receivingTransfers={receivingTransfers} setReceivingTransfers={setReceivingTransfers} salesmanTransfers={salesmanTransfers} users={userRecords} addAudit={addAudit} pushToast={pushToast} onOpen={(row) => setDrawer({ type: "inventory", row })} />,
-    inventory: <SalesmanInventory inventoryRows={inventoryRows} receivingTransfers={receivingTransfers} salesmanTransfers={salesmanTransfers} setSalesmanTransfers={setSalesmanTransfers} movements={movements} users={userRecords} addAudit={addAudit} pushToast={pushToast} onOpen={(row) => setDrawer({ type: "inventory", row })} onWarehouse={() => setActive("warehouse")} />,
+    inventory: demoRole === "Owner / Admin"
+      ? <InventoryOverview rows={inventoryOverviewRows} onSelect={(row) => setDrawer({ type: "inventory", row })} onStockIn={() => setActive("trips")} />
+      : <SalesmanInventory inventoryRows={inventoryRows} receivingTransfers={receivingTransfers} salesmanTransfers={salesmanTransfers} setSalesmanTransfers={setSalesmanTransfers} movements={movements} users={userRecords} addAudit={addAudit} pushToast={pushToast} onOpen={(row) => setDrawer({ type: "inventory", row, showCost: false })} onWarehouse={() => setActive("warehouse")} />,
+    "salesman-inventory": <SalesmanInventory inventoryRows={inventoryRows} receivingTransfers={receivingTransfers} salesmanTransfers={salesmanTransfers} setSalesmanTransfers={setSalesmanTransfers} movements={movements} users={userRecords} addAudit={addAudit} pushToast={pushToast} onOpen={(row) => setDrawer({ type: "inventory", row })} onWarehouse={() => setActive("warehouse")} showCost />,
     out: (
       <OutOrders
         collections={collections} setCollections={setCollections} registerPostDcrChange={registerPostDcrChange} onStockIn={() => setActive("trips")}
@@ -343,7 +349,7 @@ export default function App() {
 
       {drawer && (
         <Drawer title={drawerTitle(drawer)} onClose={() => setDrawer(null)}>
-          {drawer.type === "inventory" && <InventoryDetail row={drawer.row} />}
+          {drawer.type === "inventory" && <InventoryDetail row={drawer.row} showCost={drawer.showCost !== false} />}
           {drawer.type === "out" && <OutDetail out={drawer.out} customers={customers} />}
           {drawer.type === "payment" && <PaymentDetail payment={drawer.payment} />}
           {drawer.type === "report" && <ReportDetail report={drawer.report} rows={drawer.rows} />}
@@ -693,7 +699,7 @@ function MovementRef({ movement }) {
   );
 }
 
-export function InventoryDetail({ row }) {
+export function InventoryDetail({ row, showCost = true }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-500">
@@ -719,9 +725,7 @@ export function InventoryDetail({ row }) {
           ["Sold KG", kg(row.totalOut)],
           ["Adjustments", kg(row.adjustments)],
           ["Remaining", kg(row.remainingQty)],
-          ["Cost / kg", currency(row.costPerKg)],
-          ["Inventory Cost Value", currency(row.inventoryCostValue)],
-          ["Original Acquisition Cost", currency(row.originalAcquisitionCost)],
+          ...(showCost ? [["Cost / kg", currency(row.costPerKg)], ["Inventory Cost Value", currency(row.inventoryCostValue)], ["Original Acquisition Cost", currency(row.originalAcquisitionCost)]] : []),
         ].map(([label, value]) => (
           <div key={label} className="rounded-lg bg-slate-50 p-3">
             <p className="text-xs font-semibold text-slate-500">{label}</p>
@@ -733,7 +737,7 @@ export function InventoryDetail({ row }) {
       {(row.history ?? []).map((movement) => (
         <div key={movement.id} className="flex items-center justify-between border-b border-slate-100 py-3">
           <MovementRef movement={movement} />
-          <p className={`font-bold ${movement.qty < 0 ? "text-rose-600" : "text-emerald-600"}`}>{movement.qty > 0 ? "+" : ""}{kg(movement.qty)}</p>
+          <p className={`font-bold ${movement.direction === "neutral" ? "text-slate-700" : movement.direction === "out" || movement.qty < 0 ? "text-rose-600" : "text-emerald-600"}`}>{movement.direction === "out" ? "-" : movement.direction === "in" || movement.qty > 0 && movement.direction !== "neutral" ? "+" : ""}{kg(Math.abs(Number(movement.qty || 0)))}</p>
         </div>
       ))}
     </div>
