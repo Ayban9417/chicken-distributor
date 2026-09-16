@@ -1,4 +1,4 @@
-import { AlertTriangle, Banknote, BarChart3, ClipboardCheck, FileClock, Home, PackageCheck, Settings, ShoppingCart, Truck, Users, WalletCards } from "lucide-react";
+import { AlertTriangle, ArrowRightLeft, Banknote, BarChart3, ClipboardCheck, FileClock, Home, PackageCheck, ReceiptText, Settings, ShoppingCart, Truck, Users, WalletCards } from "lucide-react";
 
 export const primaryNavigation = [
   { id: "dashboard", label: "Dashboard", icon: Home },
@@ -17,6 +17,19 @@ export const primaryNavigation = [
   { id: "payroll", label: "Payroll", icon: WalletCards },
   { id: "trucks", label: "Trucks", icon: Truck },
   { id: "admin", label: "Administration", icon: Settings },
+];
+
+export const salesmanNavigation = [
+  { id: "dashboard", label: "Dashboard", icon: Home },
+  { id: "inventory", label: "My Inventory", icon: PackageCheck },
+  { id: "out", label: "Sales", icon: ShoppingCart },
+  { id: "collections", label: "Payments", icon: WalletCards },
+  { id: "collectibles", label: "Collectibles", icon: Banknote },
+  { id: "customers", label: "Ledger", icon: Users },
+  { id: "transfers", label: "Transfers", icon: ArrowRightLeft },
+  { id: "expenses", label: "Expenses", icon: ReceiptText },
+  { id: "dcr", label: "My DCR", icon: FileClock },
+  { id: "dtr", label: "My DTR", icon: ClipboardCheck },
 ];
 
 export function Brand() {

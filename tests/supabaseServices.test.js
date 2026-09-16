@@ -178,7 +178,9 @@ test("RPC failures remain recoverable service errors", async () => {
 test("hosted navigation matches the final client role model", () => {
   assert.equal(initialScreenForRole("owner_admin"), "dashboard");
   assert.equal(initialScreenForRole("warehouse"), "warehouse");
-  assert.equal(initialScreenForRole("salesman"), "inventory");
+  assert.equal(initialScreenForRole("salesman"), "dashboard");
+  assert.equal(canAccessScreen("salesman", "transfers"), true);
+  assert.equal(canAccessScreen("salesman", "expenses"), true);
   assert.equal(initialScreenForRole("payroll_admin"), "dtr");
   assert.equal(isOperationalRole("cashier"), false);
   assert.equal(isOperationalRole("salesman"), true);

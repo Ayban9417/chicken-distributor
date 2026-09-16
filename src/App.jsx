@@ -77,11 +77,12 @@ import { normalizeCustomer, customerPermissions, matchesCustomer, hasCustomerHis
 import { emptySalePayment, initialPaymentAmount, validateSalePayment, paymentAtSaleStatus, saleFinancialEvents } from "./utils/salePayment";
 import { compareInventoryProducts, compareInventoryTrips } from "./utils/inventory";
 import { Warehouse, SalesmanInventory } from "./components/InventoryFlow";
-import { getSalesmanAvailableQty } from "./utils/inventoryFlow";
+import { getSalesmanAvailableQty, salesmanInventoryRows } from "./utils/inventoryFlow";
 import { InventoryOverview } from "./components/InventoryOverview";
 import { buildLocalInventoryOverviewRows } from "./utils/inventoryOverview";
-import { Brand, PrimaryNav, primaryNavigation } from "./components/ApplicationNavigation";
+import { Brand, PrimaryNav, primaryNavigation, salesmanNavigation } from "./components/ApplicationNavigation";
 import { canAccessScreen, initialScreenForRole } from "./lib/roleAccess";
+import { LocalSalesmanDashboard, LocalSalesmanDtr, SalesmanExpenses } from "./components/SalesmanWorkspace";
 
 const today = demoToday;
 
@@ -128,7 +129,7 @@ export default function App() {
   const [postDcrAlert, setPostDcrAlert] = useState("");
   const demoBackendRole = demoRole === "Owner / Admin" ? "owner_admin" : demoRole === "Agent" ? "salesman" : "warehouse";
   const demoSalesmanId = agents.find((agent) => agent.active)?.id || "";
-  const navigationItems = primaryNavigation.filter((item) => canAccessScreen(demoBackendRole, item.id)).map((item) => demoBackendRole === "salesman" && item.id === "inventory" ? { ...item, label: "My Inventory" } : item);
+  const navigationItems = demoBackendRole === "salesman" ? salesmanNavigation : primaryNavigation.filter((item) => canAccessScreen(demoBackendRole, item.id));
 
   const inventoryRows = useMemo(() => getInventoryRows(trips, movements), [trips, movements]);
   const inventoryOverviewRows = useMemo(() => buildLocalInventoryOverviewRows({ inventoryRows, receivingTransfers, salesmanTransfers, movements, users: userRecords }), [inventoryRows, receivingTransfers, salesmanTransfers, movements, userRecords]);
@@ -189,8 +190,25 @@ export default function App() {
     }
   }
 
+  function localTimeIn() {
+    if (attendance.some((item) => item.employeeId === demoSalesmanId && item.date === today)) return;
+    const timeIn = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date());
+    setAttendance((items) => [{ id: uid("dtr"), employeeId: demoSalesmanId, date: today, timeIn, timeOut: "", breakMinutes: 0 }, ...items]);
+    pushToast("Time In recorded in local demo mode");
+  }
+
+  function localTimeOut() {
+    const current = attendance.find((item) => item.employeeId === demoSalesmanId && item.date === today && !item.timeOut);
+    if (!current) return;
+    const timeOut = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date());
+    setAttendance((items) => items.map((item) => item.id === current.id ? { ...item, timeOut } : item));
+    pushToast("Time Out recorded in local demo mode");
+  }
+
   const views = {
-    dashboard: <Dashboard state={state} onNavigate={setActive} onPayment={(id) => goCustomer("collections", id)} onLedger={(id) => goCustomer("customers", id)} />,
+    dashboard: demoBackendRole === "salesman"
+      ? <LocalSalesmanDashboard name={userRecords.find((user) => user.id === demoSalesmanId)?.name} userId={demoSalesmanId} state={state} inventoryRows={salesmanInventoryRows(inventoryRows, receivingTransfers, salesmanTransfers, movements, demoSalesmanId)} attendance={attendance} date={today} onTimeIn={localTimeIn} onTimeOut={localTimeOut} onNavigate={setActive} />
+      : <Dashboard state={state} onNavigate={setActive} onPayment={(id) => goCustomer("collections", id)} onLedger={(id) => goCustomer("customers", id)} />,
     collectibles: <Collectibles state={state} onPayment={(id) => goCustomer("collections", id)} onLedger={(id) => goCustomer("customers", id)} />,
     trips: (
       <Trips
@@ -204,8 +222,9 @@ export default function App() {
     warehouse: <Warehouse inventoryRows={inventoryRows} trips={trips} movements={movements} receivingTransfers={receivingTransfers} setReceivingTransfers={setReceivingTransfers} salesmanTransfers={salesmanTransfers} users={userRecords} addAudit={addAudit} pushToast={pushToast} onOpen={(row) => setDrawer({ type: "inventory", row })} />,
     inventory: demoRole === "Owner / Admin"
       ? <InventoryOverview rows={inventoryOverviewRows} onSelect={(row) => setDrawer({ type: "inventory", row })} onStockIn={() => setActive("trips")} />
-      : <SalesmanInventory inventoryRows={inventoryRows} receivingTransfers={receivingTransfers} salesmanTransfers={salesmanTransfers} setSalesmanTransfers={setSalesmanTransfers} movements={movements} users={userRecords} addAudit={addAudit} pushToast={pushToast} onOpen={(row) => setDrawer({ type: "inventory", row, showCost: false })} onWarehouse={() => setActive("warehouse")} />,
+      : <SalesmanInventory inventoryRows={inventoryRows} receivingTransfers={receivingTransfers} salesmanTransfers={salesmanTransfers} setSalesmanTransfers={setSalesmanTransfers} movements={movements} users={userRecords} addAudit={addAudit} pushToast={pushToast} onOpen={(row) => setDrawer({ type: "inventory", row, showCost: false })} initialSalesmanId={demoSalesmanId} canSelectSalesman={false} showTransferActions={false} showReceipts={false} title="My Inventory" />,
     "salesman-inventory": <SalesmanInventory inventoryRows={inventoryRows} receivingTransfers={receivingTransfers} salesmanTransfers={salesmanTransfers} setSalesmanTransfers={setSalesmanTransfers} movements={movements} users={userRecords} addAudit={addAudit} pushToast={pushToast} onOpen={(row) => setDrawer({ type: "inventory", row })} onWarehouse={() => setActive("warehouse")} showCost />,
+    transfers: <SalesmanInventory inventoryRows={inventoryRows} receivingTransfers={receivingTransfers} salesmanTransfers={salesmanTransfers} setSalesmanTransfers={setSalesmanTransfers} movements={movements} users={userRecords} addAudit={addAudit} pushToast={pushToast} onOpen={(row) => setDrawer({ type: "inventory", row, showCost: false })} initialSalesmanId={demoSalesmanId} canSelectSalesman={false} title="Transfers" eyebrow="Salesman to Salesman" />,
     out: (
       <OutOrders
         collections={collections} setCollections={setCollections} registerPostDcrChange={registerPostDcrChange} onStockIn={() => setActive("trips")}
@@ -227,6 +246,7 @@ export default function App() {
         canSelectSalesman={demoRole === "Owner / Admin"}
       />
     ),
+    expenses: <SalesmanExpenses userId={demoSalesmanId} users={userRecords} expenses={expenses} date={today} onRecord={async (values) => { const item = { ...values, id: uid("exp") }; setExpenses((items) => [item, ...items]); addAudit(`Recorded ${currency(item.amount)} ${item.category.toLowerCase()} expense`, getAgentName(userRecords, demoSalesmanId)); registerPostDcrChange(demoSalesmanId, item.date, `${item.category} expense was added after lock`); pushToast("Expense recorded"); return item; }} />,
     customers: (
       <Customers key={targetCustomer} initialCustomerId={targetCustomer}
         canManage={permissions.manage} onAdd={() => openCustomerEditor()} onEdit={openCustomerEditor}
@@ -252,6 +272,7 @@ export default function App() {
         registerPostDcrChange={registerPostDcrChange}
         initialSalesmanId={demoRole === "Agent" ? demoSalesmanId : ""}
         canSelectSalesman={demoRole === "Owner / Admin"}
+        showExpense={demoBackendRole !== "salesman"}
       />
     ),
     dcr: (
@@ -278,7 +299,7 @@ export default function App() {
     ),
     reports: <Reports state={state} />,
     admin: permissions.manage && manageCustomers ? <CustomerManagement state={state} onAdd={() => openCustomerEditor()} onEdit={openCustomerEditor} onLedger={(id) => goCustomer("customers", id)} onBack={() => setManageCustomers(false)} onToggle={(c) => { if (!permissions.manage) return; setCustomers((items) => items.map((item) => item.id === c.id ? { ...item, active: !item.active } : item)); addAudit((c.active ? "Deactivated customer " : "Activated customer ") + c.name, demoRole); }} onDelete={(c) => { if (!permissions.manage || hasCustomerHistory(c.id, state)) return; setCustomers((items) => items.filter((item) => item.id !== c.id)); addAudit("Deleted unused customer " + c.name, demoRole); }} /> : demoRole === "Owner / Admin" && managePlants ? <PlantManagement plants={plantConfigs} setPlants={setPlantConfigs} trips={trips} role={demoRole} addAudit={addAudit} pushToast={pushToast} onBack={() => setManagePlants(false)} /> : <><div className="mb-4 flex flex-wrap gap-3">{permissions.manage && <><Button variant="secondary" onClick={() => setManagePlants(true)}><Settings size={17} />Manage Plants</Button><Button variant="secondary" onClick={() => setManageCustomers(true)}><Users size={17} />Manage Customers</Button></>}</div><Administration state={state} setUsers={setUsers} addAudit={addAudit} pushToast={pushToast} /></>,
-    dtr: <Dtr users={userRecords} attendance={attendance} setAttendance={setAttendance} pushToast={pushToast} addAudit={addAudit} />,
+    dtr: demoBackendRole === "salesman" ? <LocalSalesmanDtr userId={demoSalesmanId} attendance={attendance} date={today} onTimeIn={localTimeIn} onTimeOut={localTimeOut} /> : <Dtr users={userRecords} attendance={attendance} setAttendance={setAttendance} pushToast={pushToast} addAudit={addAudit} />,
     payroll: <Payroll users={userRecords} attendance={attendance} payroll={payroll} setPayroll={setPayroll} pushToast={pushToast} addAudit={addAudit} />,
     trucks: <Trucks trucks={trucks} setTrucks={setTrucks} pushToast={pushToast} addAudit={addAudit} />,
   };
@@ -1234,7 +1255,7 @@ export function Customers({ initialCustomerId = "", customers, ledgerEntries, ou
   );
 }
 
-export function Collections({ initialCustomerId = "", customers, ledgerEntries, setLedgerEntries, collections, setCollections, expenses, setExpenses, setDiscrepancies, addAudit, pushToast, registerPostDcrChange, users: providedUsers, currentDate = today, initialSalesmanId = "", canSelectSalesman = true, allowManualAllocation = true, onRecordPayment, onRecordExpense, busy = false }) {
+export function Collections({ initialCustomerId = "", customers, ledgerEntries, setLedgerEntries, collections, setCollections, expenses, setExpenses, setDiscrepancies, addAudit, pushToast, registerPostDcrChange, users: providedUsers, currentDate = today, initialSalesmanId = "", canSelectSalesman = true, allowManualAllocation = true, onRecordPayment, onRecordExpense, busy = false, showExpense = true }) {
   const contextUsers = useUsers();
   const agents = providedUsers || contextUsers;
   const firstAgent = initialSalesmanId || agents.find((agent) => agent.active && agent.role === "Agent")?.id || "";
@@ -1335,7 +1356,7 @@ export function Collections({ initialCustomerId = "", customers, ledgerEntries, 
           <Button className="mt-4 w-full" disabled={busy || collectionInvalid} onClick={recordCollection}><Banknote size={18} />{busy ? "Recording..." : "Record Payment"}</Button>
         </div>
         <div className="space-y-4">
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
+          {showExpense && <div className="rounded-lg border border-slate-200 bg-white p-4">
             <h2 className="mb-4 font-bold">+ Record Expense</h2>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Salesman"><select disabled={!canSelectSalesman} className={inputClass()} value={expense.agentId} onChange={(e) => setExpense({ ...expense, agentId: e.target.value })}>{agents.filter((agent) => agent.active && agent.role === "Agent").map((agent) => <option value={agent.id} key={agent.id}>{agent.name}</option>)}</select></Field>
@@ -1349,7 +1370,7 @@ export function Collections({ initialCustomerId = "", customers, ledgerEntries, 
 
             {expense.source === "Cash Collection" && <div className="mt-3 rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-900">Approved cash-paid expenses reduce expected physical cash remittance.</div>}
             <Button className="mt-4 w-full" disabled={busy || !expense.date || Number(expense.amount) <= 0 || !agents.some((agent) => agent.id === expense.agentId && agent.active && agent.role === "Agent")} onClick={recordExpense}><ReceiptText size={18} />{busy ? "Recording..." : "Record Expense"}</Button>
-          </div>
+          </div>}
           <div className="rounded-lg border border-slate-200 bg-white p-4">
             <h2 className="mb-3 font-bold">Recent Payments</h2>
             {collections.slice().sort((a, b) => b.date.localeCompare(a.date) || b.ref.localeCompare(a.ref)).slice(0, 6).map((item) => (

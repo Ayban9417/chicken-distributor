@@ -26,3 +26,11 @@ export async function saveTimeEntry(organizationId, values, client = requireSupa
     : await client.from("time_entries").insert(payload).select("*").single();
   return fail(result);
 }
+
+export async function timeInNow(organizationId, client = requireSupabase()) {
+  return fail(await client.rpc("time_in_now", { p_organization_id: organizationId }));
+}
+
+export async function timeOutNow(organizationId, client = requireSupabase()) {
+  return fail(await client.rpc("time_out_now", { p_organization_id: organizationId }));
+}

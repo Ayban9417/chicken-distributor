@@ -97,7 +97,7 @@ export function HostedCompanyInventoryScreen({ organizationId, role, onStockIn }
   </>;
 }
 
-export function HostedInventoryScreen({ organizationId, role, userId, onChanged, onWarehouse }) {
+export function HostedInventoryScreen({ organizationId, role, userId, onChanged, onWarehouse, showTransferActions = true, showReceipts = true, transferMode = false }) {
   const [epoch, setEpoch] = useState(0);
   const [notice, setNotice] = useState("");
   const [detail, setDetail] = useState(null);
@@ -126,6 +126,10 @@ export function HostedInventoryScreen({ organizationId, role, userId, onChanged,
       }}
       pushToast={setNotice}
       showCost={role === "owner_admin"}
+      showTransferActions={showTransferActions}
+      showReceipts={showReceipts}
+      title={transferMode ? "Transfers" : role === "salesman" ? "My Inventory" : "Inventory"}
+      eyebrow={transferMode ? "Salesman to Salesman" : "Salesman Inventory"}
     />
     {detail && <Drawer title="Inventory Detail" onClose={() => setDetail(null)}><InventoryDetail row={detail} showCost={role !== "salesman"} /></Drawer>}
   </>;
@@ -301,6 +305,7 @@ export function HostedFinanceScreen({ organizationId, role, userId, view, initia
       initialSalesmanId={selectedSalesman}
       canSelectSalesman={role !== "salesman"}
       allowManualAllocation={false}
+      showExpense={role !== "salesman"}
       busy={busy}
       pushToast={setNotice}
       onRecordPayment={(values) => run(() => recordHostedPayment(organizationId, values), (saved) => `${saved?.payment_number || "Payment"} recorded and allocated.`)}

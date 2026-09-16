@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { KeyRound, LogOut, Menu, X } from "lucide-react";
+import { KeyRound, LogOut, Menu, UserRound, X } from "lucide-react";
 import { AppProvider, useAppContext } from "./context/AppContext";
 import { AuthScreen } from "./components/AuthScreen";
 import { HostedDashboard } from "./components/Reporting";
@@ -9,7 +9,8 @@ import { HostedTrucks } from "./components/HostedTrucks";
 import { HostedDtr } from "./components/HostedDtr";
 import { HostedPayroll } from "./components/HostedPayroll";
 import { ChangePasswordForm } from "./components/AccountSecurity";
-import { Brand, PrimaryNav, primaryNavigation } from "./components/ApplicationNavigation";
+import { Brand, PrimaryNav, primaryNavigation, salesmanNavigation } from "./components/ApplicationNavigation";
+import { HostedSalesmanDashboard, HostedSalesmanDtr, HostedSalesmanExpenses } from "./components/SalesmanWorkspace";
 import { Button, Drawer } from "./components/ui";
 import { supabaseConfigurationError } from "./lib/supabaseClient";
 import { canAccessScreen, initialScreenForRole, isOperationalRole } from "./lib/roleAccess";
@@ -53,6 +54,7 @@ function Workspace() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [epoch, setEpoch] = useState(0);
   const [securityOpen, setSecurityOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const changed = () => setEpoch((value) => value + 1);
   const navigate = (screen, customerId = "") => {
     const target = { payments: "collections", ledger: "customers", sales: "out", plants: "trips", "stock-in": "trips" }[screen] || screen;
@@ -60,21 +62,25 @@ function Workspace() {
     setActive(target);
   };
   useEffect(() => { window.scrollTo({ top: 0 }); setMobileOpen(false); }, [active]);
-  const items = primaryNavigation.filter((item) => canAccessScreen(role, item.id)).map((item) => role === "salesman" && item.id === "inventory" ? { ...item, label: "My Inventory" } : item);
+  const items = role === "salesman" ? salesmanNavigation : primaryNavigation.filter((item) => canAccessScreen(role, item.id));
   const screens = {
-    dashboard: <HostedDashboard organizationId={organization.id} epoch={epoch} onNavigate={navigate} onPayment={(customerId) => navigate("collections", customerId)} onLedger={(customerId) => navigate("customers", customerId)} />,
+    dashboard: role === "salesman"
+      ? <HostedSalesmanDashboard organizationId={organization.id} userId={user.id} name={profile.full_name} epoch={epoch} onChanged={changed} onNavigate={navigate} />
+      : <HostedDashboard organizationId={organization.id} epoch={epoch} onNavigate={navigate} onPayment={(customerId) => navigate("collections", customerId)} onLedger={(customerId) => navigate("customers", customerId)} />,
     trips: <HostedPlantsScreen organizationId={organization.id} role={role} onChanged={changed} />,
     warehouse: <HostedWarehouseScreen organizationId={organization.id} onChanged={changed} />,
     inventory: role === "owner_admin"
       ? <HostedCompanyInventoryScreen organizationId={organization.id} role={role} onStockIn={() => navigate("trips")} />
-      : <HostedInventoryScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} onWarehouse={() => navigate("warehouse")} />,
+      : <HostedInventoryScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} showTransferActions={false} showReceipts={false} />,
     "salesman-inventory": <HostedInventoryScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} onWarehouse={() => navigate("warehouse")} />,
     out: <HostedSalesScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} onStockIn={() => navigate("trips")} />,
     collections: <HostedFinanceScreen organizationId={organization.id} role={role} userId={user.id} view="payments" initialCustomerId={financeCustomerId} onChanged={changed} onNavigate={navigate} />,
     customers: <HostedFinanceScreen organizationId={organization.id} role={role} userId={user.id} view="ledger" initialCustomerId={financeCustomerId} onChanged={changed} onNavigate={navigate} />,
     collectibles: <HostedFinanceScreen organizationId={organization.id} role={role} userId={user.id} view="collectibles" onChanged={changed} onNavigate={navigate} />,
+    transfers: <HostedInventoryScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} transferMode />,
+    expenses: <HostedSalesmanExpenses organizationId={organization.id} userId={user.id} epoch={epoch} onChanged={changed} />,
     dcr: <HostedFinanceScreen organizationId={organization.id} role={role} userId={user.id} view="dcr" onChanged={changed} onNavigate={navigate} />,
-    dtr: <HostedDtr organizationId={organization.id} userId={user.id} role={role} />,
+    dtr: role === "salesman" ? <HostedSalesmanDtr organizationId={organization.id} userId={user.id} epoch={epoch} onChanged={changed} /> : <HostedDtr organizationId={organization.id} userId={user.id} role={role} />,
     payroll: <HostedPayroll organizationId={organization.id} userId={user.id} />,
     reports: <HostedReports organizationId={organization.id} epoch={epoch} />,
     trucks: <HostedTrucks organizationId={organization.id} userId={user.id} />,
@@ -86,11 +92,12 @@ function Workspace() {
   return <div className="min-h-screen bg-slate-100 text-slate-900">
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 overflow-y-auto border-r border-slate-200 bg-white md:block"><Brand /><PrimaryNav active={active} setActive={navigate} items={items} /></aside>
     {mobileOpen && <div className="fixed inset-0 z-40 bg-slate-950/35 md:hidden"><aside className="h-full w-80 max-w-[86vw] overflow-y-auto bg-white shadow-2xl"><div className="flex items-center justify-between border-b border-slate-200 pr-3"><Brand /><Button variant="ghost" className="h-11 w-11 px-0" onClick={() => setMobileOpen(false)} aria-label="Close menu"><X size={20} /></Button></div><PrimaryNav active={active} setActive={navigate} items={items} /></aside></div>}
-    <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur md:ml-64 md:px-7"><Button variant="ghost" className="h-11 w-11 px-0 md:hidden" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu size={22} /></Button><div className="hidden text-sm font-semibold text-slate-500 xl:block">{organization.name} / Hosted DEV</div><div className="flex items-center gap-2 text-right"><div className="hidden sm:block"><p className="text-sm font-bold">{profile?.full_name}</p><p className="text-xs text-slate-500">{roleLabels[role] || role}</p></div><Button variant="secondary" className="h-11 px-3" onClick={() => setSecurityOpen(true)} aria-label="Change password"><KeyRound size={16} /><span className="hidden lg:inline">Change password</span></Button><Button variant="secondary" className="h-11 px-3" onClick={signOut}><LogOut size={16} /><span className="hidden lg:inline">Sign out</span></Button></div></header>
+    <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur md:ml-64 md:px-7"><Button variant="ghost" className="h-11 w-11 px-0 md:hidden" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu size={22} /></Button><div className="hidden text-sm font-semibold text-slate-500 xl:block">{organization.name} / Hosted DEV</div><div className="flex items-center gap-2 text-right"><div className="hidden sm:block"><p className="text-sm font-bold">{profile?.full_name}</p><p className="text-xs text-slate-500">{roleLabels[role] || role}</p></div>{role === "salesman" && <Button variant="secondary" className="h-11 px-3" onClick={() => setAccountOpen(true)} aria-label="My account"><UserRound size={16} /><span className="hidden lg:inline">My Account</span></Button>}<Button variant="secondary" className="h-11 px-3" onClick={() => setSecurityOpen(true)} aria-label="Change password"><KeyRound size={16} /><span className="hidden lg:inline">Change password</span></Button><Button variant="secondary" className="h-11 px-3" onClick={signOut}><LogOut size={16} /><span className="hidden lg:inline">Sign out</span></Button></div></header>
     <main className="pb-24 md:ml-64"><div className="mx-auto max-w-7xl px-4 py-6 md:px-7">{content}</div></main>
     <nav className="mobile-nav fixed inset-x-0 bottom-0 z-30 flex gap-2 overflow-x-auto border-t border-slate-200 bg-white p-2 md:hidden">{items.map(({ id, label, icon: Icon }) => <button key={id} className={`flex min-w-20 flex-col items-center gap-1 rounded-lg px-2 py-2 text-xs font-semibold ${active === id ? "bg-blue-50 text-[#146ef5]" : "text-slate-500"}`} onClick={() => navigate(id)}><Icon size={18} /><span>{label}</span></button>)}</nav>
     <footer className="border-t border-slate-200 bg-white px-4 py-4 text-center text-xs text-slate-500 md:ml-64">Fictional demonstration data and acquisition costs. Prototype by Noderno.</footer>
     {securityOpen && <Drawer title="Change Password" onClose={() => setSecurityOpen(false)}><ChangePasswordForm onChangePassword={changePassword} onDone={async () => { await refreshAccess(); setSecurityOpen(false); }} /></Drawer>}
+    {accountOpen && <Drawer title="My Account" onClose={() => setAccountOpen(false)}><div className="space-y-4"><div><p className="text-sm font-semibold text-slate-500">Name</p><p className="text-lg font-bold">{profile.full_name}</p></div><div><p className="text-sm font-semibold text-slate-500">Username</p><p className="font-bold">{profile.username}</p></div><div><p className="text-sm font-semibold text-slate-500">Role</p><p className="font-bold">Salesman</p></div><Button className="w-full" variant="secondary" onClick={() => { setAccountOpen(false); setSecurityOpen(true); }}><KeyRound size={17} />Change Password</Button><Button className="w-full" variant="secondary" onClick={signOut}><LogOut size={17} />Sign Out</Button></div></Drawer>}
   </div>;
 }
 

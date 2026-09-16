@@ -1,6 +1,6 @@
 # Final Client-Facing Acceptance Audit
 
-**Audit date:** September 15, 2026
+**Audit date:** September 16, 2026
 **Project:** Chicken Distributor
 **Branch:** `feature/supabase-frontend`
 **Pre-account-management checkpoint:** `85a79b9b19a5af9045fb0507386d0761663620d9`
@@ -43,7 +43,7 @@ No deployment or merge to `main` was performed.
 | DCR | PASS | Submission locked the snapshot; expected cash, actual cash, methods, expenses, and discrepancy reconciled. |
 | Discrepancies | PASS | Cash shortage and post-lock payment adjustment appeared without mutating the locked DCR. |
 | Reports | PASS | Date filtering, financial cards, trip summary, inventory, transfers, customer/product/plant profitability, DCR, and discrepancy sections rendered. |
-| DTR | PASS | Existing empty state and role visibility worked; no migration or feature changes were made. |
+| DTR | PASS | Salesmen can Time In and Time Out only for themselves using server time; duplicate actions are idempotent. Owner/Admin corrections require a reason and create an audit event. |
 | Payroll | PASS | Owner-only visibility and empty state worked; no migration or feature changes were made. |
 | Trucks | PASS | Existing empty state worked; no migration or feature changes were made. |
 | Administration | PASS | Owner can create, edit, activate, deactivate, and reset Salesman accounts. The UI has no role selector and cannot create privileged roles. Cashier is not assignable. |
@@ -95,7 +95,7 @@ The final role-model regression scenario independently stocked 100 kg as Owner/A
 | --- | --- |
 | Owner/Admin | PASS: Plant management, Stock In, Warehouse, customers, reports, Payroll, and Administration were accessible. |
 | Warehouse | PASS: Warehouse inventory, receiving history, Warehouse-to-Salesman transfers, DTR, and Trucks were accessible. Stock In, payments, Plant configuration, DCR, reports, discrepancies, Payroll, and Administration were blocked. |
-| Salesman | PASS: only own assigned inventory was visible; Salesman selection was locked; own sales, payments, expenses, and DCR worked. Selling another Salesman's stock, arbitrary inventory movement, and Plant edits were denied. |
+| Salesman | PASS: the dedicated workspace exposes Dashboard, My Inventory, Sales, Payments, Collectibles, Ledger, Transfers, Expenses, My DCR, and My DTR only. Own workflows passed; cross-salesman inventory/sales, arbitrary inventory movement, Plant edits, role promotion, and completed-DTR edits were denied. |
 | Legacy `cashier` value | PASS: no application role or navigation is exposed. Existing memberships are deactivated by migration, activation is denied, and direct payment/data access is rejected. |
 
 Expected RLS denials were observed and counted as successful security checks. The corrective migration narrowed Stock In, payment, DCR, financial, and membership policies to the final client role model.
@@ -115,6 +115,17 @@ Expected RLS denials were observed and counted as successful security checks. Th
 - Payment notes and references: PASS, retained and displayed.
 - Warehouse receipt and Salesman transfer traceability: PASS.
 - DCR lock and post-lock adjustment: PASS.
+
+## Dedicated Salesman Workspace Acceptance
+
+- The common field workflow is now isolated from Owner/Admin navigation and starts on a Salesman dashboard.
+- The dashboard derives own Sales, Collections, Expenses, Cash to Remit, assigned inventory, collectibles, DCR status, and attendance from the same local or hosted operational records used by the detail screens.
+- My Inventory displays assigned, sold, and remaining quantities by exact Plant + Trip + Product + Code/Class. Acquisition cost and profitability are not rendered.
+- Transfers is a separate working screen; My Inventory does not show transfer controls or receipt history.
+- Sales, Payments, Ledger, Collectibles, Expenses, and DCR use the signed-in Salesman's identity without a selectable employee field.
+- My DTR provides one-click Time In/Time Out. The browser sends only the organization ID; the database supplies `auth.uid()` and Manila server time.
+- The hosted acceptance route completed a PHP 950 Sale, PHP 450 in partial Collections, a PHP 50 Expense, a locked PHP 400 DCR, a Salesman transfer, and a complete 35-minute attendance record. Dashboard and detail screens reconciled after each action.
+- Hosted authorization probes passed for Stock In denial, cross-salesman Sale denial, hidden cross-salesman inventory/financial rows, Plant and role-edit denial, direct inventory-write denial, locked-DCR rewrite denial, completed-DTR edit denial, and electronic-payment reference enforcement.
 
 ## Bugs Found And Fixed
 
@@ -190,7 +201,7 @@ Expected RLS denials were observed and counted as successful security checks. Th
 
 ## Local Mode
 
-Local-data mode started successfully. Owner/Admin retained the complete workflow; Warehouse was limited to Warehouse, DTR, and Trucks; Salesman had own-inventory, Sales, Payments, Ledger, Collectibles, DCR, and DTR access. The role selector exposes no Cashier option, and Salesman selectors are locked in Sales and Payments. No hosted credentials are required for local mode.
+Local-data mode started successfully. Owner/Admin retained the complete workflow; Warehouse was limited to Warehouse, DTR, and Trucks; Salesman received the dedicated Dashboard, My Inventory, Sales, Payments, Collectibles, Ledger, Transfers, Expenses, My DCR, and My DTR workspace. Local Time In/Time Out shares state between Dashboard and My DTR. The role selector exposes no Cashier option, and Salesman identity is fixed in field workflows. No hosted credentials are required for local mode.
 
 ## Database And Tooling Checks
 
@@ -199,6 +210,7 @@ Local-data mode started successfully. Owner/Admin retained the complete workflow
 - An all-schema lint run reported only managed pgTAP self-reference noise under the `extensions` schema; this is not an application schema defect.
 - Migration `20260914173236_align_roles_with_client_workflow.sql` was applied to hosted DEV and the remote migration state is current.
 - Migration `20260915074952_secure_username_account_management.sql` was applied to hosted DEV; a final linked dry run confirmed no pending migrations.
+- Migration `20260916135900_salesman_attendance_clock.sql` was applied to hosted DEV. It provides self-only, server-timestamped Time In/Time Out RPCs and audited Owner/Admin corrections.
 - The `username-login` and `manage-salesman-account` Edge Functions were deployed to DEV and passed the hosted account lifecycle/security scenario.
 - Database advisors returned no error-level findings. The warning for authenticated execution of `complete_own_password_change()` is intentional: it is a targetless `SECURITY DEFINER` RPC bound to `auth.uid()` and an active membership. Remaining warnings are the project-level leaked-password-protection setting and pre-existing RLS performance suggestions.
 - The migration preserves `cashier` only as an inactive legacy text value while preventing operational assignment or access.
@@ -217,7 +229,7 @@ Local-data mode started successfully. Owner/Admin retained the complete workflow
 
 ## Final Verification
 
-- Automated tests: **94 passed, 0 failed**
+- Automated tests: **108 passed, 0 failed**
 - Production build: **PASS**
 - Application-schema database lint: **PASS**
 - Hosted browser console: **PASS, no errors/warnings**

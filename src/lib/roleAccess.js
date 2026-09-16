@@ -13,6 +13,8 @@ export const screenRoles = {
   collections: ["owner_admin", "salesman"],
   ledger: ["owner_admin", "salesman"],
   collectibles: ["owner_admin", "salesman"],
+  transfers: ["salesman"],
+  expenses: ["salesman"],
   dcr: ["owner_admin", "salesman"],
   dtr: ["owner_admin", "warehouse", "salesman", "payroll_admin"],
   payroll: ["owner_admin", "payroll_admin"],
@@ -30,7 +32,7 @@ export const canAccessScreen = (role, screen) => screenRoles[screen]?.includes(r
 export function initialScreenForRole(role) {
   if (role === "owner_admin") return "dashboard";
   if (role === "warehouse") return "warehouse";
-  if (role === "salesman") return "inventory";
+  if (role === "salesman") return "dashboard";
   if (role === "payroll_admin") return "dtr";
   return "dashboard";
 }

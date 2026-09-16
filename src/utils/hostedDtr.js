@@ -40,6 +40,7 @@ export const buildTimeEntryPayload = (organizationId, values) => ({
   time_in: shortTime(values.timeIn),
   time_out: values.timeOut ? shortTime(values.timeOut) : null,
   break_minutes: Number(values.breakMinutes || 0),
+  ...(values.id ? { correction_reason: values.correctionReason?.trim() || null } : {}),
 });
 
 export const timeEntryForm = (row) => ({
@@ -49,4 +50,15 @@ export const timeEntryForm = (row) => ({
   timeIn: shortTime(row.time_in),
   timeOut: shortTime(row.time_out),
   breakMinutes: String(row.break_minutes || 0),
+  correctionReason: "",
 });
+
+export function attendanceState(entry) {
+  if (!entry) return "not_timed_in";
+  return entry.time_out ? "completed" : "working";
+}
+
+export function attendanceHistoryStatus(entry, today) {
+  if (entry.timeOut) return "COMPLETED";
+  return entry.date === today ? "WORKING" : "INCOMPLETE";
+}
