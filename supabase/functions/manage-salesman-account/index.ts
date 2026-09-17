@@ -1,18 +1,29 @@
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "@supabase/supabase-js";
-import { corsHeaders } from "@supabase/supabase-js/cors";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
 const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const internalAuthDomain = Deno.env.get("INTERNAL_AUTH_DOMAIN") || "accounts.chicken-distributor.internal";
-const responseHeaders = { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" };
+const configuredOrigins = (Deno.env.get("ALLOWED_ORIGINS") || "").split(",").map((value) => value.trim()).filter(Boolean);
 
 const normalizeUsername = (value: unknown) => String(value || "").trim().toLowerCase();
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: responseHeaders });
+const isAllowedOrigin = (origin: string) => !origin
+  || configuredOrigins.includes(origin)
+  || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+const responseHeaders = (request: Request) => {
+  const origin = request.headers.get("Origin") || "";
+  return {
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    ...(origin && isAllowedOrigin(origin) ? { "Access-Control-Allow-Origin": origin, Vary: "Origin" } : {}),
+    "Content-Type": "application/json",
+    "Cache-Control": "no-store",
+  };
+};
 const messageFor = (error: { code?: string; message?: string } | null) => {
   if (error?.code === "23505" || /duplicate key/i.test(error?.message || "")) return "Username is already in use.";
-  return error?.message || "The account request could not be completed.";
+  return "The account request could not be completed.";
 };
 
 function validateUsername(value: unknown) {
@@ -30,7 +41,10 @@ function validatePassword(value: unknown) {
 }
 
 Deno.serve(async (request) => {
-  if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: responseHeaders(request) });
+  const origin = request.headers.get("Origin") || "";
+  if (origin && !isAllowedOrigin(origin)) return json({ error: "Origin is not allowed." }, 403);
+  if (request.method === "OPTIONS") return new Response("ok", { headers: responseHeaders(request) });
   if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
   if (!supabaseUrl || !anonKey || !serviceRoleKey) return json({ error: "Account service is unavailable." }, 503);
 
@@ -140,6 +154,7 @@ Deno.serve(async (request) => {
 
     return json({ error: "Unsupported account action." }, 400);
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : "The account request could not be completed." }, 400);
+    const safeValidation = error instanceof Error && /^(Use 3-64|Password must be at least)/.test(error.message);
+    return json({ error: safeValidation ? error.message : "The account request could not be completed." }, 400);
   }
 });

@@ -82,8 +82,8 @@ export function HostedSalesmanDashboard({ organizationId, userId, name, epoch = 
   const [action, setAction] = useState({ busy: false, error: "" });
   const remote = useRemote(async () => {
     const [finance, inventory, attendance] = await Promise.all([
-      loadHostedFinanceParity(organizationId),
-      loadHostedSalesmanInventory(organizationId),
+      loadHostedFinanceParity(organizationId, undefined, userId),
+      loadHostedSalesmanInventory(organizationId, undefined, userId),
       loadDtrEntries(organizationId, { start: date, end: date }, userId),
     ]);
     return { finance, inventory, attendance };
@@ -160,7 +160,7 @@ export function SalesmanExpenses({ userId, users, expenses, date, busy = false, 
 export function HostedSalesmanExpenses({ organizationId, userId, epoch = 0, onChanged }) {
   const [localEpoch, setLocalEpoch] = useState(0);
   const [status, setStatus] = useState({ busy: false, error: "", notice: "" });
-  const remote = useRemote(() => loadHostedFinanceParity(organizationId), `${organizationId}-${userId}-${epoch}-${localEpoch}`);
+  const remote = useRemote(() => loadHostedFinanceParity(organizationId, undefined, userId), `${organizationId}-${userId}-${epoch}-${localEpoch}`);
   const record = async (values) => {
     setStatus({ busy: true, error: "", notice: "" });
     try {

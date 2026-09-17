@@ -83,13 +83,21 @@ expectedError(await warehouse.client.rpc("record_payment", {
 
 const salesmanA = await login("salesmanA");
 const salesmanB = await login("salesmanB");
-const ownStock = rows(await salesmanA.client.from("salesman_stock_summary").select("inventory_lot_id, salesman_user_id, available_quantity_kg").eq("organization_id", organizationId), "salesman own stock");
+const workspaceResult = await salesmanA.client.rpc("get_salesman_workspace", { p_organization_id: organizationId });
+assert.ifError(workspaceResult.error);
+const workspace = workspaceResult.data;
+assert.ok(!/cost_per_kg|inventory_cost_value|gross_profit|total_cogs|line_cogs/.test(JSON.stringify(workspace)), "Salesman-safe data omits cost, profit, and valuation fields");
+const ownStock = workspace.stock || [];
 assert.ok(ownStock.length > 0 && ownStock.every((row) => row.salesman_user_id === salesmanA.userId), "salesman sees only own assigned stock");
-assert.equal(rows(await salesmanA.client.from("salesman_stock_summary").select("inventory_lot_id").eq("organization_id", organizationId).eq("salesman_user_id", salesmanB.userId), "other salesman stock").length, 0, "other salesman stock is hidden");
+assert.equal(rows(await salesmanA.client.from("salesman_stock_summary").select("inventory_lot_id").eq("organization_id", organizationId), "legacy cost-bearing stock view").length, 0, "legacy cost-bearing stock view is unavailable to Salesman");
+assert.equal(rows(await salesmanA.client.from("inventory_lots").select("id, cost_per_kg"), "cost-bearing lots").length, 0, "cost-bearing inventory lots are unavailable to Salesman");
+assert.equal(rows(await salesmanA.client.from("sales").select("id, total_cogs, gross_profit"), "cost-bearing sales").length, 0, "cost-bearing Sale rows are unavailable to Salesman");
 denied(await salesmanA.client.from("plants").update({ name: plants[0].name }).eq("id", plants[0].id).select("id"), "salesman Plant configuration update");
 
-const sale = rows(await salesmanA.client.from("sales").select("id, customer_id, salesman_user_id, sale_date, trust_receipt_number, client_request_id").eq("organization_id", organizationId).eq("trust_receipt_number", "PARITY2-TR-002"), "sale replay source")[0];
-const saleLine = rows(await salesmanA.client.from("sale_lines").select("inventory_lot_id, quantity_kg, selling_price_per_kg").eq("sale_id", sale.id), "sale replay line")[0];
+const sale = (workspace.sales || []).find((row) => row.trust_receipt_number === "PARITY2-TR-002");
+assert.ok(sale, "safe Sale replay source exists");
+const saleLine = (workspace.saleLines || []).find((row) => row.sale_id === sale.id);
+assert.ok(saleLine, "safe Sale replay line exists");
 const saleArgs = {
   p_organization_id: organizationId,
   p_customer_id: sale.customer_id,

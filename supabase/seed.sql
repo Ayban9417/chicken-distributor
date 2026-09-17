@@ -1,4 +1,6 @@
--- Minimal development master data only. No operational stock, Sales, Payments, or DCRs.
+-- DEVELOPMENT ONLY. `supabase db reset` loads this file; production deployment
+-- must use `supabase db push` and the approved import process instead.
+-- Minimal demo master data only. No operational stock, Sales, Payments, or DCRs.
 insert into public.organizations (id, name, slug)
 values ('10000000-0000-4000-8000-000000000001', 'Chicken Distributor Demo', 'chicken-distributor-demo')
 on conflict (id) do nothing;

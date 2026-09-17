@@ -1,5 +1,6 @@
 import { requireSupabase } from "../lib/supabaseClient.js";
 import { loadPeople, loadSalesmanStock, loadWarehouseStock, transferSalesmanStock, transferWarehouseStock } from "./operationsService.js";
+import { loadSalesmanWorkspaceData } from "./salesmanDataService.js";
 import { money } from "../utils/business.js";
 
 const fail = (result) => {
@@ -101,22 +102,27 @@ export function createHostedWarehouseTransfer(organizationId, values) {
   });
 }
 
-export async function loadHostedSalesmanInventory(organizationId, client = requireSupabase()) {
-  const [stock, people] = await Promise.all([loadSalesmanStock(organizationId, null, client), loadPeople(organizationId, client)]);
+export async function loadHostedSalesmanInventory(organizationId, client = requireSupabase(), salesmanUserId = null) {
+  const snapshot = salesmanUserId ? await loadSalesmanWorkspaceData(organizationId, client) : null;
+  const [stock, people] = snapshot
+    ? [snapshot.stock, snapshot.people]
+    : await Promise.all([loadSalesmanStock(organizationId, null, client), loadPeople(organizationId, client)]);
   const lotIds = [...new Set(stock.map((row) => row.inventory_lot_id))];
-  const [lotsResult, movementsResult] = await Promise.all([
-    lotIds.length ? client.from("inventory_lots").select("id, original_quantity_kg").in("id", lotIds) : Promise.resolve({ data: [], error: null }),
-    lotIds.length ? client.from("inventory_movements").select("id, inventory_lot_id, movement_type, quantity_kg, from_location_type, from_salesman_user_id, to_location_type, to_salesman_user_id, effective_date, reference_id, reference_line_id").eq("organization_id", organizationId).in("inventory_lot_id", lotIds).order("effective_date", { ascending: false }) : Promise.resolve({ data: [], error: null }),
-  ]);
-  const lots = fail(lotsResult);
-  const movements = fail(movementsResult);
+  const [lots, movements] = snapshot
+    ? [snapshot.lots, snapshot.movements]
+    : await Promise.all([
+      lotIds.length ? client.from("inventory_lots").select("id, original_quantity_kg").in("id", lotIds).then(fail) : [],
+      lotIds.length ? client.from("inventory_movements").select("id, inventory_lot_id, movement_type, quantity_kg, from_location_type, from_salesman_user_id, to_location_type, to_salesman_user_id, effective_date, reference_id, reference_line_id").eq("organization_id", organizationId).in("inventory_lot_id", lotIds).order("effective_date", { ascending: false }).then(fail) : [],
+    ]);
   const transferMovements = movements.filter((row) => row.movement_type === "salesman_to_salesman");
   const receiptIds = [...new Set(transferMovements.map((row) => row.reference_id))];
   const receiptLineIds = [...new Set(transferMovements.map((row) => row.reference_line_id).filter(Boolean))];
-  const [receipts, receiptLines] = await Promise.all([
-    receiptIds.length ? client.from("transfer_receipts").select("id, receipt_number, notes").in("id", receiptIds).then(fail) : [],
-    receiptLineIds.length ? client.from("transfer_receipt_lines").select("id, bags, head_count").in("id", receiptLineIds).then(fail) : [],
-  ]);
+  const [receipts, receiptLines] = snapshot
+    ? [snapshot.transferReceipts, snapshot.transferReceiptLines]
+    : await Promise.all([
+      receiptIds.length ? client.from("transfer_receipts").select("id, receipt_number, notes").in("id", receiptIds).then(fail) : [],
+      receiptLineIds.length ? client.from("transfer_receipt_lines").select("id, bags, head_count").in("id", receiptLineIds).then(fail) : [],
+    ]);
   const originalMap = new Map(lots.map((row) => [row.id, number(row.original_quantity_kg)]));
   const receiptMap = new Map(receipts.map((row) => [row.id, row]));
   const receiptLineMap = new Map(receiptLines.map((row) => [row.id, row]));

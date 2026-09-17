@@ -101,7 +101,7 @@ export function HostedInventoryScreen({ organizationId, role, userId, onChanged,
   const [epoch, setEpoch] = useState(0);
   const [notice, setNotice] = useState("");
   const [detail, setDetail] = useState(null);
-  const remote = useRemote(() => loadHostedSalesmanInventory(organizationId), `${organizationId}-${epoch}`);
+  const remote = useRemote(() => loadHostedSalesmanInventory(organizationId, undefined, role === "salesman" ? userId : null), `${organizationId}-${userId}-${epoch}`);
   const refresh = () => { setEpoch((value) => value + 1); onChanged?.(); };
   if (!remote.data) return <RemoteState loading={remote.loading} error={remote.error} onRefresh={remote.refresh} />;
   const salesmen = remote.data.users.filter((person) => person.role === "Agent");
@@ -139,7 +139,7 @@ export function HostedSalesScreen({ organizationId, role, userId, onChanged, onS
   const [epoch, setEpoch] = useState(0);
   const [notice, setNotice] = useState("");
   const [customerEditor, setCustomerEditor] = useState(null);
-  const remote = useRemote(() => loadHostedSales(organizationId), `${organizationId}-${epoch}`);
+  const remote = useRemote(() => loadHostedSales(organizationId, undefined, role === "salesman" ? userId : null), `${organizationId}-${userId}-${epoch}`);
   const refresh = () => { setEpoch((value) => value + 1); onChanged?.(); };
   if (!remote.data) return <RemoteState loading={remote.loading} error={remote.error} onRefresh={remote.refresh} />;
   const data = remote.data;
@@ -212,7 +212,7 @@ export function HostedFinanceScreen({ organizationId, role, userId, view, initia
   const [busy, setBusy] = useState(false);
   const [detail, setDetail] = useState(null);
   const [customerEditor, setCustomerEditor] = useState(null);
-  const remote = useRemote(() => loadHostedFinanceParity(organizationId), `${organizationId}-${epoch}`);
+  const remote = useRemote(() => loadHostedFinanceParity(organizationId, undefined, role === "salesman" ? userId : null), `${organizationId}-${userId}-${epoch}`);
   const refresh = () => { setEpoch((value) => value + 1); onChanged?.(); };
   const run = async (action, success) => {
     setBusy(true); setError(""); setNotice("");

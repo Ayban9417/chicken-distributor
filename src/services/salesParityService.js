@@ -1,6 +1,7 @@
 import { requireSupabase } from "../lib/supabaseClient.js";
 import { createSale, loadCustomers, loadFinance, loadPeople, loadSalesmanStock } from "./operationsService.js";
 import { parityUsers } from "./inventoryParityService.js";
+import { loadSalesmanWorkspaceData } from "./salesmanDataService.js";
 
 const fail = (result) => {
   if (result.error) throw result.error;
@@ -9,17 +10,18 @@ const fail = (result) => {
 const number = (value) => Number(value || 0);
 const titlePayment = (value) => value === "cash_credit" ? "Cash / Credit" : value ? value[0].toUpperCase() + value.slice(1) : "Cash";
 
-export async function loadHostedSales(organizationId, client = requireSupabase()) {
-  const [customerRows, people, stock, finance, pricesResult, productsResult] = await Promise.all([
-    loadCustomers(organizationId),
-    loadPeople(organizationId),
-    loadSalesmanStock(organizationId),
-    loadFinance(organizationId),
-    client.from("customer_prices").select("customer_id, product_id, selling_price_per_kg").eq("active", true),
-    client.from("products").select("id, name").eq("organization_id", organizationId),
-  ]);
-  const prices = fail(pricesResult);
-  const products = fail(productsResult);
+export async function loadHostedSales(organizationId, client = requireSupabase(), salesmanUserId = null) {
+  const snapshot = salesmanUserId ? await loadSalesmanWorkspaceData(organizationId, client) : null;
+  const [customerRows, people, stock, finance, prices, products] = snapshot
+    ? [snapshot.customers, snapshot.people, snapshot.stock, { sales: snapshot.sales, ledger: snapshot.ledger }, snapshot.prices, snapshot.products]
+    : await Promise.all([
+      loadCustomers(organizationId),
+      loadPeople(organizationId),
+      loadSalesmanStock(organizationId),
+      loadFinance(organizationId),
+      client.from("customer_prices").select("customer_id, product_id, selling_price_per_kg").eq("active", true).then(fail),
+      client.from("products").select("id, name").eq("organization_id", organizationId).then(fail),
+    ]);
   const productMap = new Map(products.map((row) => [row.id, row.name]));
   const customers = customerRows.map((row) => ({
     id: row.id,

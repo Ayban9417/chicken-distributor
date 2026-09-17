@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
-select plan(36);
+select plan(49);
 
 insert into auth.users (id, email) values
   ('d0000000-0000-4000-8000-000000000101', 'frontend-owner@test.invalid'),
@@ -40,6 +40,10 @@ select throws_ok(
   $$select public.create_stock_trip(gen_random_uuid(), gen_random_uuid(), current_date, '[]', gen_random_uuid())$$,
   '42501', null, 'anonymous users cannot call frontend Stock In RPC'
 );
+select throws_ok(
+  $$select public.get_salesman_workspace(gen_random_uuid())$$,
+  '42501', null, 'anonymous users cannot call the Salesman-safe read RPC'
+);
 
 set local role authenticated;
 set local request.jwt.claim.sub = 'd0000000-0000-4000-8000-000000000101';
@@ -65,6 +69,16 @@ select is(
   (select sum(available_quantity_kg) from public.warehouse_stock_summary where organization_id = 'd0000000-0000-4000-8000-000000000001'),
   100::numeric,
   'Owner can view Warehouse stock'
+);
+select is(
+  (select cost_per_kg from public.stock_trip_lines limit 1),
+  100::numeric,
+  'Owner retains authorized Stock In acquisition cost visibility'
+);
+select is(
+  (select cost_per_kg from public.inventory_lots limit 1),
+  100::numeric,
+  'Owner retains authorized lot cost visibility'
 );
 select lives_ok(
   $$select count(*) from public.sales_by_plant where organization_id = 'd0000000-0000-4000-8000-000000000001'$$,
@@ -113,10 +127,21 @@ select throws_ok(
 );
 
 set local request.jwt.claim.sub = 'd0000000-0000-4000-8000-000000000103';
+select is((select count(*) from public.stock_trip_lines), 0::bigint, 'Salesman cannot query cost-bearing Stock In lines');
+select is((select count(*) from public.inventory_lots), 0::bigint, 'Salesman cannot query cost-bearing inventory lots');
 select is(
   (select sum(available_quantity_kg) from public.salesman_stock_summary where salesman_user_id = 'd0000000-0000-4000-8000-000000000103'),
-  70::numeric,
-  'Salesman can view own assigned inventory'
+  null::numeric,
+  'cost-bearing legacy stock view is unavailable to Salesman'
+);
+select is(
+  jsonb_array_length(public.get_salesman_workspace('d0000000-0000-4000-8000-000000000001')->'stock'),
+  1,
+  'Salesman-safe read RPC returns own assigned inventory'
+);
+select ok(
+  public.get_salesman_workspace('d0000000-0000-4000-8000-000000000001')::text not like '%cost_per_kg%',
+  'Salesman-safe read RPC omits every acquisition cost field'
 );
 select is(
   (select count(*) from public.salesman_stock_summary where salesman_user_id = 'd0000000-0000-4000-8000-000000000104'),
@@ -126,7 +151,7 @@ select is(
 select lives_ok(
   $$select public.transfer_salesman_to_salesman(
     'd0000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000103', 'd0000000-0000-4000-8000-000000000104', '2026-09-13',
-    jsonb_build_array(jsonb_build_object('inventory_lot_id', (select id from public.inventory_lots where organization_id = 'd0000000-0000-4000-8000-000000000001'), 'quantity_kg', 10)),
+    jsonb_build_array(jsonb_build_object('inventory_lot_id', (public.get_salesman_workspace('d0000000-0000-4000-8000-000000000001')->'stock'->0->>'inventory_lot_id')::uuid, 'quantity_kg', 10)),
     'd0000000-0000-4000-8000-000000000603', 'route reassignment'
   )$$,
   'Salesman can transfer own stock to another Salesman'
@@ -139,16 +164,33 @@ select is(
 select lives_ok(
   $$select public.create_sale(
     'd0000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000501', 'd0000000-0000-4000-8000-000000000103', '2026-09-13', 'FRONT-TR-1',
-    jsonb_build_array(jsonb_build_object('inventory_lot_id', (select id from public.inventory_lots where organization_id = 'd0000000-0000-4000-8000-000000000001'), 'quantity_kg', 20, 'selling_price_per_kg', 150)),
+    jsonb_build_array(jsonb_build_object('inventory_lot_id', (public.get_salesman_workspace('d0000000-0000-4000-8000-000000000001')->'stock'->0->>'inventory_lot_id')::uuid, 'quantity_kg', 20, 'selling_price_per_kg', 150)),
     'd0000000-0000-4000-8000-000000000604'
   )$$,
   'Salesman can create a Sale from own stock'
 );
-select is((select status from public.sales where trust_receipt_number = 'FRONT-TR-1'), 'unpaid', 'new unpaid Sale has the expected status');
+select is(
+  public.get_salesman_workspace('d0000000-0000-4000-8000-000000000001')->'sales'->0->>'status',
+  'unpaid',
+  'new unpaid Sale has the expected status in the safe read model'
+);
+select is((select count(*) from public.sales), 0::bigint, 'Salesman cannot query cost-bearing Sale rows directly');
+select is((select count(*) from public.sale_lines), 0::bigint, 'Salesman cannot query cost-bearing Sale lines directly');
+select is(
+  jsonb_array_length(public.get_salesman_workspace('d0000000-0000-4000-8000-000000000001')->'sales'),
+  1,
+  'Salesman-safe read RPC returns the Salesman own Sale'
+);
+select ok(
+  public.get_salesman_workspace('d0000000-0000-4000-8000-000000000001')::text not like '%gross_profit%'
+    and public.get_salesman_workspace('d0000000-0000-4000-8000-000000000001')::text not like '%total_cogs%'
+    and public.get_salesman_workspace('d0000000-0000-4000-8000-000000000001')::text not like '%inventory_cost_value%',
+  'Salesman-safe read RPC omits company profit and valuation fields'
+);
 select throws_ok(
   $$select public.create_sale(
     'd0000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000501', 'd0000000-0000-4000-8000-000000000104', '2026-09-13', 'FRONT-TR-DENIED',
-    jsonb_build_array(jsonb_build_object('inventory_lot_id', (select id from public.inventory_lots where organization_id = 'd0000000-0000-4000-8000-000000000001'), 'quantity_kg', 1, 'selling_price_per_kg', 150)),
+    jsonb_build_array(jsonb_build_object('inventory_lot_id', (public.get_salesman_workspace('d0000000-0000-4000-8000-000000000001')->'stock'->0->>'inventory_lot_id')::uuid, 'quantity_kg', 1, 'selling_price_per_kg', 150)),
     'd0000000-0000-4000-8000-000000000605'
   )$$,
   '42501', null, 'Salesman cannot create a Sale for another Salesman'
@@ -156,7 +198,7 @@ select throws_ok(
 select throws_ok(
   $$select public.create_sale(
     'd0000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000501', 'd0000000-0000-4000-8000-000000000103', '2026-09-13', 'FRONT-TR-TOO-MUCH',
-    jsonb_build_array(jsonb_build_object('inventory_lot_id', (select id from public.inventory_lots where organization_id = 'd0000000-0000-4000-8000-000000000001'), 'quantity_kg', 100, 'selling_price_per_kg', 150)),
+    jsonb_build_array(jsonb_build_object('inventory_lot_id', (public.get_salesman_workspace('d0000000-0000-4000-8000-000000000001')->'stock'->0->>'inventory_lot_id')::uuid, 'quantity_kg', 100, 'selling_price_per_kg', 150)),
     'd0000000-0000-4000-8000-000000000606'
   )$$,
   'P0001', null, 'Salesman cannot sell more than own stock'
@@ -181,10 +223,18 @@ select is(
   'GCASH-FRONT-1',
   'Salesman electronic Payment reference is retained'
 );
-select results_eq(
-  $$insert into public.expenses (organization_id, salesman_user_id, expense_date, category, amount, payment_source, approval_status, created_by) values ('d0000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000103', '2026-09-13', 'Fuel', 50, 'cash_collection', 'approved', 'd0000000-0000-4000-8000-000000000103') returning 1$$,
-  $$values (1)$$,
-  'Salesman can record own expense'
+select lives_ok(
+  $$select public.record_expense('d0000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000103', '2026-09-13', 'Fuel', 50, 'cash_collection', 'd0000000-0000-4000-8000-000000000901', 'route fuel', 'approved')$$,
+  'Salesman can record own Expense through the idempotent RPC'
+);
+select lives_ok(
+  $$select public.record_expense('d0000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000103', '2026-09-13', 'Fuel', 50, 'cash_collection', 'd0000000-0000-4000-8000-000000000901', 'route fuel', 'approved')$$,
+  'Expense idempotent replay succeeds'
+);
+select is(
+  (select count(*) from public.expenses where client_request_id = 'd0000000-0000-4000-8000-000000000901'),
+  1::bigint,
+  'Expense idempotent replay creates one row'
 );
 select lives_ok(
   $$select public.submit_dcr('d0000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000103', '2026-09-13', 450, 'd0000000-0000-4000-8000-000000000801')$$,
@@ -200,7 +250,7 @@ select throws_ok(
     organization_id, inventory_lot_id, movement_type, quantity_kg, from_location_type,
     to_location_type, reference_type, reference_id, reference_line_id, effective_date, created_by
   ) values (
-    'd0000000-0000-4000-8000-000000000001', (select id from public.inventory_lots where organization_id = 'd0000000-0000-4000-8000-000000000001'),
+    'd0000000-0000-4000-8000-000000000001', (public.get_salesman_workspace('d0000000-0000-4000-8000-000000000001')->'stock'->0->>'inventory_lot_id')::uuid,
     'adjustment_in', 1, 'adjustment', 'warehouse', 'test', gen_random_uuid(), gen_random_uuid(), current_date, 'd0000000-0000-4000-8000-000000000103'
   )$$,
   '42501', null, 'Salesman cannot create arbitrary inventory movements'

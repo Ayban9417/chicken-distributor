@@ -10,6 +10,7 @@ import {
   submitDcr,
 } from "./operationsService.js";
 import { parityUsers } from "./inventoryParityService.js";
+import { loadSalesmanWorkspaceData } from "./salesmanDataService.js";
 import { buildDcr } from "../utils/business.js";
 
 const number = (value) => Number(value || 0);
@@ -188,36 +189,46 @@ export function normalizeHostedLedgerEntries(rows, sales, payments, allocations)
   });
 }
 
-export async function loadHostedFinanceParity(organizationId, client = requireSupabase()) {
-  const [customerRows, finance, people, operations, pricesResult, productsResult, discrepanciesResult, auditResult] = await Promise.all([
-    loadCustomers(organizationId),
-    loadFinance(organizationId),
-    loadPeople(organizationId),
-    loadOperationsSummary(organizationId),
-    client.from("customer_prices").select("*").eq("active", true),
-    client.from("products").select("id, name, category").eq("organization_id", organizationId),
-    client.from("discrepancies").select("*").eq("organization_id", organizationId).order("created_at", { ascending: false }),
-    client.from("audit_events").select("*").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
-  ]);
-  const prices = fail(pricesResult);
-  const products = fail(productsResult);
-  const discrepancyRows = fail(discrepanciesResult);
-  const auditRows = fail(auditResult);
+export async function loadHostedFinanceParity(organizationId, client = requireSupabase(), salesmanUserId = null) {
+  const snapshot = salesmanUserId ? await loadSalesmanWorkspaceData(organizationId, client) : null;
+  const [customerRows, finance, people, operations, prices, products, discrepancyRows, auditRows] = snapshot
+    ? [
+      snapshot.customers,
+      { balances: snapshot.balances, ledger: snapshot.ledger, collectibles: snapshot.collectibles, sales: snapshot.sales, payments: snapshot.payments },
+      snapshot.people,
+      { expenses: snapshot.expenses, dcrs: snapshot.dcrs },
+      snapshot.prices,
+      snapshot.products,
+      snapshot.discrepancies,
+      [],
+    ]
+    : await Promise.all([
+      loadCustomers(organizationId),
+      loadFinance(organizationId),
+      loadPeople(organizationId),
+      loadOperationsSummary(organizationId),
+      client.from("customer_prices").select("*").eq("active", true).then(fail),
+      client.from("products").select("id, name, category").eq("organization_id", organizationId).then(fail),
+      client.from("discrepancies").select("*").eq("organization_id", organizationId).order("created_at", { ascending: false }).then(fail),
+      client.from("audit_events").select("*").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100).then(fail),
+    ]);
   const customers = normalizeHostedCustomers(customerRows, prices, products);
   const users = parityUsers(people);
   const profileMap = new Map(users.map((user) => [user.id, user]));
   const sales = finance.sales || [];
   const payments = finance.payments || [];
-  const [saleLines, allocations] = await Promise.all([
-    selectIn(client, "sale_lines", "*", "sale_id", ids(sales, "id")),
-    selectIn(client, "payment_allocations", "*", "payment_id", ids(payments, "id")),
-  ]);
-  const lots = await selectIn(client, "inventory_lots", "*", "id", ids(saleLines, "inventory_lot_id"));
-  const tripLines = await selectIn(client, "stock_trip_lines", "id, stock_trip_id", "id", ids(lots, "stock_trip_line_id"));
-  const trips = await selectIn(client, "stock_trips", "id, trip_number, trip_date, plant_id", "id", ids(tripLines, "stock_trip_id"));
-  const plants = await selectIn(client, "plants", "id, name", "id", ids(trips, "plant_id"));
-  const codes = await selectIn(client, "plant_product_codes", "id, code, display_name", "id", ids(saleLines, "code_id"));
-  const classes = await selectIn(client, "plant_product_class_types", "id, class_type, display_name", "id", ids(saleLines, "class_type_id"));
+  const [saleLines, allocations] = snapshot
+    ? [snapshot.saleLines, snapshot.allocations]
+    : await Promise.all([
+      selectIn(client, "sale_lines", "*", "sale_id", ids(sales, "id")),
+      selectIn(client, "payment_allocations", "*", "payment_id", ids(payments, "id")),
+    ]);
+  const lots = snapshot ? snapshot.lots : await selectIn(client, "inventory_lots", "*", "id", ids(saleLines, "inventory_lot_id"));
+  const tripLines = snapshot ? snapshot.tripLines : await selectIn(client, "stock_trip_lines", "id, stock_trip_id", "id", ids(lots, "stock_trip_line_id"));
+  const trips = snapshot ? snapshot.trips : await selectIn(client, "stock_trips", "id, trip_number, trip_date, plant_id", "id", ids(tripLines, "stock_trip_id"));
+  const plants = snapshot ? snapshot.plants : await selectIn(client, "plants", "id, name", "id", ids(trips, "plant_id"));
+  const codes = snapshot ? snapshot.codes : await selectIn(client, "plant_product_codes", "id, code, display_name", "id", ids(saleLines, "code_id"));
+  const classes = snapshot ? snapshot.classes : await selectIn(client, "plant_product_class_types", "id, class_type, display_name", "id", ids(saleLines, "class_type_id"));
   const productMap = mapBy(products);
   const lotMap = mapBy(lots);
   const tripLineMap = mapBy(tripLines);
@@ -247,7 +258,7 @@ export async function loadHostedFinanceParity(organizationId, client = requireSu
       qty: number(line.quantity_kg),
       price: number(line.selling_price_per_kg),
       subtotal: number(line.line_sales),
-      costPerKg: number(line.acquisition_cost_per_kg),
+      ...(line.acquisition_cost_per_kg === undefined ? {} : { costPerKg: number(line.acquisition_cost_per_kg) }),
     });
     groupsBySale.set(line.sale_id, groups);
   });

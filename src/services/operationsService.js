@@ -177,18 +177,20 @@ export async function loadFinance(organizationId) {
   return { balances: balances.data, ledger: ledger.data, collectibles: collectibles.data, sales: sales.data, payments: payments.data };
 }
 
-export async function recordExpense(organizationId, values, createdBy) {
-  const { data, error } = await requireSupabase().from("expenses").insert({
-    organization_id: organizationId,
-    salesman_user_id: values.salesmanId || null,
-    expense_date: values.date,
-    category: values.category.trim(),
-    amount: Number(values.amount),
-    payment_source: values.source,
-    description: values.description?.trim() || null,
-    approval_status: values.status || "approved",
-    created_by: createdBy,
-  }).select("*").single();
+export const buildExpenseArgs = (organizationId, values, clientRequestId) => ({
+    p_organization_id: organizationId,
+    p_salesman_user_id: values.salesmanId || null,
+    p_expense_date: values.date,
+    p_category: values.category.trim(),
+    p_amount: Number(values.amount),
+    p_payment_source: values.source,
+    p_client_request_id: clientRequestId,
+    p_description: values.description?.trim() || null,
+    p_approval_status: values.status || "approved",
+});
+
+export async function recordExpense(organizationId, values, createdBy, clientRequestId = values.clientRequestId || requestId(), client = requireSupabase()) {
+  const { data, error } = await client.rpc("record_expense", buildExpenseArgs(organizationId, values, clientRequestId));
   if (error) throw error;
   return data;
 }
