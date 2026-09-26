@@ -20,6 +20,13 @@ test("Salesman dashboard contains operational metrics without owner financial me
   for (const label of ["Capital (Product Cost)", "Profit Estimate", "Gross Margin", "Inventory Value"]) assert.doesNotMatch(workspace, new RegExp(label));
 });
 
+test("Salesman dashboard preserves the locked DCR snapshot after later transactions", () => {
+  assert.match(workspace, /locked\?\.snapshot\?\.expectedCashRemittance \?\? dcr\.expectedCashRemittance/);
+  assert.match(workspace, /locked \? currency\(locked\.diff\) : "Pending"/);
+  assert.doesNotMatch(workspace, /locked\?\.expected \?\?/);
+  assert.doesNotMatch(workspace, /currency\(locked\.difference\)/);
+});
+
 test("hosted Salesman routes use dedicated dashboard, DTR, transfers, and expenses", () => {
   assert.match(hostedApp, /role === "salesman" \? salesmanNavigation/);
   assert.match(hostedApp, /HostedSalesmanDashboard/);
