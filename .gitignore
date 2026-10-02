@@ -17,3 +17,6 @@ supabase/.env
 .DS_Store
 Thumbs.db
 *.log
+
+# Vercel local project state
+.vercel
