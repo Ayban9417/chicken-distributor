@@ -4,6 +4,7 @@ import { Badge, Button, Field, inputClass, ResponsiveTable, SectionHeader } from
 import { createProduct, loadPlantConfiguration, saveClassType, saveCode, savePlant, savePlantProduct } from "../services/plantsService";
 import { readableError } from "../services/errors";
 import { deleteHostedPlantProduct } from "../services/protectedDeletionService";
+import { configuredProductById, withoutConfiguredProduct } from "../utils/plantConfiguration";
 import { DestructiveActionDialog } from "./DestructiveActionDialog";
 
 const emptyPlant = () => ({ name: "", short_code: "", accent: "#15803d", active: true });
@@ -56,6 +57,15 @@ export function LivePlantManagement({ organizationId, role, onBack }) {
       ...current,
       products: current.products.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item),
     }));
+  }
+
+  function openProductDeletion(plantProductId) {
+    const product = configuredProductById(draft?.products, plantProductId);
+    if (!product) {
+      setError("The selected configured Product is no longer available. Refresh and try again.");
+      return;
+    }
+    setDeleteProduct({ ...product, plant: draft.name });
   }
 
   async function persistPlant() {
@@ -115,7 +125,7 @@ export function LivePlantManagement({ organizationId, role, onBack }) {
           <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={draft.active} onChange={(e) => setDraft({ ...draft, active: e.target.checked })} />Plant Active</label>
         </div>
         <h3 className="mt-6 text-lg font-bold">Configured Products</h3>
-        {(draft.products || []).map((link, index) => <ProductConfiguration key={link.id || link.product_id} link={link} index={index} update={updateLink} onDelete={link.id ? () => setDeleteProduct({ ...link, plant: draft.name }) : null} />)}
+        {(draft.products || []).map((link, index) => <ProductConfiguration key={link.id || link.product_id} link={link} index={index} update={updateLink} onDelete={link.id ? openProductDeletion : null} />)}
         <div className="mt-4 flex flex-wrap items-end gap-3">
           <Field label="Add Product"><select id="plant-product-select" className={inputClass()} defaultValue=""><option value="">Select Product</option>{data.products.filter((product) => !configuredIds.has(product.id)).map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select></Field>
           <Button variant="secondary" onClick={() => {
@@ -148,7 +158,7 @@ export function LivePlantManagement({ organizationId, role, onBack }) {
       onClose={() => setDeleteProduct(null)}
       onConfirm={async ({ password, reason, requestId }) => {
         await deleteHostedPlantProduct(organizationId, deleteProduct.id, password, reason, requestId);
-        setDraft((current) => current ? { ...current, products: current.products.filter((item) => item.id !== deleteProduct.id) } : current);
+        setDraft((current) => current ? { ...current, products: withoutConfiguredProduct(current.products, deleteProduct.id) } : current);
         setDeleteProduct(null);
         setNotice("Product deleted successfully.");
         await refresh();
@@ -170,8 +180,11 @@ function PlantRows({ plants, onEdit }) {
 
 function ProductConfiguration({ link, index, update, onDelete }) {
   return <fieldset className="mt-4 border-t border-slate-200 py-4">
-    <legend className="font-bold">{link.product?.name || "Product"}</legend>
-    {onDelete && <div className="mb-3 flex justify-end"><Button variant="danger" onClick={onDelete}><Trash2 size={16} />Delete Product</Button></div>}
+    <legend className="sr-only">Configure {link.product?.name || "Product"}</legend>
+    <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
+      <h4 className="min-w-0 break-words font-bold text-slate-950">{link.product?.name || "Product"}</h4>
+      {onDelete && <Button variant="danger" className="shrink-0 px-3" aria-label={`Delete ${link.product?.name || "Product"}`} onClick={() => onDelete(link.id)}><Trash2 size={16} />Delete</Button>}
+    </div>
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {[
         ["active", "Product Active"],

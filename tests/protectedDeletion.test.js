@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 import { deleteHostedPlantProduct, deleteHostedStockTrip, protectedDeletionPayload } from "../src/services/protectedDeletionService.js";
+import { configuredProductById, withoutConfiguredProduct } from "../src/utils/plantConfiguration.js";
 
 const migrationUrl = new URL("../supabase/migrations/20261005032519_protected_admin_deletions.sql", import.meta.url);
 const schemaGrantUrl = new URL("../supabase/migrations/20261005041135_grant_protected_deletion_private_schema.sql", import.meta.url);
@@ -123,4 +124,28 @@ test("responsive reusable dialog and owner screens expose secondary destructive 
   assert.match(trips, /role !== "owner_admin"/);
   assert.match(plants, /Delete Product/);
   assert.match(plants, /Product Active/);
+  assert.match(plants, /onDelete\(link\.id\)/);
+  assert.match(plants, /aria-label={`Delete \$\{link\.product\?\.name/);
+});
+
+test("configured Product deletion targets a stable Plant Product ID independently", () => {
+  const products = [
+    { id: "manok-pinoy-c1", product: { name: "C1" } },
+    { id: "manok-pinoy-d1", product: { name: "D1" } },
+    { id: "manok-pinoy-g", product: { name: "G" } },
+  ];
+
+  assert.equal(configuredProductById(products, "manok-pinoy-d1")?.product.name, "D1");
+  assert.deepEqual(
+    withoutConfiguredProduct(products, "manok-pinoy-d1").map((item) => item.product.name),
+    ["C1", "G"],
+  );
+  assert.deepEqual(
+    withoutConfiguredProduct(products, "manok-pinoy-c1").map((item) => item.product.name),
+    ["D1", "G"],
+  );
+  assert.deepEqual(
+    withoutConfiguredProduct(products, "manok-pinoy-g").map((item) => item.product.name),
+    ["C1", "D1"],
+  );
 });
