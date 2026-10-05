@@ -17,6 +17,10 @@ import { SalesmanInventory, Warehouse } from "./InventoryFlow";
 import { InventoryOverview } from "./InventoryOverview";
 import { CustomerEditor } from "./CustomerManagement";
 import { SalesmanAccounts } from "./SalesmanAccounts";
+import { DestructiveActionDialog } from "./DestructiveActionDialog";
+import { deleteHostedStockTrip } from "../services/protectedDeletionService";
+import { kg, shortDate } from "../utils/business";
+import { sum } from "../utils/operations";
 
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date());
 
@@ -30,6 +34,7 @@ export function HostedPlantsScreen({ organizationId, role, onChanged }) {
   const [epoch, setEpoch] = useState(0);
   const [manage, setManage] = useState(false);
   const [notice, setNotice] = useState("");
+  const [deleteTrip, setDeleteTrip] = useState(null);
   const remote = useRemote(() => loadHostedPlants(organizationId), `${organizationId}-${epoch}`);
   const refresh = () => { setEpoch((value) => value + 1); onChanged?.(); };
   if (role !== "owner_admin") return <RemoteState error="Stock In and Plant configuration are available only to the Owner / Admin." />;
@@ -50,9 +55,24 @@ export function HostedPlantsScreen({ organizationId, role, onChanged }) {
         refresh();
         return saved;
       }}
+      onDeleteTrip={setDeleteTrip}
       currentDate={today()}
       pushToast={setNotice}
     />
+    {deleteTrip && <DestructiveActionDialog
+      title="Delete Trip?"
+      description="This permanently removes the erroneous Stock-In Trip and its unused source inventory."
+      details={[["Plant", deleteTrip.plant], ["Trip Date", shortDate(deleteTrip.date)], ["Original Stock", kg(sum(deleteTrip.products, "originalQty"))]]}
+      confirmLabel="Delete Trip"
+      reasonRequired
+      onClose={() => setDeleteTrip(null)}
+      onConfirm={async ({ password, reason, requestId }) => {
+        await deleteHostedStockTrip(organizationId, deleteTrip.id, password, reason, requestId);
+        setDeleteTrip(null);
+        setNotice("Trip deleted successfully.");
+        refresh();
+      }}
+    />}
   </PlantContext.Provider>;
 }
 

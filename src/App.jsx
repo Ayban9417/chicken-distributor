@@ -18,6 +18,7 @@ import {
   Search,
   Settings,
   ShoppingCart,
+  Trash2,
   Truck,
   Users,
   WalletCards,
@@ -380,7 +381,7 @@ export default function App() {
   );
 }
 
-export function Trips({ trips, setTrips, addAudit, pushToast, plantConfigs, onStockIn, currentDate = today }) {
+export function Trips({ trips, setTrips, addAudit, pushToast, plantConfigs, onStockIn, onDeleteTrip, currentDate = today }) {
   const [form, setForm] = useState(() => tripForm(plantConfigs.find((p) => p.active), currentDate));
   const plant = plantConfigs.find((p) => p.id === form.plantId);
   const productOptions = activeProducts(plant);
@@ -459,6 +460,7 @@ export function Trips({ trips, setTrips, addAudit, pushToast, plantConfigs, onSt
         <div className="space-y-3">{trips.filter((trip) => trip.plant === plant).sort((a, b) => b.date.localeCompare(a.date)).map((trip) => <details key={trip.id} className="rounded-lg border border-slate-200 bg-white p-4">
           <summary className="cursor-pointer font-bold">{shortDate(trip.date)} / {trip.code} / {kg(sum(trip.products, "originalQty"))} / {currency(tripAcquisitionCost(trip))}</summary>
           <div className="mt-3"><ResponsiveTable columns={["Product", "Size/Code", "Class Type", "Bags", "Heads", "KG", "Acquisition Type", "Cost/kg", "Total Cost"]} rows={trip.products.map((item) => [item.name, productLabel("", item.sizeCode, "", item.sizeCodeLabel) || "-", productLabel("", "", item.classType, "", item.classTypeLabel) || "-", item.bags ?? "Not recorded", item.headCount ?? "Not recorded", kg(item.originalQty), item.acquisitionType === "Free from Plant" ? <Badge tone="green">FREE FROM PLANT</Badge> : "Purchased", currency(item.costPerKg), currency(item.originalQty * item.costPerKg)])} /></div>
+          {onDeleteTrip && <div className="mt-4 flex justify-end"><Button variant="danger" onClick={() => onDeleteTrip(trip)}><Trash2 size={17} />Delete Trip</Button></div>}
         </details>)}</div>
       </div>)}
     </section>

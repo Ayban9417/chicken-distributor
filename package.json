@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test tests/*.test.js",
-    "test:hosted:roles": "node scripts/hosted-role-check.mjs"
+    "test:hosted:roles": "node scripts/hosted-role-check.mjs",
+    "test:hosted:deletions": "node scripts/hosted-protected-deletion-check.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.116.0",

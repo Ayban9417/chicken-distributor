@@ -5,9 +5,9 @@ select plan(9);
 
 select has_column('public', 'profiles', 'username', 'Profiles have an operational username');
 select has_column('public', 'profiles', 'must_change_password', 'Profiles track required password changes');
-select hasnt_function_privilege('authenticated', 'public.provision_salesman_account(uuid,uuid,text,text,uuid)', 'execute', 'Browser sessions cannot call the provisioning RPC');
-select hasnt_function_privilege('authenticated', 'public.update_salesman_account(uuid,uuid,text,text,boolean,uuid)', 'execute', 'Browser sessions cannot call the account update RPC');
-select has_function_privilege('service_role', 'public.provision_salesman_account(uuid,uuid,text,text,uuid)', 'execute', 'Only the server-side service role can provision Salesmen');
+select ok(not pg_catalog.has_function_privilege('authenticated', 'public.provision_salesman_account(uuid,uuid,text,text,uuid)', 'execute'), 'Browser sessions cannot call the provisioning RPC');
+select ok(not pg_catalog.has_function_privilege('authenticated', 'public.update_salesman_account(uuid,uuid,text,text,boolean,uuid)', 'execute'), 'Browser sessions cannot call the account update RPC');
+select ok(pg_catalog.has_function_privilege('service_role', 'public.provision_salesman_account(uuid,uuid,text,text,uuid)', 'execute'), 'Only the server-side service role can provision Salesmen');
 
 insert into auth.users (id, email) values
   ('e0000000-0000-4000-8000-000000000101', 'account-owner@test.invalid'),
@@ -26,7 +26,7 @@ select throws_ok(
   '23505', null, 'Normalized usernames are unique'
 );
 
-select hasnt_table_privilege('anon', 'public.profiles', 'select', 'Anonymous callers cannot enumerate usernames');
+select ok(not pg_catalog.has_table_privilege('anon', 'public.profiles', 'select'), 'Anonymous callers cannot enumerate usernames');
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'e0000000-0000-4000-8000-000000000102', true);

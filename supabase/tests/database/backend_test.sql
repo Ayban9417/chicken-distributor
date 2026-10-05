@@ -123,8 +123,8 @@ select throws_ok(
 select api.record_payment('a0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-000000000501', '2026-09-06', 400, 'cash', 'a0000000-0000-4000-8000-000000000805', 'a0000000-0000-4000-8000-000000000102');
 select api.record_payment('a0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-000000000501', '2026-09-06', 100, 'gcash', 'a0000000-0000-4000-8000-000000000806', 'a0000000-0000-4000-8000-000000000102', 'GC-TEST');
 select api.record_payment('a0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-000000000501', '2026-09-06', 100, 'bank', 'a0000000-0000-4000-8000-000000000807', 'a0000000-0000-4000-8000-000000000102', 'BNK-TEST');
-insert into public.expenses (organization_id, salesman_user_id, expense_date, category, amount, payment_source, approval_status, created_by)
-values ('a0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-000000000102', '2026-09-06', 'Fuel', 150, 'cash_collection', 'approved', 'a0000000-0000-4000-8000-000000000101');
+insert into public.expenses (organization_id, salesman_user_id, expense_date, category, amount, payment_source, approval_status, created_by, client_request_id)
+values ('a0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-000000000102', '2026-09-06', 'Fuel', 150, 'cash_collection', 'approved', 'a0000000-0000-4000-8000-000000000101', 'a0000000-0000-4000-8000-000000000809');
 select api.submit_dcr('a0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-000000000102', '2026-09-06', 250, 'a0000000-0000-4000-8000-000000000901');
 select is((select cash_collected from public.daily_cash_reports where client_request_id = 'a0000000-0000-4000-8000-000000000901'), 400::numeric, 'DCR cash excludes GCash and Bank Payments');
 select is((select expected_cash_remittance from public.daily_cash_reports where client_request_id = 'a0000000-0000-4000-8000-000000000901'), 250::numeric, 'approved cash-paid expense reduces expected remittance');

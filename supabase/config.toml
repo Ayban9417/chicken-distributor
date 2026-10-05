@@ -435,3 +435,9 @@ entrypoint = "./functions/manage-salesman-account/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/manage-salesman-account/*.html" ]
+
+[functions.admin-destructive-action]
+enabled = true
+verify_jwt = true
+import_map = "./functions/admin-destructive-action/deno.json"
+entrypoint = "./functions/admin-destructive-action/index.ts"
