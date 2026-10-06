@@ -1,4 +1,5 @@
 import { addDays } from "./operations.js";
+import { displayProductCategory } from "./business.js";
 
 const number = (value) => Number(value || 0);
 
@@ -45,7 +46,7 @@ export function normalizeHostedTrips({ trips = [], lines = [], plantProducts = [
       return {
         productId: line.plant_product_id,
         name: product.name || "Unknown Product",
-        category: product.category === "whole_chicken" ? "Whole Chicken" : "By-product",
+        category: displayProductCategory(product.category),
         codeId: line.code_id || "",
         sizeCode: code?.code || "",
         sizeCodeLabel: code?.display_name || "",

@@ -73,6 +73,7 @@ import { initialPlantConfigs, activeProducts, activeCodes, activeClassTypes, opt
 import { PlantManagement } from "./components/PlantManagement";
 import { PlantContext } from "./components/ui";
 import { isWholeChicken } from "./utils/business";
+import { groupTripProducts } from "./utils/tripPresentation";
 import { CustomerManagement, CustomerEditor, CustomerSelector, CustomerSearch } from "./components/CustomerManagement";
 import { normalizeCustomer, customerPermissions, matchesCustomer, hasCustomerHistory, availableCredit, exceedsCredit } from "./utils/customers";
 import { emptySalePayment, initialPaymentAmount, validateSalePayment, paymentAtSaleStatus, saleFinancialEvents } from "./utils/salePayment";
@@ -381,6 +382,34 @@ export default function App() {
   );
 }
 
+function TripProductSection({ title, group, emptyMessage }) {
+  return <section className="min-w-0 border-t border-slate-200 pt-4 first:border-0 first:pt-0">
+    <h4 className="mb-3 text-sm font-extrabold uppercase text-slate-900">{title}</h4>
+    {!group.rows.length ? <p className="py-3 text-sm text-slate-500">{emptyMessage}</p> : <div className="max-w-full overflow-x-auto rounded-lg border border-slate-200">
+      <table className="w-full min-w-[640px] text-left text-sm">
+        <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr>{["Product", "Number of Kilos", "Cost/kg", "Heads", "Bags", "Total Cost"].map((column) => <th key={column} scope="col" className="px-3 py-2 font-bold">{column}</th>)}</tr></thead>
+        <tbody className="divide-y divide-slate-100">{group.rows.map((item, index) => <tr key={`${item.productId || item.name}-${item.codeId || item.sizeCode || ""}-${item.classTypeId || item.classType || ""}-${index}`}>
+          <td className="px-3 py-2 font-semibold text-slate-950">{productLabel(item.name, item.sizeCode, item.classType, item.sizeCodeLabel, item.classTypeLabel)}</td>
+          <td className="whitespace-nowrap px-3 py-2">{kg(item.originalQty)}</td>
+          <td className="whitespace-nowrap px-3 py-2">{currency(item.costPerKg)}</td>
+          <td className="px-3 py-2">{item.headCount ?? "Not recorded"}</td>
+          <td className="px-3 py-2">{item.bags ?? "Not recorded"}</td>
+          <td className="whitespace-nowrap px-3 py-2">{currency(money(Number(item.originalQty || 0) * (item.acquisitionType === "Free from Plant" ? 0 : Number(item.costPerKg || 0))))}</td>
+        </tr>)}</tbody>
+        <tfoot className="bg-slate-950 font-bold text-white"><tr><th scope="row" className="px-3 py-3">TOTAL</th><td className="whitespace-nowrap px-3 py-3">{kg(group.kilos)}</td><td /><td /><td /><td className="whitespace-nowrap px-3 py-3">{currency(group.cost)}</td></tr></tfoot>
+      </table>
+    </div>}
+  </section>;
+}
+
+function TripProductSections({ products }) {
+  const groups = groupTripProducts(products);
+  return <div className="mt-4 space-y-5">
+    <TripProductSection title="Whole Dressed Chicken / Other Products" group={groups.main} emptyMessage="No whole dressed chicken or other products recorded for this trip." />
+    <TripProductSection title="By-products" group={groups.byproducts} emptyMessage="No by-products recorded for this trip." />
+  </div>;
+}
+
 export function Trips({ trips, setTrips, addAudit, pushToast, plantConfigs, onStockIn, onDeleteTrip, currentDate = today }) {
   const [form, setForm] = useState(() => tripForm(plantConfigs.find((p) => p.active), currentDate));
   const plant = plantConfigs.find((p) => p.id === form.plantId);
@@ -457,9 +486,9 @@ export function Trips({ trips, setTrips, addAudit, pushToast, plantConfigs, onSt
     <section className="report-section"><h2 className="mb-4 text-lg font-bold">Plant Trips</h2>
       {[...new Set(trips.map((trip) => trip.plant))].map((plant) => <div key={plant} className="mb-6">
         <h3 className="mb-3"><PlantName name={plant} /></h3>
-        <div className="space-y-3">{trips.filter((trip) => trip.plant === plant).sort((a, b) => b.date.localeCompare(a.date)).map((trip) => <details key={trip.id} className="rounded-lg border border-slate-200 bg-white p-4">
+        <div className="space-y-3">{trips.filter((trip) => trip.plant === plant).sort((a, b) => b.date.localeCompare(a.date)).map((trip) => <details key={trip.id} className="min-w-0 rounded-lg border border-slate-200 bg-white p-4">
           <summary className="cursor-pointer font-bold">{shortDate(trip.date)} / {trip.code} / {kg(sum(trip.products, "originalQty"))} / {currency(tripAcquisitionCost(trip))}</summary>
-          <div className="mt-3"><ResponsiveTable columns={["Product", "Size/Code", "Class Type", "Bags", "Heads", "KG", "Acquisition Type", "Cost/kg", "Total Cost"]} rows={trip.products.map((item) => [item.name, productLabel("", item.sizeCode, "", item.sizeCodeLabel) || "-", productLabel("", "", item.classType, "", item.classTypeLabel) || "-", item.bags ?? "Not recorded", item.headCount ?? "Not recorded", kg(item.originalQty), item.acquisitionType === "Free from Plant" ? <Badge tone="green">FREE FROM PLANT</Badge> : "Purchased", currency(item.costPerKg), currency(item.originalQty * item.costPerKg)])} /></div>
+          <TripProductSections products={trip.products} />
           {onDeleteTrip && <div className="mt-4 flex justify-end"><Button variant="danger" onClick={() => onDeleteTrip(trip)}><Trash2 size={17} />Delete Trip</Button></div>}
         </details>)}</div>
       </div>)}

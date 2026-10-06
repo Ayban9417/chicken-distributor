@@ -48,6 +48,8 @@ export const productLabel = (product, sizeCode = "", classType = "", sizeCodeLab
   classType && (classTypeLabel && classTypeLabel !== classType ? `${classType} — ${classTypeLabel}` : classType),
 ].filter(Boolean).join(" / ");
 export const isWholeChicken = (item) => item.category ? item.category === "Whole Chicken" : (item.name || item.product) === "Whole Dressed Chicken";
+export const displayProductCategory = (category) => category === "whole_chicken" ? "Whole Chicken" : category === "other" ? "Other" : category === "by_product" ? "By-products" : undefined;
+export const isByProduct = (item) => item?.category ? ["by_product", "By-product", "By-products"].includes(item.category) : !isWholeChicken(item || {});
 
 export function getAvailableQty(trips, movements, tripId, product, sizeCode = "", classType = "") {
   const trip = getTripById(trips, tripId);

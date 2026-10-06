@@ -1,7 +1,7 @@
 import { requireSupabase } from "../lib/supabaseClient.js";
 import { loadPeople, loadSalesmanStock, loadWarehouseStock, transferSalesmanStock, transferWarehouseStock } from "./operationsService.js";
 import { loadSalesmanWorkspaceData } from "./salesmanDataService.js";
-import { money } from "../utils/business.js";
+import { displayProductCategory, money } from "../utils/business.js";
 
 const fail = (result) => {
   if (result.error) throw result.error;
@@ -51,7 +51,7 @@ export async function loadHostedWarehouse(organizationId, client = requireSupaba
       tripCode: row.trip_number,
       plant: row.plant_name,
       product: row.product_name,
-      category: row.category === "whole_chicken" ? "Whole Chicken" : "By-products",
+      category: displayProductCategory(row.category),
       sizeCode: row.product_code || "",
       classType: row.class_type || "",
       bags: line.bags ?? null,
@@ -140,7 +140,7 @@ export async function loadHostedSalesmanInventory(organizationId, client = requi
       tripCode: row.trip_number,
       plant: row.plant_name,
       product: row.product_name,
-      category: row.category === "whole_chicken" ? "Whole Chicken" : "By-products",
+      category: displayProductCategory(row.category),
       sizeCode: row.product_code || "",
       classType: row.class_type || "",
       bags: null,
@@ -248,7 +248,7 @@ export function buildHostedInventoryOverviewRows({ warehouseStock = [], salesman
       tripCode: row.trip_number,
       plant: row.plant_name,
       product: row.product_name,
-      category: row.category === "whole_chicken" ? "Whole Chicken" : "By-products",
+      category: displayProductCategory(row.category),
       sizeCode: row.product_code || code?.code || "",
       sizeCodeLabel: code?.display_name || "",
       classType: row.class_type || classType?.class_type || "",

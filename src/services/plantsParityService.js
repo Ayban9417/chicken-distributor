@@ -2,6 +2,7 @@ import { requireSupabase } from "../lib/supabaseClient.js";
 import { normalizeHostedTrips } from "../utils/hostedDashboard.js";
 import { createStockTrip } from "./operationsService.js";
 import { loadPlantConfiguration } from "./plantsService.js";
+import { displayProductCategory } from "../utils/business.js";
 
 const fail = (result) => {
   if (result.error) throw result.error;
@@ -20,7 +21,7 @@ export function normalizePlantConfiguration(configuration) {
       productId: link.id,
       masterProductId: link.product_id,
       productName: link.product?.name || "Unknown Product",
-      category: link.product?.category === "whole_chicken" ? "Whole Chicken" : "By-products",
+      category: displayProductCategory(link.product?.category),
       active: link.active,
       usesSizeCodes: link.uses_size_codes,
       usesClassTypes: link.uses_class_types,

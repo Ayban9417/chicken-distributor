@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { ArrowRightLeft, ClipboardCheck, PackageCheck } from "lucide-react";
 import { Badge, Button, Field, inputClass, MoneyInput, PlantName, ResponsiveTable, SectionHeader, StatCard, StatMini } from "./ui";
-import { currency, kg, money, productLabel, shortDate, isWholeChicken } from "../utils/business";
+import { currency, kg, money, productLabel, shortDate, isByProduct } from "../utils/business";
 import { companyStockTotals, getSalesmanAvailableQty, getWarehouseAvailableQty, nextReceipt, salesmanInventoryRows, warehouseRows } from "../utils/inventoryFlow";
 import { compareInventoryProducts, compareInventoryTrips } from "../utils/inventory";
 import { sum } from "../utils/operations";
@@ -37,11 +37,11 @@ function TripStock({ rows, warehouse, onTransfer, onOpen, showCost = true, showT
   }, new Map()).values()].sort(compareInventoryTrips);
   return <div className="space-y-5">{trips.map((trip) => {
     const sorted = [...trip.rows].sort(compareInventoryProducts);
-    const whole = sorted.filter(isWholeChicken); const byproducts = sorted.filter((row) => !isWholeChicken(row));
+    const whole = sorted.filter((row) => !isByProduct(row)); const byproducts = sorted.filter(isByProduct);
     const remainingKey = warehouse ? "warehouseAvailable" : "remainingQty";
     return <details key={trip.tripId} open className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <summary className="cursor-pointer"><span className="font-extrabold uppercase">{shortDate(trip.tripDate)} / {trip.tripCode}</span><span className="ml-2 text-sm text-slate-500">{kg(sum(sorted, remainingKey))} remaining</span></summary>
-      {!!whole.length && <section className="mt-4"><h3 className="mb-3 text-lg font-extrabold uppercase">Whole Dressed Chicken</h3>
+      {!!whole.length && <section className="mt-4"><h3 className="mb-3 text-lg font-extrabold uppercase">Whole Dressed Chicken / Other Products</h3>
         <div className="mb-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><StatMini label="Total Original KG" value={kg(sum(whole, "originalQty"))} /><StatMini label="Total Sold" value={kg(sum(whole, "totalOut"))} />{warehouse && <StatMini label="Transferred to Salesmen" value={kg(sum(whole, "transferredQty"))} />}<StatMini label={warehouse ? "Warehouse Remaining" : "Salesman Remaining"} value={kg(sum(whole, remainingKey))} /></div>
         <StockTable rows={whole} warehouse={warehouse} onTransfer={onTransfer} onOpen={onOpen} showCost={showCost} showTransferActions={showTransferActions} /></section>}
       {!!byproducts.length && <section className="mt-5"><h3 className="mb-3 text-lg font-extrabold uppercase">By-products</h3><StockTable rows={byproducts} warehouse={warehouse} onTransfer={onTransfer} onOpen={onOpen} showCost={showCost} showTransferActions={showTransferActions} /></section>}
