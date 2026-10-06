@@ -24,7 +24,7 @@ const responseHeaders = (request: Request) => {
 
 function knownDatabaseError(error: { code?: string; message?: string } | null) {
   const message = error?.message || "";
-  if (error?.code === "55000" && /^This (trip|product) /.test(message)) return { error: message, status: 409 };
+  if (error?.code === "55000" && (/^This (trip|product) /.test(message) || /^Historical transactions exist\./.test(message))) return { error: message, status: 409 };
   if (error?.code === "P0002") return { error: "The selected record was not found or was already deleted.", status: 404 };
   if (error?.code === "42501") return { error: "Owner / Admin authorization is required.", status: 403 };
   if (error?.code === "22023" && /deletion reason/i.test(message)) return { error: "Enter a deletion reason between 3 and 200 characters.", status: 400 };
@@ -67,7 +67,7 @@ Deno.serve(async (request) => {
   if (action === "delete_stock_trip" && (reason.length < 3 || reason.length > 200)) {
     return json({ error: "Enter a deletion reason between 3 and 200 characters." }, 400);
   }
-  if (!new Set(["delete_stock_trip", "delete_plant_product"]).has(action)) return json({ error: "Unsupported deletion action." }, 400);
+  if (!new Set(["delete_stock_trip", "delete_plant_product", "delete_unused_customer"]).has(action)) return json({ error: "Unsupported deletion action." }, 400);
 
   const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const [{ data: ownerMembership, error: ownerError }, { data: profile, error: profileError }] = await Promise.all([
@@ -84,13 +84,13 @@ Deno.serve(async (request) => {
   const { data: reauthenticated, error: passwordError } = await verifier.auth.signInWithPassword({ email: internalEmail, password });
   if (passwordError || reauthenticated.user?.id !== callerData.user.id) return json({ error: "Current password is incorrect." }, 401);
 
-  const rpc = action === "delete_stock_trip" ? "delete_unused_stock_trip" : "delete_unused_plant_product";
-  const targetKey = action === "delete_stock_trip" ? "p_stock_trip_id" : "p_plant_product_id";
+  const rpc = action === "delete_stock_trip" ? "delete_unused_stock_trip" : action === "delete_plant_product" ? "delete_unused_plant_product" : "delete_unused_customer";
+  const targetKey = action === "delete_stock_trip" ? "p_stock_trip_id" : action === "delete_plant_product" ? "p_plant_product_id" : "p_customer_id";
   const result = await admin.rpc(rpc, {
     p_organization_id: organizationId,
     [targetKey]: targetId,
     p_actor_user_id: callerData.user.id,
-    p_reason: reason || "Product added by mistake.",
+    p_reason: reason || (action === "delete_unused_customer" ? "Customer added by mistake." : "Product added by mistake."),
     p_request_id: requestId,
   });
   if (result.error) {

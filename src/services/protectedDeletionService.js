@@ -25,3 +25,6 @@ export const deleteHostedStockTrip = (organizationId, tripId, password, reason, 
 
 export const deleteHostedPlantProduct = (organizationId, plantProductId, password, reason, requestId, client) =>
   invokeProtectedDeletion(protectedDeletionPayload("delete_plant_product", organizationId, plantProductId, password, reason, requestId), client);
+
+export const deleteUnusedHostedCustomer = (organizationId, customerId, password, reason, requestId, client) =>
+  invokeProtectedDeletion(protectedDeletionPayload("delete_unused_customer", organizationId, customerId, password, reason, requestId), client);

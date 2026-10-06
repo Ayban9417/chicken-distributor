@@ -310,7 +310,7 @@ export async function saveHostedCustomer(organizationId, record, client = requir
     creditLimit: record.creditLimit,
     paymentTerms: record.paymentDays,
     active: record.active !== false,
-  });
+  }, client);
   const products = fail(await client.from("products").select("id, name").eq("organization_id", organizationId));
   for (const product of products) {
     const value = record.pricing?.[product.name];

@@ -8,17 +8,17 @@ import { readableError } from "../services/errors";
 import { createHostedSale, loadHostedSales } from "../services/salesParityService";
 import { loadHostedFinanceParity, recordHostedExpense, recordHostedPayment, saveHostedCustomer, submitHostedDcr } from "../services/financeParityService";
 import { saveCustomer } from "../services/operationsService";
-import { deleteUnusedHostedCustomer, loadHostedAdministration, setHostedCustomerActive } from "../services/administrationService";
+import { loadHostedAdministration, setHostedCustomerActive } from "../services/administrationService";
 import { createSalesmanAccount, resetSalesmanPassword, setSalesmanAccountActive, updateSalesmanAccount } from "../services/accountService";
 import { Button, Drawer, PlantContext, UserContext } from "./ui";
 import { Collectibles } from "./Reporting";
 import { LivePlantManagement } from "./LivePlantManagement";
 import { SalesmanInventory, Warehouse } from "./InventoryFlow";
 import { InventoryOverview } from "./InventoryOverview";
-import { CustomerEditor } from "./CustomerManagement";
+import { CustomerEditor, CustomerManagement } from "./CustomerManagement";
 import { SalesmanAccounts } from "./SalesmanAccounts";
 import { DestructiveActionDialog } from "./DestructiveActionDialog";
-import { deleteHostedStockTrip } from "../services/protectedDeletionService";
+import { deleteHostedStockTrip, deleteUnusedHostedCustomer } from "../services/protectedDeletionService";
 import { kg, shortDate } from "../utils/business";
 import { sum } from "../utils/operations";
 
@@ -340,6 +340,7 @@ export function HostedAdministration({ organizationId, role, onChanged, onNaviga
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [customerEditor, setCustomerEditor] = useState(null);
+  const [deleteCustomer, setDeleteCustomer] = useState(null);
   const remote = useRemote(() => loadHostedAdministration(organizationId), `${organizationId}-${epoch}`);
   const refresh = () => { setEpoch((value) => value + 1); onChanged?.(); };
   const run = async (action, success) => {
@@ -365,13 +366,26 @@ export function HostedAdministration({ organizationId, role, onChanged, onNaviga
     <CustomerManagement
       state={state}
       onBack={() => setMode("users")}
-      onAdd={() => setCustomerEditor({})}
-      onEdit={(customer) => setCustomerEditor({ customer })}
+      onAdd={() => { setError(""); setCustomerEditor({}); }}
+      onEdit={(customer) => { setError(""); setCustomerEditor({ customer }); }}
       onLedger={(customerId) => onNavigate("ledger", customerId)}
       onToggle={(customer) => run(() => setHostedCustomerActive(customer.id, !customer.active), `${customer.name} ${customer.active ? "deactivated" : "activated"}.`)}
-      onDelete={(customer) => run(() => deleteUnusedHostedCustomer(customer.id), `${customer.name} deleted.`)}
+      onDelete={setDeleteCustomer}
     />
-    {customerEditor && <CustomerEditor customer={customerEditor.customer} customers={data.customers} productNames={data.productNames} onExisting={(customer) => setCustomerEditor({ customer })} onClose={() => setCustomerEditor(null)} onSave={async (record) => { const saved = await run(() => saveHostedCustomer(organizationId, record), "Customer saved."); if (saved) setCustomerEditor(null); }} />}
+    {customerEditor && <CustomerEditor customer={customerEditor.customer} customers={data.customers} productNames={data.productNames} saveError={error} onExisting={(customer) => setCustomerEditor({ customer })} onClose={() => setCustomerEditor(null)} onSave={async (record) => { const saved = await run(() => saveHostedCustomer(organizationId, record), "Customer saved."); if (saved) setCustomerEditor(null); }} />}
+    {deleteCustomer && <DestructiveActionDialog
+      title="Delete Customer?"
+      description="This permanently removes an unused customer and their selling prices. Customers with transactions cannot be deleted."
+      details={[["Customer", deleteCustomer.name]]}
+      confirmLabel="Delete Customer"
+      onClose={() => setDeleteCustomer(null)}
+      onConfirm={async ({ password, reason, requestId }) => {
+        await deleteUnusedHostedCustomer(organizationId, deleteCustomer.id, password, reason, requestId);
+        setDeleteCustomer(null);
+        setNotice(`${deleteCustomer.name} deleted.`);
+        refresh();
+      }}
+    />}
   </UserContext.Provider>;
 
   return <UserContext.Provider value={data.users}>

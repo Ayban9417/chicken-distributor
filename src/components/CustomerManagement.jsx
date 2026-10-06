@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Plus, Pencil, Trash2, ArrowLeft, Save } from "lucide-react";
 import { Button, Badge, Drawer, Field, inputClass, MoneyInput, ResponsiveTable, SectionHeader } from "./ui";
 import { currency, customerBalance, generalPrice } from "../utils/business";
@@ -17,19 +17,31 @@ export function CustomerSelector({ customers, value, onChange, onAdd, label = "S
     {onAdd && <Button variant="secondary" onClick={() => onAdd(query, () => setQuery(""))}><Plus size={17} />{query.trim() && !found.length ? "Add " + query.trim() : "Add New Customer"}</Button>}
   </div>;
 }
-export function CustomerEditor({ customer, customers, quick = false, initialName = "", productNames, onSave, onExisting, onClose }) {
+export function CustomerEditor({ customer, customers, quick = false, initialName = "", productNames, onSave, onExisting, onClose, saveError = "" }) {
   const [draft, setDraft] = useState(() => customer ? { ...structuredClone(customer), creditLimit: customer.creditLimit ?? "", paymentDays: customer.paymentDays ?? "" } : { ...emptyCustomer(), name: initialName });
   const [error, setError] = useState("");
   const [duplicates, setDuplicates] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const savePending = useRef(false);
   const patch = (changes) => { setDraft((d) => ({ ...d, ...changes })); setDuplicates([]); setError(""); };
-  function save(override = false) {
+  async function save(override = false) {
+    if (savePending.current) return;
     const problem = validateCustomer(draft);
     if (problem) return setError(problem);
     const found = duplicateCustomers(customers, draft);
     if (!override && found.length) return setDuplicates(found);
-    onSave(customerRecord(draft));
+    savePending.current = true;
+    setSaving(true);
+    try {
+      await onSave(customerRecord(draft));
+    } catch (reason) {
+      setError(reason?.message || "Unable to save customer. Please try again.");
+    } finally {
+      savePending.current = false;
+      setSaving(false);
+    }
   }
-  return <Drawer title={quick ? "Add New Customer" : customer ? "Edit Customer" : "Add Customer"} onClose={onClose}>
+  return <Drawer title={quick ? "Add New Customer" : customer ? "Edit Customer" : "Add Customer"} onClose={() => { if (!savePending.current) onClose(); }}>
     <div className="grid gap-3 sm:grid-cols-2">
       <Field label="Customer Name"><input required className={inputClass()} value={draft.name} onChange={(e) => patch({ name: e.target.value })} /></Field>
       <Field label="Contact Person"><input className={inputClass()} value={draft.contactPerson} onChange={(e) => patch({ contactPerson: e.target.value })} /></Field>
@@ -43,8 +55,9 @@ export function CustomerEditor({ customer, customers, quick = false, initialName
     </div>
     {!quick && <section className="report-section"><h3 className="mb-3 font-bold">Customer Selling Prices</h3>{[...new Set([...productNames, ...Object.keys(draft.pricing)])].map((product) => <div key={product} className="mb-3 grid items-end gap-3 sm:grid-cols-2"><Field label={product + " Selling Price/kg"}><MoneyInput value={draft.pricing[product] ?? ""} onChange={(e) => patch({ pricing: { ...draft.pricing, [product]: e.target.value } })} /></Field><p className="text-sm text-slate-500">Default: {currency(generalPrice[product] || 0)}/kg</p></div>)}</section>}
     {error && <p role="alert" className="mt-4 text-rose-700">{error}</p>}
-    {!!duplicates.length && <section role="alert" className="mt-4 border-l-4 border-amber-500 bg-amber-50 p-4"><h3 className="font-bold">Possible existing customer</h3>{duplicates.map((c) => <div key={c.id} className="mt-3"><p className="font-semibold">{c.name}{c.active === false ? " (Inactive)" : ""}</p><p>{c.mobile || "No mobile recorded"}</p><Button variant="secondary" className="mt-2" disabled={quick && c.active === false} onClick={() => onExisting(c)}>Use Existing Customer</Button></div>)}<Button variant="secondary" className="mt-3" onClick={() => save(true)}>{customer ? "Save Anyway" : "Create Anyway"}</Button></section>}
-    <div className="mt-5 flex flex-wrap gap-3"><Button onClick={() => save()}><Save size={17} />{quick ? "Add & Select Customer" : "Save Customer"}</Button><Button variant="secondary" onClick={onClose}>Cancel</Button></div>
+    {saveError && <p role="alert" className="mt-4 text-rose-700">{saveError}</p>}
+    {!!duplicates.length && <section role="alert" className="mt-4 border-l-4 border-amber-500 bg-amber-50 p-4"><h3 className="font-bold">Possible existing customer</h3>{duplicates.map((c) => <div key={c.id} className="mt-3"><p className="font-semibold">{c.name}{c.active === false ? " (Inactive)" : ""}</p><p>{c.mobile || "No mobile recorded"}</p><Button variant="secondary" className="mt-2" disabled={saving || (quick && c.active === false)} onClick={() => onExisting(c)}>Use Existing Customer</Button></div>)}<Button variant="secondary" className="mt-3" disabled={saving} onClick={() => save(true)}>{customer ? "Save Anyway" : "Create Anyway"}</Button></section>}
+    <div className="mt-5 flex flex-wrap gap-3"><Button disabled={saving} onClick={() => save()}><Save size={17} />{saving ? "Saving..." : quick ? "Add & Select Customer" : "Save Customer"}</Button><Button variant="secondary" disabled={saving} onClick={onClose}>Cancel</Button></div>
   </Drawer>;
 }
 export function CustomerManagement({ state, onEdit, onAdd, onLedger, onToggle, onDelete, onBack }) {

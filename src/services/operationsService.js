@@ -102,12 +102,11 @@ export const buildSalesmanTransferArgs = (organizationId, values, clientRequestI
 export const transferSalesmanStock = (organizationId, values, clientRequestId = requestId(), client = requireSupabase()) =>
   rpc(client, "transfer_salesman_to_salesman", buildSalesmanTransferArgs(organizationId, values, clientRequestId));
 
-export async function loadCustomers(organizationId) {
-  return fail(await requireSupabase().from("customers").select("*").eq("organization_id", organizationId).order("name"));
+export async function loadCustomers(organizationId, client = requireSupabase()) {
+  return fail(await client.from("customers").select("*").eq("organization_id", organizationId).order("name"));
 }
 
-export async function saveCustomer(organizationId, values) {
-  const client = requireSupabase();
+export async function saveCustomer(organizationId, values, client = requireSupabase()) {
   const payload = {
     organization_id: organizationId,
     name: values.name.trim(),

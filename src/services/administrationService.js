@@ -32,15 +32,3 @@ export async function updateHostedMembership(organizationId, user, client = requ
 export async function setHostedCustomerActive(customerId, active, client = requireSupabase()) {
   return fail(await client.from("customers").update({ active }).eq("id", customerId).select("*").single());
 }
-
-export async function deleteUnusedHostedCustomer(customerId, client = requireSupabase()) {
-  const [sales, payments] = await Promise.all([
-    client.from("sales").select("id", { count: "exact", head: true }).eq("customer_id", customerId),
-    client.from("payments").select("id", { count: "exact", head: true }).eq("customer_id", customerId),
-  ]);
-  if (sales.error) throw sales.error;
-  if (payments.error) throw payments.error;
-  if (sales.count || payments.count) throw new Error("Historical transactions exist. Deactivate this customer instead.");
-  fail(await client.from("customer_prices").delete().eq("customer_id", customerId).select("id"));
-  return fail(await client.from("customers").delete().eq("id", customerId).select("id").single());
-}
