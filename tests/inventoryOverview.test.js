@@ -9,6 +9,7 @@ const stock = (overrides) => ({
   tripId: overrides.tripId,
   tripDate: overrides.tripDate,
   tripCode: overrides.tripCode,
+  tripReference: overrides.tripReference || "",
   plant: overrides.plant,
   product: overrides.product,
   category: overrides.category,
@@ -29,8 +30,8 @@ const stock = (overrides) => ({
 });
 
 const inventoryRows = [
-  stock({ tripId: "fk-1", tripDate: "2026-09-15", tripCode: "ST-FK-1", plant: "Fkidz", product: "Whole Dressed Chicken", category: "Whole Chicken", sizeCode: "C1", sizeCodeLabel: "Cat1", originalQty: 500, totalOut: 100, bags: 25, costPerKg: 130 }),
-  stock({ tripId: "fk-1", tripDate: "2026-09-15", tripCode: "ST-FK-1", plant: "Fkidz", product: "Head", category: "By-products", originalQty: 10, totalOut: 10, headCount: 120, costPerKg: 20 }),
+  stock({ tripId: "fk-1", tripDate: "2026-09-15", tripCode: "ST-FK-1", tripReference: "FK-REF-1", plant: "Fkidz", product: "Whole Dressed Chicken", category: "Whole Chicken", sizeCode: "C1", sizeCodeLabel: "Cat1", originalQty: 500, totalOut: 100, bags: 25, costPerKg: 130 }),
+  stock({ tripId: "fk-1", tripDate: "2026-09-15", tripCode: "ST-FK-1", tripReference: "FK-REF-1", plant: "Fkidz", product: "Head", category: "By-products", originalQty: 10, totalOut: 10, headCount: 120, costPerKg: 20 }),
   stock({ tripId: "bt-1", tripDate: "2026-09-14", tripCode: "ST-BT-1", plant: "Bounty", product: "Whole Dressed Chicken", category: "Whole Chicken", sizeCode: "P1", classType: "A", classTypeLabel: "Premium", originalQty: 200, costPerKg: 142 }),
   stock({ tripId: "mg-1", tripDate: "2026-09-13", tripCode: "ST-MG-1", plant: "Magnolia", product: "Small Intestine", category: "By-products", originalQty: 50, costPerKg: 45 }),
   stock({ tripId: "mg-1", tripDate: "2026-09-13", tripCode: "ST-MG-1", plant: "Magnolia", product: "Large Intestine", category: "By-products", originalQty: 30, costPerKg: 48 }),
@@ -74,6 +75,9 @@ test("trip and product filters retain sold-out historical rows", () => {
   assert.equal(soldOut[0].product, "Head");
   assert.equal(soldOut[0].remainingQty, 0);
   assert.deepEqual(groupInventoryByTrip(filterInventoryRows(rows, { plant: "Fkidz" })).map((group) => group.tripCode), ["ST-FK-1"]);
+  assert.deepEqual(groupInventoryByTrip(filterInventoryRows(rows, { plant: "Fkidz" })).map((group) => group.tripReference), ["FK-REF-1"]);
+  assert.equal(filterInventoryRows(rows, { plant: "Fkidz", productQuery: "FK-REF-1" }).length, 2);
+  assert.equal(filterInventoryRows(rows, { plant: "Fkidz", productQuery: "ST-FK-1" }).length, 0);
 });
 
 test("hosted inventory mapping derives sold stock and movement references from authoritative movements", () => {
@@ -87,6 +91,7 @@ test("hosted inventory mapping derives sold stock and movement references from a
       { id: "m4", inventory_lot_id: "lot-1", movement_type: "sale", quantity_kg: 100, from_salesman_user_id: "juan", reference_type: "sale", reference_id: "sale-1", effective_date: "2026-09-15" },
     ],
     tripLines: [{ id: "line-1", bags: 25, head_count: null, acquisition_type: "purchased" }],
+    trips: [{ id: "trip-1", reference_number: "FK-REF-1" }],
     codes: [{ id: "code-1", code: "C1", display_name: "Cat1" }],
     classes: [{ id: "class-1", class_type: "A", display_name: "Premium" }],
     people: [{ user_id: "juan", full_name: "Juan Cruz" }, { user_id: "pedro", full_name: "Pedro Reyes" }],
@@ -97,7 +102,8 @@ test("hosted inventory mapping derives sold stock and movement references from a
   const row = rows[0];
   assert.deepEqual([row.originalQty, row.warehouseQty, row.salesmanQty, row.soldQty, row.remainingQty, row.reconciliationDelta], [500, 200, 200, 100, 400, 0]);
   assert.deepEqual([row.sizeCodeLabel, row.classTypeLabel, row.bags], ["Cat1", "Premium", 25]);
-  assert.deepEqual(row.history.map((movement) => movement.ref), ["ST-FK-1", "RR-000123", "TF-000044", "TR-10239"]);
+  assert.equal(row.tripReference, "FK-REF-1");
+  assert.deepEqual(row.history.map((movement) => movement.ref), ["FK-REF-1", "RR-000123", "TF-000044", "TR-10239"]);
 });
 
 test("the routed shared Inventory presentation retains original Plant-first controls", () => {

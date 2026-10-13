@@ -65,8 +65,8 @@ export function validateStock(form) {
 export function validatePayment(payment, ledger, allocations) {
   const amount = Number(payment.amount);
   if (!payment.date || !Number.isFinite(amount) || amount <= 0) return "Enter a date and positive payment amount.";
-  if (payment.method !== "Cash" && !payment.reference.trim()) return "Reference Number is required for electronic payments.";
-  if (payment.method === "Bank Deposit" && !payment.bank.trim()) return "Enter the bank name.";
+  if (payment.method === "GCash" && !payment.reference.trim()) return "GCash Reference Number is required.";
+  if (payment.method === "Bank Deposit" && !payment.bank.trim()) return "Select a bank.";
   const invoices = invoiceBalances(ledger, payment.customerId);
   const seen = new Set();
   for (const allocation of allocations) {

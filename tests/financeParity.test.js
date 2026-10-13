@@ -15,7 +15,7 @@ import { collectibleRows } from "../src/utils/operations.js";
 
 test("hosted customer parity preserves null credit and product pricing", () => {
   const customers = normalizeHostedCustomers([
-    { id: "customer-1", name: "Branch Store", customer_type: "market_vendor", payment_type: "cash_credit", credit_limit: null, payment_terms_days: null, active: true },
+    { id: "customer-1", name: "Branch Store", additional_phones: ["09181234567"], customer_type: "market_vendor", payment_type: "cash_credit", credit_limit: null, payment_terms_days: null, active: true },
   ], [
     { customer_id: "customer-1", product_id: "product-1", selling_price_per_kg: "188.50" },
   ], [
@@ -24,6 +24,7 @@ test("hosted customer parity preserves null credit and product pricing", () => {
   assert.equal(customers[0].creditLimit, null);
   assert.equal(customers[0].paymentType, "Cash / Credit");
   assert.equal(customers[0].pricing["Whole Dressed Chicken"], 188.5);
+  assert.deepEqual(customers[0].additionalPhones, ["09181234567"]);
 });
 
 test("hosted ledger and collectibles use allocated backend credits", () => {
@@ -43,9 +44,17 @@ test("hosted ledger and collectibles use allocated backend credits", () => {
   assert.equal(collectibleRows(customers, ledger, collections)[0].balance, 60);
 });
 
+test("hosted Bank payments expose the bank name without a reference", () => {
+  const [payment] = normalizeHostedCollections([{
+    id: "pay-bank", payment_number: "PAY-101", payment_date: "2026-09-14", amount: "50", method: "bank", bank_name: "Metrobank", reference_number: null,
+  }], [], []);
+  assert.equal(payment.bank, "Metrobank");
+  assert.equal(payment.reference, "");
+});
+
 test("hosted payment, expense, and DCR payloads retain operational context", () => {
-  assert.deepEqual(hostedPaymentValues({ customerId: "customer-1", agentId: "salesman-1", date: "2026-09-14", amount: 50, method: "Bank Deposit", reference: "BANK-9", notes: "North branch" }), {
-    customerId: "customer-1", salesmanId: "salesman-1", date: "2026-09-14", amount: 50, method: "bank", reference: "BANK-9", notes: "North branch", saleId: null,
+  assert.deepEqual(hostedPaymentValues({ customerId: "customer-1", agentId: "salesman-1", date: "2026-09-14", amount: 50, method: "Bank Deposit", reference: "", bank: "BDO", notes: "North branch" }), {
+    customerId: "customer-1", salesmanId: "salesman-1", date: "2026-09-14", amount: 50, method: "bank", reference: "", bank: "BDO", notes: "North branch", saleId: null,
   });
   assert.deepEqual(hostedExpenseValues({ agentId: "salesman-1", date: "2026-09-14", category: "Fuel", amount: 20, source: "Cash Collection", description: "Route fuel", status: "Approved" }), {
     salesmanId: "salesman-1", date: "2026-09-14", category: "Fuel", amount: 20, source: "cash_collection", description: "Route fuel", status: "approved",

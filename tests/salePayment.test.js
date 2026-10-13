@@ -35,7 +35,7 @@ for (const [label, input, balance, method] of [
   ["Partial Cash", payment(20000), 30000, "Cash"],
   ["Full Cash", payment(50000), 0, "Cash"],
   ["Partial GCash", payment(20000, "GCash", "GC-001"), 30000, "GCash"],
-  ["Partial Bank", payment(20000, "Bank Deposit", "BANK-001"), 30000, "Bank Deposit"],
+  ["Partial Bank", { ...payment(20000, "Bank Deposit"), bank: "BDO" }, 30000, "Bank Deposit"],
 ]) test(label + ": separate sale/payment events reconcile across every financial view", () => {
   const result = saleFinancialEvents(sale, input, "PAY-TEST", uid);
   const paid = 50000 - balance;
@@ -58,7 +58,10 @@ test("overpayment, invalid amounts and missing electronic references are blocked
   assert.equal(validateSalePayment(payment(60000), 50000), "Payment cannot exceed Sale Total.");
   assert.throws(() => saleFinancialEvents(sale, payment(60000), "PAY", uid), /cannot exceed/);
   for (const amount of [-1, Infinity, NaN, "bad"]) assert.match(validateSalePayment(payment(amount), 50000), /valid nonnegative/);
-  for (const method of ["GCash", "Bank Deposit"]) { assert.match(validateSalePayment(payment(20000, method, "  "), 50000), /Reference Number/); assert.equal(validateSalePayment(payment(20000, method, "REF"), 50000), ""); }
+  assert.match(validateSalePayment(payment(20000, "GCash", "  "), 50000), /Reference Number/);
+  assert.equal(validateSalePayment(payment(20000, "GCash", "REF"), 50000), "");
+  assert.match(validateSalePayment(payment(20000, "Bank Deposit"), 50000), /bank/);
+  assert.equal(validateSalePayment({ ...payment(20000, "Bank Deposit"), bank: "Landbank" }, 50000), "");
   assert.equal(validateSalePayment({ ...payment(60000), enabled: false }, 50000), "");
 });
 

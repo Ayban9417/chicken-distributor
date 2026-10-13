@@ -112,6 +112,7 @@ export async function saveCustomer(organizationId, values, client = requireSupab
     name: values.name.trim(),
     contact_person: values.contactPerson?.trim() || null,
     mobile: values.mobile?.trim() || null,
+    additional_phones: (values.additionalPhones || []).map((phone) => phone.trim()).filter(Boolean),
     address: values.address?.trim() || null,
     customer_type: values.customerType || "other",
     payment_type: values.paymentType || "cash",
@@ -138,14 +139,16 @@ export const buildSaleArgs = (organizationId, values, clientRequestId, paymentRe
   p_initial_payment: Number(values.paymentAmount || 0) > 0 ? {
     amount: Number(values.paymentAmount),
     method: values.paymentMethod,
-    reference_number: values.paymentReference || null,
+    reference_number: values.paymentMethod === "bank" ? null : values.paymentReference || null,
     notes: values.paymentNotes || null,
     client_request_id: paymentRequestId,
   } : null,
 });
 
 export const createSale = (organizationId, values, clientRequestId = requestId(), client = requireSupabase()) =>
-  rpc(client, "create_sale", buildSaleArgs(organizationId, values, clientRequestId));
+  values.paymentMethod === "bank" && Number(values.paymentAmount || 0) > 0
+    ? rpc(client, "create_sale_with_bank_payment", { ...buildSaleArgs(organizationId, values, clientRequestId), p_bank_name: values.paymentBank })
+    : rpc(client, "create_sale", buildSaleArgs(organizationId, values, clientRequestId));
 
 export const buildPaymentArgs = (organizationId, values, clientRequestId) => ({
   p_organization_id: organizationId,
@@ -155,13 +158,15 @@ export const buildPaymentArgs = (organizationId, values, clientRequestId) => ({
   p_method: values.method,
   p_client_request_id: clientRequestId,
   p_salesman_user_id: values.salesmanId || null,
-  p_reference_number: values.reference || null,
+  p_reference_number: values.method === "bank" ? null : values.reference || null,
   p_notes: values.notes || null,
   p_target_sale_id: values.saleId || null,
 });
 
 export const recordPayment = (organizationId, values, clientRequestId = requestId(), client = requireSupabase()) =>
-  rpc(client, "record_payment", buildPaymentArgs(organizationId, values, clientRequestId));
+  values.method === "bank"
+    ? rpc(client, "record_bank_payment", { ...buildPaymentArgs(organizationId, values, clientRequestId), p_bank_name: values.bank })
+    : rpc(client, "record_payment", buildPaymentArgs(organizationId, values, clientRequestId));
 
 export async function loadFinance(organizationId) {
   const client = requireSupabase();

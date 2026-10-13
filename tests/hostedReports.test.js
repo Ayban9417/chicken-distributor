@@ -112,11 +112,12 @@ test("hosted inventory report reads acquisition type from the stock trip line", 
     warehouse_stock_summary: [{ inventory_lot_id: "lot-1", available_quantity_kg: 4 }],
     inventory_lots: [{ id: "lot-1", stock_trip_line_id: "line-1", original_quantity_kg: 10 }],
     stock_trip_lines: [{ id: "line-1", stock_trip_id: "trip-1", acquisition_type: "free_from_plant" }],
-    stock_trips: [{ id: "trip-1", trip_number: "ST-001", trip_date: "2026-09-14" }],
+    stock_trips: [{ id: "trip-1", trip_number: "ST-001", reference_number: "REF-001", trip_date: "2026-09-14" }],
   });
   const result = await loadHostedReports("org-1", { start: "2026-09-01", end: "2026-09-30" }, client);
   assert.equal(result.warehouseStock[0].acquisition_type, "free_from_plant");
   assert.equal(result.warehouseStock[0].original_quantity_kg, 10);
+  assert.equal(result.warehouseStock[0].trip_reference, "REF-001");
   const lotProjection = client.queries.find((query) => query.table === "inventory_lots" && query.steps.some((step) => step[0] === "select" && step[1].includes("original_quantity_kg")));
   assert.ok(lotProjection);
   assert.equal(lotProjection.steps[0][1].includes("acquisition_type"), false);

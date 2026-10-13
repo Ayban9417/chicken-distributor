@@ -82,6 +82,7 @@ export async function loadHostedWarehouse(organizationId, client = requireSupaba
       plant: row.plant_name || "-",
       tripDate: row.trip_date,
       tripCode: row.trip_number || "-",
+      tripReference: tripMap.get(row.stock_trip_id)?.reference_number || "",
       product: row.product_name || "-",
       sizeCode: row.product_code || "",
       classType: row.class_type || "",
@@ -112,6 +113,9 @@ export async function loadHostedSalesmanInventory(organizationId, client = requi
     ? [snapshot.stock, snapshot.people]
     : await Promise.all([loadSalesmanStock(organizationId, null, client), loadPeople(organizationId, client)]);
   const lotIds = [...new Set(stock.map((row) => row.inventory_lot_id))];
+  const tripIds = [...new Set(stock.map((row) => row.stock_trip_id).filter(Boolean))];
+  const trips = tripIds.length ? fail(await client.from("stock_trips").select("id, reference_number").eq("organization_id", organizationId).in("id", tripIds)) : [];
+  const tripMap = new Map(trips.map((row) => [row.id, row]));
   const [lots, movements] = snapshot
     ? [snapshot.lots, snapshot.movements]
     : await Promise.all([
@@ -142,6 +146,7 @@ export async function loadHostedSalesmanInventory(organizationId, client = requi
       tripId: row.stock_trip_id,
       tripDate: row.trip_date,
       tripCode: row.trip_number,
+      tripReference: tripMap.get(row.stock_trip_id)?.reference_number || "",
       plant: row.plant_name,
       product: row.product_name,
       category: displayProductCategory(row.category),
@@ -171,6 +176,7 @@ export async function loadHostedSalesmanInventory(organizationId, client = requi
       plant: row.plant_name || "-",
       tripDate: row.trip_date,
       tripCode: row.trip_number || "-",
+      tripReference: tripMap.get(row.stock_trip_id)?.reference_number || "",
       product: row.product_name || "-",
       sizeCode: row.product_code || "",
       classType: row.class_type || "",
@@ -209,8 +215,9 @@ const movementTitle = (movement, people) => {
   return movement.movement_type;
 };
 
-export function buildHostedInventoryOverviewRows({ warehouseStock = [], salesmanStock = [], movements = [], tripLines = [], codes = [], classes = [], people = [], receivingReceipts = [], transferReceipts = [], sales = [] }) {
+export function buildHostedInventoryOverviewRows({ warehouseStock = [], salesmanStock = [], movements = [], tripLines = [], trips = [], codes = [], classes = [], people = [], receivingReceipts = [], transferReceipts = [], sales = [] }) {
   const lineMap = rowsById(tripLines);
+  const tripMap = rowsById(trips);
   const codeMap = rowsById(codes);
   const classMap = rowsById(classes);
   const receivingMap = rowsById(receivingReceipts);
@@ -231,7 +238,7 @@ export function buildHostedInventoryOverviewRows({ warehouseStock = [], salesman
       const reference = movement.reference_type === "receiving_receipt" ? receivingMap.get(movement.reference_id)?.receipt_number
         : movement.reference_type === "transfer_receipt" ? transferMap.get(movement.reference_id)?.receipt_number
           : movement.reference_type === "sale" ? saleMap.get(movement.reference_id)?.trust_receipt_number
-            : row.trip_number;
+            : tripMap.get(row.stock_trip_id)?.reference_number || "Not recorded";
       return {
         id: movement.id,
         type: movementTitle(movement, people),
@@ -250,6 +257,7 @@ export function buildHostedInventoryOverviewRows({ warehouseStock = [], salesman
       tripId: row.stock_trip_id,
       tripDate: row.trip_date,
       tripCode: row.trip_number,
+      tripReference: tripMap.get(row.stock_trip_id)?.reference_number || "",
       plant: row.plant_name,
       product: row.product_name,
       category: displayProductCategory(row.category),
@@ -287,6 +295,7 @@ export async function loadHostedInventoryOverview(organizationId, client = requi
   const lots = await selectIds(client, "inventory_lots", "id, stock_trip_line_id", lotIds);
   const lotMap = rowsById(lots);
   const tripLines = await selectIds(client, "stock_trip_lines", "id, bags, head_count, acquisition_type", lots.map((row) => row.stock_trip_line_id));
+  const trips = await selectIds(client, "stock_trips", "id, reference_number", warehouseStock.map((row) => row.stock_trip_id));
   const codeIds = warehouseStock.map((row) => row.code_id).filter(Boolean);
   const classIds = warehouseStock.map((row) => row.class_type_id).filter(Boolean);
   const receiptIds = movements.filter((row) => row.reference_type === "receiving_receipt").map((row) => row.reference_id);
@@ -304,6 +313,7 @@ export async function loadHostedInventoryOverview(organizationId, client = requi
     salesmanStock,
     movements,
     tripLines,
+    trips,
     codes,
     classes,
     people,

@@ -25,7 +25,8 @@ test("Warehouse matches Plant Trip summary and retains exact stock columns", asy
     assert.match(summary, /Trip Date[\s\S]*Oct 13, 2026[\s\S]*Reference Number[\s\S]*Ref-aB42[\s\S]*Whole Dressed Chicken[\s\S]*15\.125 kg[\s\S]*By-products[\s\S]*2 kg[\s\S]*Other Products[\s\S]*3 kg/);
     assert.match(summary, /grid-cols-1/);
     assert.doesNotMatch(summary, /ST-000042/);
-    assert.match(html, /Trip ST-000042 \/ Warehouse remaining: 15\.125 kg/);
+    assert.match(html, /Reference Ref-aB42 \/ Warehouse remaining: 15\.125 kg/);
+    assert.doesNotMatch(html, /ST-000042/);
     const wholeTable = html.match(/<table\b[\s\S]*?<\/table>/)?.[0];
     assert.ok(wholeTable);
     assert.match(wholeTable, /<th[^>]*>Whole Dressed Chicken<\/th>/);
@@ -65,6 +66,7 @@ test("hosted Warehouse maps the exact stock Trip reference without changing bala
   const result = await loadHostedWarehouse("org-1", { from: (table) => new Query(table) });
   assert.ok(queries.includes("stock_trips"));
   assert.equal(result.rows[0].tripReference, "Ref-aB42");
+  assert.equal(result.receivingTransfers.length, 0);
   assert.equal(result.rows[0].warehouseAvailable, 8.125);
   assert.equal(result.rows[0].costPerKg, 142);
   assert.equal(result.rows[0].bags, 4);

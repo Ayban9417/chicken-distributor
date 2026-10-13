@@ -21,8 +21,8 @@ export async function loadHostedReports(organizationId, range, client = requireS
   const base = [
     period(client.from("sales").select("id, customer_id, salesman_user_id, trust_receipt_number, sale_date, gross_sales, sales_deductions, net_sales, total_cogs, gross_profit").eq("organization_id", organizationId).neq("status", "voided"), "sale_date", range).order("sale_date", { ascending: false }),
     period(client.from("expenses").select("id, salesman_user_id, expense_date, category, amount, payment_source, description, approval_status").eq("organization_id", organizationId), "expense_date", range).order("expense_date", { ascending: false }),
-    period(client.from("payments").select("id, customer_id, salesman_user_id, payment_number, payment_date, amount, method, reference_number, notes, verification_status, voided_at").eq("organization_id", organizationId).is("voided_at", null), "payment_date", range).order("payment_date", { ascending: false }),
-    client.from("payments").select("id, customer_id, salesman_user_id, payment_number, payment_date, amount, method, reference_number, notes, verification_status, voided_at").eq("organization_id", organizationId).is("voided_at", null).order("payment_date", { ascending: false }),
+    period(client.from("payments").select("*").eq("organization_id", organizationId).is("voided_at", null), "payment_date", range).order("payment_date", { ascending: false }),
+    client.from("payments").select("*").eq("organization_id", organizationId).is("voided_at", null).order("payment_date", { ascending: false }),
     period(client.from("sales_by_plant").select("*").eq("organization_id", organizationId), "sale_date", range),
     period(client.from("daily_cash_reports").select("*").eq("organization_id", organizationId), "report_date", range).order("report_date", { ascending: false }),
     client.from("collectibles").select("*").eq("organization_id", organizationId).order("sale_date"),
@@ -61,7 +61,7 @@ export async function loadHostedReports(organizationId, range, client = requireS
   const transferReceipts = await selectIn(client, "transfer_receipts", "id, receipt_number, from_salesman_user_id, to_salesman_user_id", "id", ids(movements.filter((row) => row.reference_type === "transfer_receipt"), "reference_id"));
   const stockLots = await selectIn(client, "inventory_lots", "id, stock_trip_line_id, original_quantity_kg", "id", ids([...warehouseStock, ...salesmanStock], "inventory_lot_id"));
   const tripLines = await selectIn(client, "stock_trip_lines", "id, stock_trip_id, acquisition_type", "id", ids([...lotRows, ...stockLots], "stock_trip_line_id"));
-  const trips = await selectIn(client, "stock_trips", "id, trip_number, trip_date", "id", ids(tripLines, "stock_trip_id"));
+  const trips = await selectIn(client, "stock_trips", "id, trip_number, reference_number, trip_date", "id", ids(tripLines, "stock_trip_id"));
 
   const productMap = mapBy(products);
   const plantMap = mapBy(plants);
@@ -108,6 +108,7 @@ export async function loadHostedReports(organizationId, range, client = requireS
       product_code: codeMap.get(lot.code_id)?.code || null,
       class_type: classMap.get(lot.class_type_id)?.class_type || null,
       trip_number: trip.trip_number || "-",
+      trip_reference: trip.reference_number || "",
       trip_date: trip.trip_date || null,
     };
   });
@@ -117,6 +118,7 @@ export async function loadHostedReports(organizationId, range, client = requireS
     const tripLine = tripLineMap.get(lot.stock_trip_line_id) || {};
     return {
       ...row,
+      trip_reference: tripMap.get(tripLineMap.get(lot.stock_trip_line_id)?.stock_trip_id)?.reference_number || "",
       acquisition_type: tripLine.acquisition_type || "purchased",
       original_quantity_kg: lot.original_quantity_kg || 0,
     };

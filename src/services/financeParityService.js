@@ -39,6 +39,7 @@ export function normalizeHostedCustomers(rows, prices = [], products = []) {
     name: row.name,
     contactPerson: row.contact_person || "",
     mobile: row.mobile || "",
+    additionalPhones: row.additional_phones || [],
     address: row.address || "",
     type: title(row.customer_type) || "Other",
     paymentType: paymentType(row.payment_type),
@@ -156,6 +157,7 @@ export function normalizeHostedCollections(payments, sales, allocations) {
     amount: number(row.amount),
     method: paymentMethod(row.method),
     reference: row.reference_number || "",
+    bank: row.bank_name || "",
     notes: row.notes || "",
     verificationStatus: row.verification_status,
     createdAt: row.created_at,
@@ -183,6 +185,7 @@ export function normalizeHostedLedgerEntries(rows, sales, payments, allocations)
       type: row.entry_type === "sale" ? "OUT" : "Payment",
       allocations: allocationMap.get(row.entry_id) || [],
       reference: payment?.reference_number || "",
+      bank: payment?.bank_name || "",
       agentId: sale?.salesman_user_id || payment?.salesman_user_id || "",
       method: paymentMethod(payment?.method),
     };
@@ -225,7 +228,9 @@ export async function loadHostedFinanceParity(organizationId, client = requireSu
     ]);
   const lots = snapshot ? snapshot.lots : await selectIn(client, "inventory_lots", "*", "id", ids(saleLines, "inventory_lot_id"));
   const tripLines = snapshot ? snapshot.tripLines : await selectIn(client, "stock_trip_lines", "id, stock_trip_id", "id", ids(lots, "stock_trip_line_id"));
-  const trips = snapshot ? snapshot.trips : await selectIn(client, "stock_trips", "id, trip_number, trip_date, plant_id", "id", ids(tripLines, "stock_trip_id"));
+  const trips = snapshot ? snapshot.trips : await selectIn(client, "stock_trips", "id, trip_number, reference_number, trip_date, plant_id", "id", ids(tripLines, "stock_trip_id"));
+  const tripReferences = snapshot ? await selectIn(client, "stock_trips", "id, reference_number", "id", ids(trips, "id")) : trips;
+  const referenceByTrip = new Map(tripReferences.map((trip) => [trip.id, trip.reference_number || ""]));
   const plants = snapshot ? snapshot.plants : await selectIn(client, "plants", "id, name", "id", ids(trips, "plant_id"));
   const codes = snapshot ? snapshot.codes : await selectIn(client, "plant_product_codes", "id, code, display_name", "id", ids(saleLines, "code_id"));
   const classes = snapshot ? snapshot.classes : await selectIn(client, "plant_product_class_types", "id, class_type, display_name", "id", ids(saleLines, "class_type_id"));
@@ -244,7 +249,7 @@ export async function loadHostedFinanceParity(organizationId, client = requireSu
     const groups = groupsBySale.get(line.sale_id) || [];
     let group = groups.find((item) => item.tripId === trip.id);
     if (!group) {
-      group = { tripId: trip.id, plant, tripDate: trip.trip_date, lines: [] };
+      group = { tripId: trip.id, plant, tripDate: trip.trip_date, tripReference: referenceByTrip.get(trip.id) || "", lines: [] };
       groups.push(group);
     }
     const code = codeMap.get(line.code_id);
@@ -304,6 +309,7 @@ export async function saveHostedCustomer(organizationId, record, client = requir
     name: record.name,
     contactPerson: record.contactPerson,
     mobile: record.mobile,
+    additionalPhones: record.additionalPhones,
     address: record.address,
     customerType: String(record.type || "other").toLowerCase().replaceAll(" ", "_"),
     paymentType: ({ Cash: "cash", Credit: "credit", "Cash / Credit": "cash_credit" })[record.paymentType] || "cash",
@@ -333,6 +339,7 @@ export const hostedPaymentValues = (values) => ({
     amount: values.amount,
     method: ({ Cash: "cash", GCash: "gcash", "Bank Deposit": "bank" })[values.method] || "cash",
     reference: values.reference,
+    bank: values.bank,
     notes: values.notes,
     saleId: null,
 });

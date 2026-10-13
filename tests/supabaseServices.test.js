@@ -147,14 +147,23 @@ test("Sale payload supports full payment, no payment, and stable idempotency key
   assert.equal(client.calls[1].args.p_client_request_id, ids.request);
 });
 
-test("Payment service carries electronic reference, notes, target Sale, and Salesman", async () => {
-  const values = { customerId: ids.customer, salesmanId: ids.salesOne, saleId: "sale-1", date: "2026-09-13", amount: "750", method: "bank", reference: "BANK-100", notes: "verified deposit" };
+test("Bank Payment service carries bank name separately and no reference number", async () => {
+  const values = { customerId: ids.customer, salesmanId: ids.salesOne, saleId: "sale-1", date: "2026-09-13", amount: "750", method: "bank", bank: "BDO", reference: "", notes: "verified deposit" };
   const expected = buildPaymentArgs(ids.organization, values, ids.request);
   const client = rpcClient({ payment_number: "PAY-1" });
   await recordPayment(ids.organization, values, ids.request, client);
-  assert.deepEqual(client.calls, [{ name: "record_payment", args: expected }]);
-  assert.equal(expected.p_reference_number, "BANK-100");
+  assert.deepEqual(client.calls, [{ name: "record_bank_payment", args: { ...expected, p_bank_name: "BDO" } }]);
+  assert.equal(expected.p_reference_number, null);
   assert.equal(expected.p_notes, "verified deposit");
+});
+
+test("Bank payment at Sale selects the atomic bank Sale RPC", async () => {
+  const values = { customerId: ids.customer, salesmanId: ids.salesOne, date: "2026-09-13", trustReceipt: "TR-200", lines: [{ lotId: ids.lot, quantity: 5, price: 200 }], paymentAmount: 100, paymentMethod: "bank", paymentBank: "BPI" };
+  const client = rpcClient({ id: "sale-1" });
+  await createSale(ids.organization, values, ids.request, client);
+  assert.equal(client.calls[0].name, "create_sale_with_bank_payment");
+  assert.equal(client.calls[0].args.p_bank_name, "BPI");
+  assert.equal(client.calls[0].args.p_initial_payment.reference_number, null);
 });
 
 test("DCR service maps the lock snapshot and explanation", async () => {

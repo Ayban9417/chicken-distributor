@@ -19,7 +19,7 @@ test("full and quick creation share numeric money normalization and validation",
   const record = customerRecord(draft);
   assert.equal(record.name, "Golden Chicken House"); assert.equal(record.creditLimit, 100000); assert.equal(record.paymentDays, 7);
   assert.deepEqual(record.pricing, { Liver: 123.5, Head: 0 });
-  assert.equal(customerPrice(record, "Head"), 0); assert.equal(customerPrice(record, "Feet"), 98);
+  assert.equal(customerPrice(record, "Head"), 0); assert.equal(customerPrice(record, "Feet"), 0);
   assert.equal(customerRecord({ ...emptyCustomer(), name: "Cash customer" }).creditLimit, null);
   for (const patch of [{ name: " " }, { creditLimit: -1 }, { creditLimit: "NaN" }, { paymentDays: 1.5 }, { pricing: { Liver: -1 } }]) assert.ok(validateCustomer({ ...draft, ...patch }));
 });
@@ -34,6 +34,15 @@ test("consistent case-insensitive customer search covers names, contacts and mob
   const c = { name: "Golden Chicken House", contactPerson: "Juan Dela Cruz", mobile: "0917 123 4567" };
   for (const query of ["golden", "CHICKEN", "dela CRUZ", "0917123", "+63 917 123 4567", ""]) assert.equal(matchesCustomer(c, query), true);
   assert.equal(matchesCustomer(c, "Missing"), false);
+});
+test("additional phones normalize, search, deduplicate, and preserve zero-price defaults", () => {
+  const draft = { ...emptyCustomer(), name: "Branch Store", mobile: "0917 123 4567", additionalPhones: [" +63 918 123 4567 ", ""], pricing: {} };
+  const saved = customerRecord(draft);
+  assert.deepEqual(saved.additionalPhones, ["+63 918 123 4567"]);
+  assert.equal(matchesCustomer(saved, "0918123"), true);
+  assert.equal(duplicateCustomers([{ ...saved, id: "one" }], { ...emptyCustomer(), name: "Different", mobile: "0918 123 4567" }).length, 1);
+  assert.match(validateCustomer({ ...draft, additionalPhones: ["+63 917 123 4567"] }), /unique/);
+  assert.equal(customerPrice(saved, "Whole Dressed Chicken"), 0);
 });
 test("new customer sale, partial FIFO payments, credit and collectibles derive from one ledger", () => {
   const c = { ...customerRecord({ ...emptyCustomer(), name: "Golden Chicken House", paymentType: "Cash / Credit", creditLimit: 100000 }), id: "gold" };

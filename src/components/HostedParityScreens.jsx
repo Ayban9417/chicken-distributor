@@ -51,7 +51,7 @@ export function HostedPlantsScreen({ organizationId, role, onChanged }) {
       setTrips={() => {}}
       onStockIn={async (trip) => {
         const saved = await createHostedStockIn(organizationId, trip);
-        setNotice(`${saved.trip_number} added to Warehouse.`);
+        setNotice(`Trip ${trip.reference?.trim() || "without a reference number"} added to Warehouse.`);
         refresh();
         return saved;
       }}
@@ -205,6 +205,7 @@ export function HostedSalesScreen({ organizationId, role, userId, onChanged, onS
             name: record.name,
             contactPerson: record.contactPerson,
             mobile: record.mobile,
+            additionalPhones: record.additionalPhones,
             address: record.address,
             customerType: record.type?.toLowerCase().replaceAll(" ", "_") || "other",
             paymentType: ({ Cash: "cash", Credit: "credit", "Cash / Credit": "cash_credit" })[record.paymentType] || "cash",

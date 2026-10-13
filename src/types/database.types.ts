@@ -140,6 +140,7 @@ export type Database = {
       customers: {
         Row: {
           active: boolean
+          additional_phones: string[]
           address: string | null
           contact_person: string | null
           created_at: string
@@ -155,6 +156,7 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          additional_phones?: string[]
           address?: string | null
           contact_person?: string | null
           created_at?: string
@@ -170,6 +172,7 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          additional_phones?: string[]
           address?: string | null
           contact_person?: string | null
           created_at?: string
@@ -725,6 +728,7 @@ export type Database = {
       payments: {
         Row: {
           amount: number
+          bank_name: string | null
           client_request_id: string
           created_at: string
           created_by: string
@@ -744,6 +748,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          bank_name?: string | null
           client_request_id: string
           created_at?: string
           created_by: string
@@ -763,6 +768,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          bank_name?: string | null
           client_request_id?: string
           created_at?: string
           created_by?: string
@@ -2435,6 +2441,22 @@ export type Database = {
       }
     }
     Functions: {
+      create_sale_with_bank_payment: {
+        Args: {
+          p_bank_name: string
+          p_client_request_id: string
+          p_customer_id: string
+          p_initial_payment: Json
+          p_lines: Json
+          p_notes: string | null
+          p_organization_id: string
+          p_sale_date: string
+          p_sales_deductions: number
+          p_salesman_user_id: string
+          p_trust_receipt_number: string
+        }
+        Returns: Json
+      }
       create_sale: {
         Args: {
           p_client_request_id: string
@@ -2460,6 +2482,22 @@ export type Database = {
           p_plant_id: string
           p_reference_number?: string
           p_trip_date: string
+        }
+        Returns: Json
+      }
+      record_bank_payment: {
+        Args: {
+          p_amount: number
+          p_bank_name: string
+          p_client_request_id: string
+          p_customer_id: string
+          p_method: string
+          p_notes: string | null
+          p_organization_id: string
+          p_payment_date: string
+          p_reference_number: string | null
+          p_salesman_user_id: string | null
+          p_target_sale_id: string | null
         }
         Returns: Json
       }

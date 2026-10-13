@@ -8,7 +8,8 @@ export function validateSalePayment(payment, total) {
   if (amount > total) return "Payment cannot exceed Sale Total.";
   if (!amount) return "";
   if (!["Cash", "GCash", "Bank Deposit"].includes(payment.method)) return "Select a payment method.";
-  if (payment.method !== "Cash" && !payment.reference.trim()) return "Reference Number is required for electronic payments.";
+  if (payment.method === "GCash" && !payment.reference.trim()) return "GCash Reference Number is required.";
+  if (payment.method === "Bank Deposit" && !payment.bank.trim()) return "Select a bank.";
   return "";
 }
 export const paymentAtSaleStatus = (total, amount) => amount >= total && total > 0 ? "PAID" : amount > 0 ? "PARTIALLY PAID" : "UNPAID";
@@ -23,7 +24,7 @@ export function saleFinancialEvents(out, payment, paymentRef, uid) {
   // Later payments still use the existing FIFO allocation workflow.
   const allocations = [{ invoiceRef: out.ref, amount }];
   const collection = { id: uid("col"), ref: paymentRef, customerId: out.customerId, agentId: out.agentId, date: out.date,
-    amount, method: payment.method, reference: payment.reference.trim(), bank: payment.bank.trim(), notes: payment.notes?.trim() || "", allocations,
+    amount, method: payment.method, reference: payment.method === "GCash" ? payment.reference.trim() : "", bank: payment.method === "Bank Deposit" ? payment.bank.trim() : "", notes: payment.notes?.trim() || "", allocations,
     outId: out.id, saleRef: out.ref, source: "Payment at Sale",
     destination: payment.method === "Cash" ? "Cash held by Salesman until remittance" : payment.method === "GCash" ? "Owner GCash" : "Owner Bank Account" };
   const entry = { ...collection, id: uid("led"), type: "Payment", description: payment.method + " Payment at Sale", charge: 0, payment: amount };

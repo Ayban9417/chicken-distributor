@@ -10,20 +10,10 @@ export const shortDate = (date) =>
     new Date(`${date}T00:00:00`)
   );
 
-export const dayKey = (date) => date;
+export const tripReferenceLabel = (trip) =>
+  String(trip?.tripReference ?? trip?.trip_reference ?? trip?.reference ?? trip?.reference_number ?? "").trim() || "Not recorded";
 
-export const generalPrice = {
-  "Whole Dressed Chicken": 190,
-  Liver: 130,
-  Gizzard: 135,
-  Feet: 98,
-  Head: 75,
-  Neck: 80,
-  Intestine: 70,
-  "Small Intestine": 70,
-  "Large Intestine": 70,
-  Other: 100,
-};
+export const dayKey = (date) => date;
 
 export function getAgentName(agents, agentId) {
   return agents.find((agent) => agent.id === agentId)?.name || "Unassigned";
@@ -233,7 +223,7 @@ export function allocateOldestFirst(ledgerEntries, customerId, amount, date = "9
 }
 
 export function customerPrice(customer, product) {
-  return customer?.pricing?.[product] ?? generalPrice[product] ?? 0;
+  return customer?.pricing?.[product] ?? 0;
 }
 
 export function buildDcr({ collections, expenses, customers, agentId, date }) {

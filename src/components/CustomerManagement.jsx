@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Plus, Pencil, Trash2, ArrowLeft, Save } from "lucide-react";
 import { Button, Badge, Drawer, Field, inputClass, MoneyInput, ResponsiveTable, SectionHeader } from "./ui";
-import { currency, customerBalance, generalPrice } from "../utils/business";
+import { currency, customerBalance } from "../utils/business";
 import { emptyCustomer, duplicateCustomers, matchesCustomer, hasCustomerHistory, validateCustomer, customerRecord, allowsCredit } from "../utils/customers";
 
 export function CustomerSearch({ value, onChange }) {
@@ -18,7 +18,7 @@ export function CustomerSelector({ customers, value, onChange, onAdd, label = "S
   </div>;
 }
 export function CustomerEditor({ customer, customers, quick = false, initialName = "", productNames, onSave, onExisting, onClose, saveError = "" }) {
-  const [draft, setDraft] = useState(() => customer ? { ...structuredClone(customer), creditLimit: customer.creditLimit ?? "", paymentDays: customer.paymentDays ?? "" } : { ...emptyCustomer(), name: initialName });
+  const [draft, setDraft] = useState(() => customer ? { ...structuredClone(customer), additionalPhones: [...(customer.additionalPhones || [])], creditLimit: customer.creditLimit ?? "", paymentDays: customer.paymentDays ?? "" } : { ...emptyCustomer(), name: initialName });
   const [error, setError] = useState("");
   const [duplicates, setDuplicates] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -46,14 +46,16 @@ export function CustomerEditor({ customer, customers, quick = false, initialName
       <Field label="Customer Name"><input required className={inputClass()} value={draft.name} onChange={(e) => patch({ name: e.target.value })} /></Field>
       <Field label="Contact Person"><input className={inputClass()} value={draft.contactPerson} onChange={(e) => patch({ contactPerson: e.target.value })} /></Field>
       <Field label="Mobile Number"><input type="tel" className={inputClass()} value={draft.mobile} onChange={(e) => patch({ mobile: e.target.value })} /></Field>
+      <div className="sm:col-span-2 space-y-2">
+        {(draft.additionalPhones || []).map((number, index) => <div key={index} className="flex items-end gap-2"><div className="min-w-0 flex-1"><Field label={`Additional Phone ${index + 1}`}><input type="tel" className={inputClass()} value={number} onChange={(e) => patch({ additionalPhones: draft.additionalPhones.map((item, position) => position === index ? e.target.value : item) })} /></Field></div><Button variant="ghost" aria-label={`Remove additional phone ${index + 1}`} title="Remove phone" onClick={() => patch({ additionalPhones: draft.additionalPhones.filter((_, position) => position !== index) })}><Trash2 size={17} /></Button></div>)}
+        <Button variant="secondary" onClick={() => patch({ additionalPhones: [...(draft.additionalPhones || []), ""] })}><Plus size={17} />Add Another Phone Number</Button>
+      </div>
       <Field label="Address"><input className={inputClass()} value={draft.address} onChange={(e) => patch({ address: e.target.value })} /></Field>
-      {!quick && <Field label="Customer Type"><input className={inputClass()} list="customer-types" value={draft.type} onChange={(e) => patch({ type: e.target.value })} /><datalist id="customer-types">{["Retailer", "Restaurant", "Reseller", "Market Vendor", "Institution", "Other"].map((t) => <option key={t}>{t}</option>)}</datalist></Field>}
       <Field label="Payment Type"><select className={inputClass()} value={draft.paymentType} onChange={(e) => patch({ paymentType: e.target.value })}><option>Cash</option><option>Credit</option><option>Cash / Credit</option></select></Field>
-      {allowsCredit(draft) && <Field label="Credit Limit"><MoneyInput value={draft.creditLimit} onChange={(e) => patch({ creditLimit: e.target.value })} /></Field>}
       {!quick && allowsCredit(draft) && <Field label="Payment Days"><input type="number" min="0" step="1" className={inputClass()} value={draft.paymentDays} onChange={(e) => patch({ paymentDays: e.target.value })} /></Field>}
       {!quick && <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={draft.active} onChange={(e) => patch({ active: e.target.checked })} />Active Customer</label>}
     </div>
-    {!quick && <section className="report-section"><h3 className="mb-3 font-bold">Customer Selling Prices</h3>{[...new Set([...productNames, ...Object.keys(draft.pricing)])].map((product) => <div key={product} className="mb-3 grid items-end gap-3 sm:grid-cols-2"><Field label={product + " Selling Price/kg"}><MoneyInput value={draft.pricing[product] ?? ""} onChange={(e) => patch({ pricing: { ...draft.pricing, [product]: e.target.value } })} /></Field><p className="text-sm text-slate-500">Default: {currency(generalPrice[product] || 0)}/kg</p></div>)}</section>}
+    {!quick && <section className="report-section"><h3 className="mb-3 font-bold">Customer Selling Prices</h3>{[...new Set([...productNames, ...Object.keys(draft.pricing)])].map((product) => <div key={product} className="mb-3"><Field label={product + " Selling Price/kg"}><MoneyInput value={draft.pricing[product] ?? 0} onChange={(e) => patch({ pricing: { ...draft.pricing, [product]: e.target.value } })} /></Field></div>)}</section>}
     {error && <p role="alert" className="mt-4 text-rose-700">{error}</p>}
     {saveError && <p role="alert" className="mt-4 text-rose-700">{saveError}</p>}
     {!!duplicates.length && <section role="alert" className="mt-4 border-l-4 border-amber-500 bg-amber-50 p-4"><h3 className="font-bold">Possible existing customer</h3>{duplicates.map((c) => <div key={c.id} className="mt-3"><p className="font-semibold">{c.name}{c.active === false ? " (Inactive)" : ""}</p><p>{c.mobile || "No mobile recorded"}</p><Button variant="secondary" className="mt-2" disabled={saving || (quick && c.active === false)} onClick={() => onExisting(c)}>Use Existing Customer</Button></div>)}<Button variant="secondary" className="mt-3" disabled={saving} onClick={() => save(true)}>{customer ? "Save Anyway" : "Create Anyway"}</Button></section>}
@@ -63,6 +65,6 @@ export function CustomerEditor({ customer, customers, quick = false, initialName
 export function CustomerManagement({ state, onEdit, onAdd, onLedger, onToggle, onDelete, onBack }) {
   const [query, setQuery] = useState("");
   return <div className="customer-management"><Button variant="ghost" onClick={onBack}><ArrowLeft size={17} />Administration</Button><SectionHeader title="Manage Customers" action={<Button onClick={onAdd}><Plus size={17} />Add Customer</Button>} /><div className="mb-4"><CustomerSearch value={query} onChange={setQuery} /></div>
-    <ResponsiveTable columns={["Customer", "Type", "Payment Type", "Credit Limit", "Outstanding", "Status", "Actions"]} rows={state.customers.filter((c) => matchesCustomer(c, query)).map((c) => [c.name, c.type, c.paymentType, c.creditLimit === null ? "Not set" : currency(c.creditLimit), currency(customerBalance(state.ledgerEntries, c.id)), <Badge tone={c.active ? "green" : "slate"}>{c.active ? "Active" : "Inactive"}</Badge>, <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => onEdit(c)}><Pencil size={16} />Edit</Button><Button variant="secondary" onClick={() => onEdit(c)}>Pricing</Button><Button variant="secondary" onClick={() => onLedger(c.id)}>View Ledger</Button><Button variant="secondary" onClick={() => onToggle(c)}>{c.active ? "Deactivate" : "Activate"}</Button><Button variant="ghost" aria-label={"Delete " + c.name} title={hasCustomerHistory(c.id, state) ? "Historical transactions: deactivate instead" : "Delete unused customer"} disabled={hasCustomerHistory(c.id, state)} onClick={() => onDelete(c)}><Trash2 size={17} /></Button></div>])} />
+    <ResponsiveTable columns={["Customer", "Phone Numbers", "Payment Type", "Outstanding", "Status", "Actions"]} rows={state.customers.filter((c) => matchesCustomer(c, query)).map((c) => [c.name, [c.mobile, ...(c.additionalPhones || [])].filter(Boolean).join(" / ") || "-", c.paymentType, currency(customerBalance(state.ledgerEntries, c.id)), <Badge tone={c.active ? "green" : "slate"}>{c.active ? "Active" : "Inactive"}</Badge>, <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => onEdit(c)}><Pencil size={16} />Edit</Button><Button variant="secondary" onClick={() => onEdit(c)}>Pricing</Button><Button variant="secondary" onClick={() => onLedger(c.id)}>View Ledger</Button><Button variant="secondary" onClick={() => onToggle(c)}>{c.active ? "Deactivate" : "Activate"}</Button><Button variant="ghost" aria-label={"Delete " + c.name} title={hasCustomerHistory(c.id, state) ? "Historical transactions: deactivate instead" : "Delete unused customer"} disabled={hasCustomerHistory(c.id, state)} onClick={() => onDelete(c)}><Trash2 size={17} /></Button></div>])} />
   </div>;
 }

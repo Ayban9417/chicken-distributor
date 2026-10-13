@@ -28,6 +28,7 @@ export async function loadHostedSales(organizationId, client = requireSupabase()
     name: row.name,
     contactPerson: row.contact_person || "",
     mobile: row.mobile || "",
+    additionalPhones: row.additional_phones || [],
     address: row.address || "",
     type: row.customer_type || "Other",
     paymentType: titlePayment(row.payment_type),
@@ -38,8 +39,11 @@ export async function loadHostedSales(organizationId, client = requireSupabase()
     pricing: Object.fromEntries(prices.filter((price) => price.customer_id === row.id).map((price) => [productMap.get(price.product_id), number(price.selling_price_per_kg)]).filter(([name]) => name)),
   }));
   const tripMap = new Map();
+  const tripIds = [...new Set(stock.map((row) => row.stock_trip_id).filter(Boolean))];
+  const tripRows = tripIds.length ? fail(await client.from("stock_trips").select("id, reference_number").eq("organization_id", organizationId).in("id", tripIds)) : [];
+  const referenceByTrip = new Map(tripRows.map((row) => [row.id, row.reference_number || ""]));
   for (const row of stock) {
-    const trip = tripMap.get(row.stock_trip_id) || { id: row.stock_trip_id, code: row.trip_number, date: row.trip_date, plant: row.plant_name, products: [] };
+    const trip = tripMap.get(row.stock_trip_id) || { id: row.stock_trip_id, code: row.trip_number, reference: referenceByTrip.get(row.stock_trip_id) || "", date: row.trip_date, plant: row.plant_name, products: [] };
     let product = trip.products.find((item) => item.lotId === row.inventory_lot_id);
     if (!product) {
       product = { lotId: row.inventory_lot_id, name: row.product_name, category: row.category === "whole_chicken" ? "Whole Chicken" : "By-products", sizeCode: row.product_code || "", classType: row.class_type || "", costPerKg: number(row.cost_per_kg), originalQty: number(row.available_quantity_kg), availableBySalesman: {} };
@@ -66,6 +70,7 @@ export function hostedSaleValues(order) {
     paymentAmount: payment ? payment.amount : 0,
     paymentMethod: payment ? ({ Cash: "cash", GCash: "gcash", "Bank Deposit": "bank" }[payment.method] || "cash") : "cash",
     paymentReference: payment?.reference || "",
+    paymentBank: payment?.bank || "",
     paymentNotes: payment?.notes || "",
   };
 }

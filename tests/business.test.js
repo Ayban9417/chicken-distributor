@@ -108,10 +108,10 @@ test("payment validation rejects missing references, overpayments and invoice ov
   const p = { customerId: "cust-abc", amount: 1000, date: demo.demoToday, method: "Cash", reference: "", bank: "BDO" };
   const allocations = allocateOldestFirst(state.ledgerEntries, p.customerId, p.amount, p.date);
   assert.equal(validatePayment(p, state.ledgerEntries, allocations), "");
-  for (const method of ["GCash", "Bank Deposit"]) {
-    assert.match(validatePayment({ ...p, method }, state.ledgerEntries, allocations), /Reference/);
-    assert.equal(validatePayment({ ...p, method, reference: "REF-123" }, state.ledgerEntries, allocations), "");
-  }
+  assert.match(validatePayment({ ...p, method: "GCash" }, state.ledgerEntries, allocations), /Reference/);
+  assert.equal(validatePayment({ ...p, method: "GCash", reference: "REF-123" }, state.ledgerEntries, allocations), "");
+  assert.equal(validatePayment({ ...p, method: "Bank Deposit" }, state.ledgerEntries, allocations), "");
+  assert.match(validatePayment({ ...p, method: "Bank Deposit", bank: "" }, state.ledgerEntries, allocations), /bank/);
   assert.match(validatePayment({ ...p, amount: 999999 }, state.ledgerEntries, allocations), /full payment/);
   assert.match(validatePayment(p, state.ledgerEntries, [{ invoiceRef: "SALE-1048", amount: 1000 }]), /balance/);
 });

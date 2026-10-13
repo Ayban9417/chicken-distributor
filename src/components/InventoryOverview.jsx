@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Banknote, ChevronRight, PackageCheck, Search, Truck, Users } from "lucide-react";
 import { Badge, Button, Field, inputClass, PlantName, SectionHeader, StatCard, StatMini } from "./ui";
-import { currency, kg, productLabel, shortDate } from "../utils/business";
+import { currency, kg, productLabel, shortDate, tripReferenceLabel } from "../utils/business";
 import { filterInventoryRows, groupInventoryByTrip, inventoryPlantSummaries, summarizeInventoryRows } from "../utils/inventoryOverview";
 
 const isWholeChicken = (row) => row.category === "Whole Chicken" || row.product === "Whole Dressed Chicken";
@@ -112,7 +112,7 @@ export function InventoryOverview({ rows = [], onSelect, onStockIn, initialPlant
       <StatCard label="Total Remaining KG" value={kg(selectedSummary.remainingQty)} detail={currency(selectedSummary.inventoryCostValue) + " inventory value"} icon={Banknote} tone="green" />
     </div>
     <div className="mt-5 grid gap-3 md:grid-cols-[220px_1fr_190px]">
-      <Field label="Trip / Date"><select className={inputClass()} value={tripFilter} onChange={(event) => setTripFilter(event.target.value)}><option value="All">View All Trips</option>{tripOptions.map((trip) => <option key={trip.tripId} value={trip.tripId}>{shortDate(trip.tripDate)} / {trip.tripCode}</option>)}</select></Field>
+      <Field label="Trip / Date"><select className={inputClass()} value={tripFilter} onChange={(event) => setTripFilter(event.target.value)}><option value="All">View All Trips</option>{tripOptions.map((trip) => <option key={trip.tripId} value={trip.tripId}>{shortDate(trip.tripDate)} / {tripReferenceLabel(trip)}</option>)}</select></Field>
       <Field label="Product Search"><div className="relative"><Search className="pointer-events-none absolute left-3 top-3 text-slate-400" size={18} /><input className={`${inputClass()} pl-10`} placeholder="Search product, code, class, or trip" value={productQuery} onChange={(event) => setProductQuery(event.target.value)} /></div></Field>
       <Field label="Product Type"><select className={inputClass()} value={productMode} onChange={(event) => setProductMode(event.target.value)}><option>All Products</option><option>Whole Chicken</option><option>By-products</option></select></Field>
     </div>
@@ -122,7 +122,7 @@ export function InventoryOverview({ rows = [], onSelect, onStockIn, initialPlant
         const byProducts = group.rows.filter((row) => !isWholeChicken(row));
         const totals = summarizeInventoryRows(group.rows);
         return <section key={group.tripId} className="border-t-2 border-slate-300 pt-5">
-          <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm font-semibold uppercase text-blue-700">Trip / Date</p><h2 className="mt-1 text-xl font-extrabold uppercase">{shortDate(group.tripDate)}</h2><p className="text-sm font-semibold text-slate-500">{group.tripCode}</p></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-3"><StatMini label="Original" value={kg(totals.originalQty)} /><StatMini label="Remaining" value={kg(totals.remainingQty)} /><StatMini label="Sold" value={kg(totals.soldQty)} /></div></div>
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm font-semibold uppercase text-blue-700">Trip / Date</p><h2 className="mt-1 text-xl font-extrabold uppercase">{shortDate(group.tripDate)}</h2><p className="text-sm font-semibold text-slate-500">{tripReferenceLabel(group)}</p></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-3"><StatMini label="Original" value={kg(totals.originalQty)} /><StatMini label="Remaining" value={kg(totals.remainingQty)} /><StatMini label="Sold" value={kg(totals.soldQty)} /></div></div>
           <StockGroup title="Whole Dressed Chicken" rows={whole} onSelect={onSelect} whole />
           <StockGroup title="By-products" rows={byProducts} onSelect={onSelect} />
         </section>;

@@ -105,7 +105,7 @@ export function filterInventoryRows(rows = [], { plant = "", tripId = "All", pro
   const normalizedQuery = productQuery.trim().toLowerCase();
   return rows.filter((row) => {
     const isWhole = row.category === "Whole Chicken" || row.product === "Whole Dressed Chicken";
-    const searchable = [row.product, row.sizeCode, row.sizeCodeLabel, row.classType, row.classTypeLabel, row.tripCode].filter(Boolean).join(" ").toLowerCase();
+    const searchable = [row.product, row.sizeCode, row.sizeCodeLabel, row.classType, row.classTypeLabel, row.tripReference].filter(Boolean).join(" ").toLowerCase();
     return (!plant || row.plant === plant)
       && (tripId === "All" || row.tripId === tripId)
       && (!normalizedQuery || searchable.includes(normalizedQuery))
@@ -115,7 +115,7 @@ export function filterInventoryRows(rows = [], { plant = "", tripId = "All", pro
 
 export function groupInventoryByTrip(rows = []) {
   const groups = [...rows.reduce((map, row) => {
-    if (!map.has(row.tripId)) map.set(row.tripId, { tripId: row.tripId, tripDate: row.tripDate, tripCode: row.tripCode, rows: [] });
+    if (!map.has(row.tripId)) map.set(row.tripId, { tripId: row.tripId, tripDate: row.tripDate, tripCode: row.tripCode, tripReference: row.tripReference, rows: [] });
     map.get(row.tripId).rows.push(row);
     return map;
   }, new Map()).values()];

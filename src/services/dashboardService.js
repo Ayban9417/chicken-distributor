@@ -11,7 +11,7 @@ const fail = (result) => {
 
 function tripQuery(client, organizationId, range) {
   return client.from("stock_trips")
-    .select("id, plant_id, trip_number, trip_date")
+    .select("id, plant_id, trip_number, reference_number, trip_date")
     .eq("organization_id", organizationId)
     .neq("status", "cancelled")
     .gte("trip_date", range.start)

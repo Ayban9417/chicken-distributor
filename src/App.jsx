@@ -51,7 +51,6 @@ import {
   currency,
   customerBalance,
   customerPrice,
-  generalPrice,
   getAgentName,
   getAcquisitionCost,
   getAvailableQty,
@@ -61,6 +60,7 @@ import {
   kg,
   ledgerWithRunningBalance,
   shortDate,
+  tripReferenceLabel,
 } from "./utils/business";
 
 import { Badge, Button, Field, inputClass, StatCard, Drawer, SectionHeader, ResponsiveTable, StatMini, Info, MoneyInput, PlantName, UserContext, useUsers } from "./components/ui";
@@ -74,7 +74,7 @@ import { PlantContext } from "./components/ui";
 import { isWholeChicken } from "./utils/business";
 import { groupTripProducts, tripKilograms, wholeChickenLineLabel } from "./utils/tripPresentation";
 import { CustomerManagement, CustomerEditor, CustomerSelector, CustomerSearch } from "./components/CustomerManagement";
-import { normalizeCustomer, customerPermissions, matchesCustomer, hasCustomerHistory, availableCredit, exceedsCredit } from "./utils/customers";
+import { normalizeCustomer, customerPermissions, matchesCustomer, hasCustomerHistory } from "./utils/customers";
 import { emptySalePayment, initialPaymentAmount, validateSalePayment, paymentAtSaleStatus, saleFinancialEvents } from "./utils/salePayment";
 import { compareInventoryProducts, compareInventoryTrips } from "./utils/inventory";
 import { Warehouse, SalesmanInventory } from "./components/InventoryFlow";
@@ -93,6 +93,7 @@ const tripForm = (plant, date = today) => ({ plantId: plant?.id || "", plant: pl
 
 const categories = ["Fuel", "Parking", "Toll", "Meals", "Repairs", "Delivery Expense", "Other"];
 const paymentMethods = ["Cash", "GCash", "Bank Deposit"];
+const bankNames = ["Landbank", "BDO", "BPI", "Metrobank"];
 const wholeChickenProduct = "Whole Dressed Chicken";
 
 export default function App() {
@@ -367,7 +368,7 @@ export default function App() {
 
       {toast && <div className="fixed right-4 top-20 z-50 rounded-lg bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-xl">{toast}</div>}
       {resetOpen && permissions.manage && <Drawer title="Reset all operational demo data?" onClose={() => setResetOpen(false)}><p>This clears Stock In, Warehouse and Salesman transfers, Inventory, Sales, Payments, Ledgers, DCRs, expenses and report activity. Plant and system configuration will remain.</p><p className="mt-3">Customers, DTR entries, payroll runs, truck assets, maintenance activity and audit activity will also be cleared. This cannot be undone.</p><div className="mt-6 flex flex-wrap gap-3"><Button variant="secondary" onClick={() => setResetOpen(false)}>Cancel</Button><Button variant="danger" onClick={resetOperationalData}>Reset Operational Data</Button></div></Drawer>}
-      {customerEditor && <CustomerEditor {...customerEditor} customers={customers} productNames={[...new Set([...Object.keys(generalPrice), ...plantConfigs.flatMap((p) => p.products.map((product) => product.productName)), ...trips.flatMap((trip) => trip.products.map((p) => p.name))])]} onSave={saveCustomer} onClose={() => setCustomerEditor(null)} onExisting={(c) => { customerEditor.onSelected?.(c); if (!customerEditor.quick) goCustomer("customers", c.id); setCustomerEditor(null); }} />}
+      {customerEditor && <CustomerEditor {...customerEditor} customers={customers} productNames={[...new Set([...plantConfigs.flatMap((p) => p.products.map((product) => product.productName)), ...trips.flatMap((trip) => trip.products.map((p) => p.name))])]} onSave={saveCustomer} onClose={() => setCustomerEditor(null)} onExisting={(c) => { customerEditor.onSelected?.(c); if (!customerEditor.quick) goCustomer("customers", c.id); setCustomerEditor(null); }} />}
 
       {drawer && (
         <Drawer title={drawerTitle(drawer)} onClose={() => setDrawer(null)}>
@@ -453,8 +454,8 @@ export function Trips({ trips, setTrips, addAudit, pushToast, plantConfigs, onSt
         setTrips((items) => [trip, ...items]);
       }
       setError(""); setForm(tripForm(plant, currentDate));
-      addAudit?.("Confirmed Stock In " + trip.code, "Owner / Admin");
-      pushToast?.(trip.code + " added to Warehouse");
+      addAudit?.("Confirmed Stock In " + tripReferenceLabel(trip), "Owner / Admin");
+      pushToast?.("Trip " + tripReferenceLabel(trip) + " added to Warehouse");
     } catch (reason) {
       setError(reason?.message || "Unable to confirm Stock In. Please try again.");
     } finally {
@@ -570,13 +571,13 @@ function Inventory({ inventoryRows, onSelect, onStockIn }) {
 
   const tripOptions = [...selectedRows.reduce((map, row) => {
     if (!map.has(row.tripId)) {
-      map.set(row.tripId, { tripId: row.tripId, tripDate: row.tripDate, tripCode: row.tripCode });
+      map.set(row.tripId, { tripId: row.tripId, tripDate: row.tripDate, tripCode: row.tripCode, tripReference: row.tripReference });
     }
     return map;
   }, new Map()).values()].sort(compareInventoryTrips);
   const productFilteredRows = selectedRows.filter((row) => {
     const matchesTrip = tripFilter === "All" || row.tripId === tripFilter;
-    const matchesProductText = [row.product, row.sizeCode, row.tripCode].filter(Boolean).join(" ").toLowerCase().includes(productQuery.toLowerCase());
+    const matchesProductText = [row.product, row.sizeCode, row.tripReference].filter(Boolean).join(" ").toLowerCase().includes(productQuery.toLowerCase());
     const matchesMode =
       productMode === "All Products" ||
       (productMode === "Whole Chicken" && isWholeChicken(row)) ||
@@ -676,7 +677,7 @@ function Inventory({ inventoryRows, onSelect, onStockIn }) {
         <Field label="Trip Date">
           <select className={inputClass()} value={tripFilter} onChange={(event) => setTripFilter(event.target.value)}>
             <option>All</option>
-            {tripOptions.map((trip) => <option key={trip.tripId} value={trip.tripId}>{shortDate(trip.tripDate)} - {trip.tripCode}</option>)}
+            {tripOptions.map((trip) => <option key={trip.tripId} value={trip.tripId}>{shortDate(trip.tripDate)} - {tripReferenceLabel(trip)}</option>)}
           </select>
         </Field>
         <Field label="Product Search">
@@ -707,7 +708,7 @@ function Inventory({ inventoryRows, onSelect, onStockIn }) {
               <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <h2 className="text-lg font-bold text-slate-950">Trip - {shortDate(group.tripDate)}</h2>
-                  <p className="text-sm font-semibold text-slate-500">{group.tripCode}</p>
+                  <p className="text-sm font-semibold text-slate-500">{tripReferenceLabel(group)}</p>
                   <p className="mt-2 text-sm font-semibold">Whole Chicken: {kg(sum(wholeChicken, "remainingQty"))} / By-products: {kg(sum(byProducts, "remainingQty"))} / Total Remaining: {kg(sum(group.rows, "remainingQty"))}</p>
                 </div>
                 <Badge tone="blue">{group.rows.length} stock lines / {group.rows.filter((row) => row.remainingQty === 0).length} sold out</Badge>
@@ -794,7 +795,7 @@ export function InventoryDetail({ row, showCost = true }) {
         <p className="text-sm font-bold text-[#146ef5]">{row.plant}</p>
         <h3 className="mt-1 text-xl font-extrabold uppercase text-slate-950">{productLabel(row.product, row.sizeCode, row.classType, row.sizeCodeLabel, row.classTypeLabel)}</h3>
         <Badge tone={row.acquisitionType === "Free from Plant" ? "green" : "slate"}>{row.acquisitionType === "Free from Plant" ? "FREE FROM PLANT" : "Purchased"}</Badge>
-        <p className="mt-1 text-sm font-semibold text-slate-500">Trip: {shortDate(row.tripDate)} - {row.tripCode}</p>
+        <p className="mt-1 text-sm font-semibold text-slate-500">Trip: {shortDate(row.tripDate)} - {tripReferenceLabel(row)}</p>
       </div>
       <div className="grid grid-cols-2 gap-3">
         {[
@@ -995,6 +996,7 @@ export function OutOrders({ customers, trips, movements = [], receivingTransfers
         tripId: group.tripId,
         plant: trip.plant,
         tripDate: trip.date,
+        tripReference: trip.reference,
         lines: group.lines
           .filter((line) => Number(line.qty || 0) > 0)
           .map((line) => ({ ...line, qty: Number(line.qty), price: Number(line.price), subtotal: money(Number(line.qty || 0) * Number(line.price || 0)) })),
@@ -1016,7 +1018,6 @@ export function OutOrders({ customers, trips, movements = [], receivingTransfers
       return;
     }
     const financial = saleFinancialEvents(out, salePayment, "PAY-" + (3000 + collections.length + 1), uid);
-    if (exceedsCredit(selectedCustomer, ledgerEntries, total - initialPaid)) addAudit("Credit Limit Exceeded: " + ref + " / " + selectedCustomer.name + " (warning-only demo policy)", getAgentName(agents, selectedAgentId));
     setOuts((items) => [out, ...items]);
     setMovements((items) => [
       ...items,
@@ -1094,14 +1095,10 @@ export function OutOrders({ customers, trips, movements = [], receivingTransfers
           <CustomerSelector customers={customers.filter((c) => c.active)} value={customerId} onChange={handleCustomerChange} onAdd={onQuickAdd ? (name, clearSearch) => onQuickAdd(name, (customer) => { handleCustomerChange(customer.id, customer); clearSearch(); }) : null} />
           {selectedCustomer.id && <div className="mt-4 space-y-3 rounded-lg bg-slate-50 p-3">
             <p className="text-xs font-extrabold uppercase text-blue-700">Customer</p><p className="customer-name uppercase">{selectedCustomer.name}</p>
-            <Info label="Customer Type" value={selectedCustomer.type || "-"} />
             <Info label="Outstanding Balance" value={currency(customerBalance(ledgerEntries, customerId))} />
-            <Info label="Credit Status" value={selectedCustomer.creditStatus || "-"} />
             <Info label="Payment Type" value={selectedCustomer.paymentType || "-"} />
-            <Info label="Available Credit" value={availableCredit(selectedCustomer, ledgerEntries) === null ? "Not set" : currency(availableCredit(selectedCustomer, ledgerEntries))} />
             <Info label="Price for Whole Chicken" value={currency(customerPrice(selectedCustomer, "Whole Dressed Chicken")) + "/kg"} />
           </div>}
-          {selectedCustomer.active && exceedsCredit(selectedCustomer, ledgerEntries, total - initialPaid) && <p role="alert" className="mt-3 border-l-4 border-amber-500 bg-amber-50 p-3 font-semibold text-amber-900">Credit Limit Exceeded</p>}
           <div className="mt-4 grid gap-3 sm:grid-cols-3 2xl:grid-cols-1">
             <Field label="Trust Receipt No."><input className={inputClass()} placeholder="TR-001" value={trustReceipt} onChange={(e) => setTrustReceipt(e.target.value)} /></Field>
             <Field label="Sale Date"><input className={inputClass()} type="date" value={saleDate} onInput={(e) => setSaleDate(e.target.value)} /></Field>
@@ -1137,7 +1134,7 @@ export function OutOrders({ customers, trips, movements = [], receivingTransfers
                   </Field>
                   <Field label={groupIndex === 0 ? "Step 3 - Select Trip" : "Select Trip"}>
                     <select className={inputClass()} value={group.tripId} onChange={(e) => changeGroupTrip(group.id, e.target.value)}>
-                      {tripOptions.map((tripOption) => <option key={tripOption.id} value={tripOption.id}>{shortDate(tripOption.date)} - {tripOption.code}</option>)}
+                      {tripOptions.map((tripOption) => <option key={tripOption.id} value={tripOption.id}>{shortDate(tripOption.date)} - {tripReferenceLabel(tripOption)}</option>)}
                     </select>
                   </Field>
                 </div>
@@ -1197,7 +1194,7 @@ export function OutOrders({ customers, trips, movements = [], receivingTransfers
                   {summaryGroups.length === 0 && <p>No products added yet.</p>}
                   {summaryGroups.map((group) => (
                     <div key={`summary-${group.id}`} className={summaryGroups.length > 1 ? "border-t border-slate-100 pt-2" : ""}>
-                      <p className="font-bold text-slate-950">{group.trip?.plant} - {group.trip ? shortDate(group.trip.date) : ""}</p>
+                      <p className="font-bold text-slate-950">{group.trip?.plant} - {group.trip ? shortDate(group.trip.date) + " / " + tripReferenceLabel(group.trip) : ""}</p>
                       <div className="mt-1 space-y-1">
                         {group.lines.map((line, index) => (
                           <div key={`${group.id}-summary-${line.product}-${index}`} className="flex flex-wrap justify-between gap-2">
@@ -1224,11 +1221,10 @@ export function OutOrders({ customers, trips, movements = [], receivingTransfers
       {saleError && <p className="my-3 text-sm font-semibold text-amber-800" role="status">{saleError}</p>}
       {review && <Drawer title="Review Sale" onClose={() => setReview(false)}>
         <h2 className="customer-name mb-3 uppercase">{selectedCustomer.name}</h2>
-        {exceedsCredit(selectedCustomer, ledgerEntries, total - initialPaid) && <p role="alert" className="mb-3 border-l-4 border-amber-500 bg-amber-50 p-3 font-semibold text-amber-900">Credit Limit Exceeded</p>}
         <Info label="Trust Receipt No." value={trustReceipt || "Not provided"} />
         <Info label="Sale Date" value={shortDate(saleDate)} />
         {summaryGroups.map((group) => <div key={group.id} className="my-4 border-t border-slate-200 pt-4">
-          <p className="font-bold">{group.trip?.plant} / {group.trip && shortDate(group.trip.date)}</p>
+          <p className="font-bold">{group.trip?.plant} / {group.trip && shortDate(group.trip.date)} / {tripReferenceLabel(group.trip)}</p>
           {group.lines.map((line, i) => <div key={i} className="mt-3 flex flex-wrap justify-between gap-2 text-sm"><span>{productLabel(line.product, line.sizeCode, line.classType, line.sizeCodeLabel, line.classTypeLabel)} / {kg(line.qty)} x {currency(line.price)}</span><strong>{currency(money(Number(line.qty) * Number(line.price)))}</strong></div>)}
           <Button variant="ghost" className="mt-2" onClick={() => setReview(false)}>Edit Products</Button>
         </div>)}
@@ -1237,8 +1233,8 @@ export function OutOrders({ customers, trips, movements = [], receivingTransfers
           {!salePayment.enabled ? <><p className="mb-3 text-slate-500">No Payment Yet</p><Button variant="secondary" onClick={() => setSalePayment({ ...salePayment, enabled: true })}><Plus size={17} />Add Payment</Button></> : <>
             <div className="grid gap-3 sm:grid-cols-2"><Field label="Amount Paid"><MoneyInput value={salePayment.amount} onChange={(e) => setSalePayment({ ...salePayment, amount: e.target.value })} /></Field>
               <Field label="Payment Method"><select className={inputClass()} value={salePayment.method} onChange={(e) => setSalePayment({ ...salePayment, method: e.target.value, reference: "", bank: "" })}>{paymentMethods.map((method) => <option key={method}>{method}</option>)}</select></Field>
-              <Field label={salePayment.method === "Cash" ? "Reference Number (Optional)" : "Reference Number"}><input className={inputClass()} value={salePayment.reference} onChange={(e) => setSalePayment({ ...salePayment, reference: e.target.value })} /></Field>
-              {salePayment.method === "Bank Deposit" && <Field label="Bank (Optional)"><input className={inputClass()} value={salePayment.bank} onChange={(e) => setSalePayment({ ...salePayment, bank: e.target.value })} /></Field>}
+              {salePayment.method === "GCash" && <Field label="GCash Reference Number"><input className={inputClass()} value={salePayment.reference} onChange={(e) => setSalePayment({ ...salePayment, reference: e.target.value })} /></Field>}
+              {salePayment.method === "Bank Deposit" && <Field label="Bank"><select className={inputClass()} value={salePayment.bank} onChange={(e) => setSalePayment({ ...salePayment, bank: e.target.value })}><option value="">Select Bank</option>{bankNames.map((name) => <option key={name}>{name}</option>)}</select></Field>}
               <Field label="Notes / Description (Optional)"><input className={inputClass()} value={salePayment.notes || ""} onChange={(e) => setSalePayment({ ...salePayment, notes: e.target.value })} placeholder="Branch or payment description" /></Field>
             </div><Button className="mt-3" variant="ghost" onClick={() => setSalePayment(emptySalePayment())}><X size={17} />Remove Payment</Button>
           </>}
@@ -1273,7 +1269,7 @@ export function Customers({ initialCustomerId = "", customers, ledgerEntries, ou
           {customers.filter((customer) => matchesCustomer(customer, query) && (balanceFilter === "All" || (balanceFilter === "With Balance" ? customerBalance(ledgerEntries, customer.id) > 0 : customerBalance(ledgerEntries, customer.id) <= 0))).map((customer) => (
             <button key={customer.id} className={`w-full rounded-lg border p-3 text-left ${selectedId === customer.id ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white"}`} onClick={() => setSelectedId(customer.id)}>
               <p className="customer-name">{customer.name}</p>
-              <p className="text-sm text-slate-500">{customer.type} - Salesman: {getAgentName(agents, customer.agentId)}</p>
+              <p className="text-sm text-slate-500">Salesman: {getAgentName(agents, customer.agentId)}</p>
               <p className={customerBalance(ledgerEntries, customer.id) > 0 ? "mt-2 text-base font-bold text-amber-800" : "mt-2 text-sm font-semibold text-emerald-700"}>Balance: {currency(customerBalance(ledgerEntries, customer.id))}</p>
             </button>
           ))}
@@ -1282,17 +1278,16 @@ export function Customers({ initialCustomerId = "", customers, ledgerEntries, ou
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="customer-name">{selected.name}</h2>
-              <p className="text-sm text-slate-500">{selected.type} - Assigned Salesman: {getAgentName(agents, selected.agentId)}</p>
+              <p className="text-sm text-slate-500">Assigned Salesman: {getAgentName(agents, selected.agentId)}</p>
             </div>
             <div className="flex flex-wrap gap-2"><Badge tone={selected.active ? "green" : "slate"}>{selected.active ? "Active" : "Inactive"}</Badge>{canManage && <Button variant="secondary" onClick={() => onEdit(selected)}>Edit Customer</Button>}</div>
           </div>
-          <div className="mb-4 grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-            <StatMini label="Credit Limit" value={selected.creditLimit === null || selected.creditLimit === "" ? "Not set" : currency(selected.creditLimit)} />
+          <div className="mb-4 grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
             <StatMini label="Outstanding Balance" value={currency(customerBalance(ledgerEntries, selected.id))} />
             <StatMini label="Total Purchases" value={currency(totalPurchases)} />
             <StatMini label="Total Payments" value={currency(totalPayments)} />
           </div>
-          <div className="customer-contact mb-4 grid gap-3 2xl:grid-cols-2"><Info label="Contact" value={selected.contactPerson || "-"} /><Info label="Mobile" value={selected.mobile || "-"} /><Info label="Address" value={selected.address || "-"} /><Info label="Payment Type" value={selected.paymentType} /><Info label="Available Credit" value={availableCredit(selected, ledgerEntries) === null ? "Not set" : currency(availableCredit(selected, ledgerEntries))} /><Info label="Payment Days" value={selected.paymentDays === "" ? "Not set" : selected.paymentDays ?? "Not set"} /></div>
+          <div className="customer-contact mb-4 grid gap-3 2xl:grid-cols-2"><Info label="Contact" value={selected.contactPerson || "-"} /><Info label="Mobile" value={selected.mobile || "-"} /><Info label="Additional Phones" value={(selected.additionalPhones || []).join(" / ") || "-"} /><Info label="Address" value={selected.address || "-"} /><Info label="Payment Type" value={selected.paymentType} /><Info label="Payment Days" value={selected.paymentDays === "" ? "Not set" : selected.paymentDays ?? "Not set"} /></div>
           {!ledger.length && <p className="mb-4 text-slate-500">No Transactions Yet</p>}
           <ResponsiveTable
             columns={["Date", "Salesman", "Trust Receipt", "Transaction", "Charge", "Payment", "Balance"]}
@@ -1306,7 +1301,7 @@ export function Customers({ initialCustomerId = "", customers, ledgerEntries, ou
               currency(entry.balance),
             ])}
           />
-          <section className="report-section"><h3 className="mb-3 font-bold">Pricing</h3><ResponsiveTable columns={["Product", "Default Selling Price/kg", "Customer Selling Price/kg"]} rows={Object.entries(selected.pricing).map(([product, price]) => [product, currency(generalPrice[product] || 0), currency(price)])} /></section>
+          <section className="report-section"><h3 className="mb-3 font-bold">Pricing</h3><ResponsiveTable columns={["Product", "Customer Selling Price/kg"]} rows={Object.entries(selected.pricing).map(([product, price]) => [product, currency(price)])} /></section>
         </div>}
       </div>
     </>
@@ -1336,11 +1331,11 @@ export function Collections({ initialCustomerId = "", customers, ledgerEntries, 
     }
     const ref = `PAY-${3000 + collections.length + 1}`;
     const destination = collection.method === "Cash" ? "Cash held by Salesman until remittance" : collection.method === "GCash" ? "Owner GCash" : "Owner Bank Account";
-    const newCollection = { ...collection, id: `col-${Date.now()}`, ref, amount: Number(collection.amount), destination, allocations };
+    const newCollection = { ...collection, reference: collection.method === "GCash" ? collection.reference.trim() : "", id: `col-${Date.now()}`, ref, amount: Number(collection.amount), destination, allocations };
     setCollections((items) => [newCollection, ...items]);
     setLedgerEntries((items) => [
       ...items,
-      { id: `led-${Date.now()}`, customerId: collection.customerId, date: collection.date, ref, description: `${collection.method} Payment`, notes: collection.notes.trim(), charge: 0, payment: Number(collection.amount), type: "Payment", allocations, reference: collection.reference.trim(), agentId: collection.agentId, method: collection.method },
+      { id: `led-${Date.now()}`, customerId: collection.customerId, date: collection.date, ref, description: `${collection.method} Payment`, notes: collection.notes.trim(), charge: 0, payment: Number(collection.amount), type: "Payment", allocations, reference: collection.method === "GCash" ? collection.reference.trim() : "", bank: collection.method === "Bank Deposit" ? collection.bank : "", agentId: collection.agentId, method: collection.method },
     ]);
     if (collection.method === "Bank Deposit") {
       setDiscrepancies((items) => [
@@ -1395,11 +1390,10 @@ export function Collections({ initialCustomerId = "", customers, ledgerEntries, 
             <Field label="Salesman"><select disabled={!canSelectSalesman} className={inputClass()} value={collection.agentId} onChange={(e) => setCollection({ ...collection, agentId: e.target.value })}>{agents.filter((agent) => agent.active && agent.role === "Agent").map((agent) => <option value={agent.id} key={agent.id}>{agent.name}</option>)}</select></Field>
             <CustomerSelector label="Customer" customers={customers} value={collection.customerId} onChange={(id) => setCollection({ ...collection, customerId: id, allocations: [] })} />
             <Field label="Amount"><MoneyInput className={inputClass()} value={collection.amount} onChange={(e) => setCollection({ ...collection, amount: e.target.value })} /></Field>
-            <Field label="Payment Method"><select className={inputClass()} value={collection.method} onChange={(e) => setCollection({ ...collection, method: e.target.value })}>{paymentMethods.map((method) => <option key={method}>{method}</option>)}</select></Field>
+            <Field label="Payment Method"><select className={inputClass()} value={collection.method} onChange={(e) => setCollection({ ...collection, method: e.target.value, reference: "", bank: "" })}>{paymentMethods.map((method) => <option key={method}>{method}</option>)}</select></Field>
             <Field label="Date"><input className={inputClass()} type="date" value={collection.date} onInput={(e) => setCollection({ ...collection, date: e.target.value })} /></Field>
             {collection.method === "GCash" && <Field label="GCash Reference Number"><input className={inputClass()} value={collection.reference} onChange={(e) => setCollection({ ...collection, reference: e.target.value })} /></Field>}
-            {collection.method === "Bank Deposit" && <Field label="Bank"><input className={inputClass()} value={collection.bank} onChange={(e) => setCollection({ ...collection, bank: e.target.value })} /></Field>}
-            {collection.method === "Bank Deposit" && <Field label="Bank Reference Number"><input className={inputClass()} value={collection.reference} onChange={(e) => setCollection({ ...collection, reference: e.target.value })} /></Field>}
+            {collection.method === "Bank Deposit" && <Field label="Bank"><select className={inputClass()} value={collection.bank} onChange={(e) => setCollection({ ...collection, bank: e.target.value })}><option value="">Select Bank</option>{bankNames.map((name) => <option key={name}>{name}</option>)}</select></Field>}
             <Field label="Notes / Description (Optional)"><input className={inputClass()} value={collection.notes} onChange={(e) => setCollection({ ...collection, notes: e.target.value })} placeholder="Branch or payment description" /></Field>
           </div>
           <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-700">Destination: {collection.method === "Cash" ? "Cash held by Salesman until remittance" : collection.method === "GCash" ? "Owner GCash" : "Owner Bank Account"}</div>
@@ -1624,7 +1618,7 @@ export function OutDetail({ out, customers }) {
       <Info label="Total" value={currency(out.total)} />
       {out.groups.map((group, index) => (
         <div key={`${group.tripId}-${index}`} className="rounded-lg border border-slate-200 p-3">
-          <p className="font-bold">{group.plant} - {shortDate(group.tripDate)}</p>
+          <p className="font-bold">{group.plant} - {shortDate(group.tripDate)} / {tripReferenceLabel(group)}</p>
           {group.lines.map((line) => (
             <div key={`${line.product}-${line.sizeCode}-${line.qty}`} className="mt-2 flex items-center justify-between text-sm">
               <span>{productLabel(line.product, line.sizeCode)} - {kg(line.qty)} x {currency(line.price)}</span>
@@ -1645,7 +1639,7 @@ export function PaymentDetail({ payment }) {
       <Info label="Salesman" value={getAgentName(agents, payment.agentId)} />
       <Info label="Payment Method" value={payment.method || payment.collection?.method || "Payment"} />
       <Info label="Amount" value={currency(payment.payment ?? payment.amount)} />
-      <Info label="Reference Number" value={payment.reference || payment.collection?.reference || "-"} />
+      {(payment.method || payment.collection?.method) === "Bank Deposit" ? <Info label="Bank" value={payment.bank || payment.collection?.bank || "-"} /> : (payment.method || payment.collection?.method) === "GCash" && <Info label="GCash Reference Number" value={payment.reference || payment.collection?.reference || "-"} />}
       <Info label="Notes / Description" value={payment.notes || payment.collection?.notes || "-"} />
       <Info label="Date/time" value={shortDate(payment.date)} />
       <div className="rounded-lg border border-slate-200 p-3">
