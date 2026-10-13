@@ -26,6 +26,8 @@ export async function loadHostedWarehouse(organizationId, client = requireSupaba
     client.from("inventory_movements").select("id, inventory_lot_id, quantity_kg, to_salesman_user_id, effective_date, reference_id, reference_line_id").eq("organization_id", organizationId).eq("movement_type", "warehouse_to_salesman").order("effective_date", { ascending: false }),
   ]);
   const lotIds = stock.map((row) => row.inventory_lot_id);
+  const tripIds = [...new Set(stock.map((row) => row.stock_trip_id).filter(Boolean))];
+  const trips = tripIds.length ? fail(await client.from("stock_trips").select("id, reference_number").eq("organization_id", organizationId).in("id", tripIds)) : [];
   const lots = lotIds.length ? fail(await client.from("inventory_lots").select("id, stock_trip_line_id").in("id", lotIds)) : [];
   const lineIds = lots.map((row) => row.stock_trip_line_id);
   const tripLines = lineIds.length ? fail(await client.from("stock_trip_lines").select("id, bags, head_count").in("id", lineIds)) : [];
@@ -39,6 +41,7 @@ export async function loadHostedWarehouse(organizationId, client = requireSupaba
   const lotMap = new Map(lots.map((row) => [row.id, row]));
   const lineMap = new Map(tripLines.map((row) => [row.id, row]));
   const stockMap = new Map(stock.map((row) => [row.inventory_lot_id, row]));
+  const tripMap = new Map(trips.map((row) => [row.id, row]));
   const receiptMap = new Map(receipts.map((row) => [row.id, row]));
   const receiptLineMap = new Map(receiptLines.map((row) => [row.id, row]));
   const rows = stock.map((row) => {
@@ -49,6 +52,7 @@ export async function loadHostedWarehouse(organizationId, client = requireSupaba
       tripId: row.stock_trip_id,
       tripDate: row.trip_date,
       tripCode: row.trip_number,
+      tripReference: tripMap.get(row.stock_trip_id)?.reference_number || "",
       plant: row.plant_name,
       product: row.product_name,
       category: displayProductCategory(row.category),

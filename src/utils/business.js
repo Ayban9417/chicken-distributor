@@ -95,6 +95,7 @@ export function getInventoryRows(trips, movements) {
         acquisitionType: product.acquisitionType || "Purchased",
         tripId: trip.id,
         tripCode: trip.code,
+        tripReference: trip.reference || "",
         plant: trip.plant,
         tripDate: trip.date,
         product: product.name,

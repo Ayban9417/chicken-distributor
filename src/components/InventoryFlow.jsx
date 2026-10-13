@@ -1,50 +1,71 @@
 import { useMemo, useState } from "react";
-import { ArrowRightLeft, ClipboardCheck, PackageCheck } from "lucide-react";
+import { ArrowRightLeft, ChevronRight, ClipboardCheck, PackageCheck } from "lucide-react";
 import { Badge, Button, Field, inputClass, PlantName, ResponsiveTable, SectionHeader, StatCard, StatMini } from "./ui";
-import { currency, kg, money, productLabel, shortDate, isByProduct } from "../utils/business";
+import { currency, kg, money, productLabel, shortDate, isByProduct, isWholeChicken } from "../utils/business";
+import { tripKilograms, wholeChickenLineLabel } from "../utils/tripPresentation";
 import { companyStockTotals, getSalesmanAvailableQty, getWarehouseAvailableQty, nextReceipt, salesmanInventoryRows, warehouseRows } from "../utils/inventoryFlow";
 import { compareInventoryProducts, compareInventoryTrips } from "../utils/inventory";
 import { sum } from "../utils/operations";
 import { demoToday } from "../data/demoData";
 
 const stockName = (row) => productLabel(row.product, row.sizeCode, row.classType, row.sizeCodeLabel, row.classTypeLabel);
+const stockKilos = (rows, key) => tripKilograms(rows.reduce((total, row) => total + Number(row[key] || 0), 0));
 const activeSalesmen = (users) => users.filter((user) => user.active && user.role === "Agent");
 const initialTransfer = () => ({ rowId: "", toSalesmanId: "", qty: "", bags: "", notes: "" });
 
 function StockTable({ rows, warehouse, onTransfer, onOpen, showCost = true, showTransferActions = true }) {
   const actionColumns = showTransferActions ? ["Action"] : [];
+  const whole = warehouse && rows.every(isWholeChicken);
   const columns = warehouse
-    ? ["Product / Code / Class", "Bags", "Heads", "Original KG", "Transferred KG", "Warehouse KG", ...(showCost ? ["Cost/kg"] : []), "Status", ...actionColumns]
+    ? [whole ? "Whole Dressed Chicken" : "Product / Code / Class", "Original KG", "Transferred KG", "Warehouse KG", ...(showCost ? ["Cost/kg"] : []), "Bags", "Heads", "Status", ...actionColumns]
     : ["Product / Code / Class", "Bags", "Heads", "Assigned KG", "Sold KG", "Remaining KG", ...(showCost ? ["Cost/kg"] : []), "Status", ...actionColumns];
   return <ResponsiveTable columns={columns}
     rows={rows.map((row) => [
-      <button className="text-left font-extrabold uppercase text-slate-950" onClick={() => onOpen?.(row)}>{stockName(row)}</button>,
-      row.bags ?? "Not recorded", row.headCount ?? "Not recorded",
+      <button className="text-left font-extrabold uppercase text-slate-950" onClick={() => onOpen?.(row)}>{whole ? wholeChickenLineLabel(row) : stockName(row)}</button>,
+      ...(!warehouse ? [row.bags ?? "Not recorded", row.headCount ?? "Not recorded"] : []),
       warehouse ? kg(row.originalQty) : kg(row.assignedQty),
       warehouse ? kg(row.transferredQty) : kg(row.totalOut),
       ...(!warehouse ? [kg(row.remainingQty)] : []),
       ...(warehouse ? [kg(row.warehouseAvailable)] : []),
       ...(showCost ? [currency(row.costPerKg)] : []),
+      ...(warehouse ? [row.bags ?? "Not recorded", row.headCount ?? "Not recorded"] : []),
       <Badge tone={(warehouse ? row.warehouseAvailable : row.remainingQty) === 0 ? "red" : "green"}>{(warehouse ? row.warehouseAvailable : row.remainingQty) === 0 ? "SOLD OUT" : "AVAILABLE"}</Badge>,
       ...(showTransferActions ? [<Button variant="secondary" disabled={(warehouse ? row.warehouseAvailable : row.remainingQty) <= 0} onClick={() => onTransfer(row)}><ArrowRightLeft size={16} />Transfer</Button>] : []),
     ])} />;
 }
 
+function TripSummaryField({ label, value, preserveCase = false }) {
+  return <span className="block min-w-0">
+    <span className="block text-xs font-bold uppercase text-slate-500">{label}</span>
+    <strong className={`mt-1 block break-words text-base font-bold text-slate-950 ${preserveCase ? "normal-case" : ""}`}>{value}</strong>
+  </span>;
+}
+
 function TripStock({ rows, warehouse, onTransfer, onOpen, showCost = true, showTransferActions = true }) {
   const trips = [...rows.reduce((map, row) => {
-    const current = map.get(row.tripId) || { tripId: row.tripId, tripDate: row.tripDate, tripCode: row.tripCode, plant: row.plant, rows: [] };
+    const current = map.get(row.tripId) || { tripId: row.tripId, tripDate: row.tripDate, tripCode: row.tripCode, tripReference: row.tripReference, plant: row.plant, rows: [] };
     current.rows.push(row); map.set(row.tripId, current); return map;
   }, new Map()).values()].sort(compareInventoryTrips);
   return <div className="space-y-5">{trips.map((trip) => {
     const sorted = [...trip.rows].sort(compareInventoryProducts);
-    const whole = sorted.filter((row) => !isByProduct(row)); const byproducts = sorted.filter(isByProduct);
+    const whole = sorted.filter((row) => warehouse ? isWholeChicken(row) : !isByProduct(row)); const byproducts = sorted.filter(isByProduct);
+    const other = warehouse ? sorted.filter((row) => !isWholeChicken(row) && !isByProduct(row)) : [];
     const remainingKey = warehouse ? "warehouseAvailable" : "remainingQty";
-    return <details key={trip.tripId} open className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <summary className="cursor-pointer"><span className="font-extrabold uppercase">{shortDate(trip.tripDate)} / {trip.tripCode}</span><span className="ml-2 text-sm text-slate-500">{kg(sum(sorted, remainingKey))} remaining</span></summary>
-      {!!whole.length && <section className="mt-4"><h3 className="mb-3 text-lg font-extrabold uppercase">Whole Dressed Chicken / Other Products</h3>
+    return <details key={trip.tripId} open className="group rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      {warehouse ? <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden"><span className="flex min-w-0 items-start gap-3"><span className="grid min-w-0 flex-1 grid-cols-1 gap-3">
+        <TripSummaryField label="Trip Date" value={shortDate(trip.tripDate)} />
+        <TripSummaryField label="Reference Number" value={trip.tripReference || "-"} preserveCase />
+        <TripSummaryField label="Whole Dressed Chicken" value={stockKilos(whole, "originalQty")} />
+        <TripSummaryField label="By-products" value={stockKilos(byproducts, "originalQty")} />
+        {!!other.length && <TripSummaryField label="Other Products" value={stockKilos(other, "originalQty")} />}
+      </span><ChevronRight aria-hidden="true" size={20} className="mt-3 shrink-0 text-slate-500 transition-transform group-open:rotate-90" /></span></summary>
+        : <summary className="cursor-pointer"><span className="font-extrabold uppercase">{shortDate(trip.tripDate)} / {trip.tripCode}</span><span className="ml-2 text-sm text-slate-500">{kg(sum(sorted, remainingKey))} remaining</span></summary>}
+      {warehouse && <p className="mt-4 text-sm text-slate-500">Trip {trip.tripCode} / Warehouse remaining: {stockKilos(sorted, remainingKey)}</p>}
+      {!!whole.length && <section className="mt-4"><h3 className="mb-3 text-lg font-extrabold uppercase">{warehouse ? "Whole Dressed Chicken" : "Whole Dressed Chicken / Other Products"}</h3>
         <div className="mb-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><StatMini label="Total Original KG" value={kg(sum(whole, "originalQty"))} /><StatMini label="Total Sold" value={kg(sum(whole, "totalOut"))} />{warehouse && <StatMini label="Transferred to Salesmen" value={kg(sum(whole, "transferredQty"))} />}<StatMini label={warehouse ? "Warehouse Remaining" : "Salesman Remaining"} value={kg(sum(whole, remainingKey))} /></div>
         <StockTable rows={whole} warehouse={warehouse} onTransfer={onTransfer} onOpen={onOpen} showCost={showCost} showTransferActions={showTransferActions} /></section>}
       {!!byproducts.length && <section className="mt-5"><h3 className="mb-3 text-lg font-extrabold uppercase">By-products</h3><StockTable rows={byproducts} warehouse={warehouse} onTransfer={onTransfer} onOpen={onOpen} showCost={showCost} showTransferActions={showTransferActions} /></section>}
+      {!!other.length && <section className="mt-5"><h3 className="mb-3 text-lg font-extrabold uppercase">Other Products</h3><StockTable rows={other} warehouse onTransfer={onTransfer} onOpen={onOpen} showCost={showCost} showTransferActions={showTransferActions} /></section>}
     </details>;
   })}</div>;
 }

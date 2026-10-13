@@ -4,7 +4,7 @@ export const tripKilograms = (value) =>
   `${Number(value || 0).toLocaleString("en-PH", { maximumFractionDigits: 3 })} kg`;
 
 export const wholeChickenLineLabel = (item) =>
-  String(item?.sizeCode || "").trim() || String(item?.classType || "").trim() || item?.name || "Unknown Product";
+  String(item?.sizeCode || "").trim() || String(item?.classType || "").trim() || item?.name || item?.product || "Unknown Product";
 
 export function groupTripProducts(products = []) {
   const lines = Array.isArray(products) ? products : [];
