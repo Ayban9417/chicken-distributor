@@ -57,7 +57,7 @@ export function TripSummary({ trips, previousTrips, inventoryRows }) {
       <StatMini label="Change" value={(difference >= 0 ? "+" : "") + difference + " Trip" + (Math.abs(difference) === 1 ? "" : "s")} />
     </div>
     <ResponsiveTable columns={["Plant", "Trips", "Whole Chicken", "By-products"]} rows={plantRows} />
-    <div className="mt-4"><ResponsiveTable columns={["Trip Date / Reference", "Plant", "Whole Chicken", "By-products", "Total Stock In", "Bags", "Acquisition Cost", "Remaining Now"]}
+    <div className="mt-4"><ResponsiveTable columns={["Trip Date / Reference", "Plant", "Whole Chicken", "By-products", "Total Stock In", "Bags", "Total Purchase Cost", "Remaining Now"]}
       rows={trips.slice().sort((a, b) => a.date.localeCompare(b.date)).map((trip) => [
         shortDate(trip.date) + " / " + trip.code, trip.plant,
         kg(sum(trip.products.filter(isWholeChicken), "originalQty")),

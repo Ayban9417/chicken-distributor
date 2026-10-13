@@ -19,7 +19,7 @@ import { CustomerEditor, CustomerManagement } from "./CustomerManagement";
 import { SalesmanAccounts } from "./SalesmanAccounts";
 import { DestructiveActionDialog } from "./DestructiveActionDialog";
 import { deleteHostedStockTrip, deleteUnusedHostedCustomer } from "../services/protectedDeletionService";
-import { kg, shortDate } from "../utils/business";
+import { currency, kg, shortDate } from "../utils/business";
 import { sum } from "../utils/operations";
 
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date());
@@ -301,7 +301,7 @@ export function HostedFinanceScreen({ organizationId, role, userId, view, initia
       busy={busy}
       postDcrAlert={data.discrepancies.find((item) => item.backendType === "post_dcr_adjustment" && item.status !== "Resolved")?.details || ""}
       pushToast={setNotice}
-      onSubmitDcr={(values) => run(() => submitHostedDcr(organizationId, values), (saved) => `DCR locked. Difference: ${Number(saved?.difference || 0).toFixed(2)}.`)}
+      onSubmitDcr={(values) => run(() => submitHostedDcr(organizationId, values), (saved) => `DCR locked. Difference: ${currency(saved?.difference || 0)}.`)}
     />
   </UserContext.Provider>;
 

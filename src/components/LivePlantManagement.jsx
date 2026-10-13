@@ -205,7 +205,7 @@ function OptionEditor({ title, rows, valueKey, onChange }) {
   return <div className="mt-4 space-y-3">
     <p className="font-bold">{title}</p>
     {rows.map((row, index) => <div key={row.id || index} className="flex flex-wrap items-end gap-3">
-      <Field label={valueKey === "code" ? "Operational Code" : "Class Type"}><input className={inputClass()} value={row[valueKey] || ""} onChange={(e) => onChange(rows.map((item, itemIndex) => itemIndex === index ? { ...item, [valueKey]: e.target.value } : item))} /></Field>
+      <Field label={valueKey === "code" ? "Description" : "Class Type"}><input data-preserve-case={valueKey === "code" || undefined} className={inputClass()} value={row[valueKey] || ""} onChange={(e) => onChange(rows.map((item, itemIndex) => itemIndex === index ? { ...item, [valueKey]: e.target.value } : item))} /></Field>
       <Field label="Display Label"><input className={inputClass()} value={row.display_name || ""} onChange={(e) => onChange(rows.map((item, itemIndex) => itemIndex === index ? { ...item, display_name: e.target.value } : item))} /></Field>
       <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={row.active ?? true} onChange={(e) => onChange(rows.map((item, itemIndex) => itemIndex === index ? { ...item, active: e.target.checked } : item))} />Active</label>
     </div>)}

@@ -41,7 +41,7 @@ test("Plant Trips render the entered reference, category totals, code-only row a
     assert.match(html, /<td[^>]*>Whole Dressed Chicken<\/td>/);
     assert.doesNotMatch(html, /Whole Dressed Chicken \/ C1|Whole Dressed Chicken — C1/);
     assert.ok(html.indexOf("Grand Total") > html.indexOf("By-products"));
-    assert.match(html, /Grand Total[\s\S]*Total Kilograms[\s\S]*17 kg[\s\S]*Total Cost/);
+    assert.match(html, /Grand Total[\s\S]*Total Kilograms[\s\S]*17 kg[\s\S]*Total Purchase Cost/);
 
     const otherTrip = { ...trip, products: [...trip.products, { name: "JUMBO", category: "Other", originalQty: 1, costPerKg: 90, acquisitionType: "Purchased" }] };
     const otherHtml = renderToStaticMarkup(createElement(Trips, { trips: [otherTrip], plantConfigs, currentDate: "2026-10-03" }));

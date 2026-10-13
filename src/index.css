@@ -16,6 +16,21 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+#root { text-transform: uppercase; }
+#root button,
+#root input,
+#root select,
+#root textarea { text-transform: uppercase; }
+#root input[type="password"],
+#root input[type="email"],
+#root input[type="url"],
+#root input[autocomplete="username"],
+#root input[data-preserve-case="true"],
+#root textarea[data-preserve-case="true"],
+#root [data-preserve-case="true"] input,
+#root [data-preserve-case="true"] textarea,
+#root [data-preserve-case="true"] select { text-transform: none; }
+
 input, select, textarea { min-width: 0; max-width: 100%; }
 input:disabled { background: #f1f5f9; }
 main, main > div, section, article, fieldset { min-width: 0; }

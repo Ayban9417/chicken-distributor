@@ -384,7 +384,7 @@ export default function App() {
 function TripHeaderField({ label, value }) {
   return <span className="block min-w-0">
     <span className="block text-xs font-bold uppercase text-slate-500">{label}</span>
-    <strong className="mt-1 block break-words text-base font-bold text-slate-950">{value}</strong>
+    <strong className={`mt-1 block break-words text-base font-bold text-slate-950 ${label === "Reference Number" ? "normal-case" : ""}`}>{value}</strong>
   </span>;
 }
 
@@ -396,7 +396,7 @@ function TripProductSection({ title, group, emptyMessage, whole = false }) {
       <p className="font-bold text-slate-900">Subtotal: {tripKilograms(group.kilos)} / {currency(group.cost)}</p>
     </div> : <div className="max-w-full overflow-x-auto rounded-lg border border-slate-200">
       <table className="w-full min-w-[640px] text-left text-sm">
-        <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr>{[whole ? "Whole Dressed Chicken" : "Product", "Number of Kilos", "Cost/kg", "Heads", "Bags", "Total Cost"].map((column) => <th key={column} scope="col" className="px-3 py-2 font-bold">{column}</th>)}</tr></thead>
+        <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr>{[whole ? "Whole Dressed Chicken" : "Product", "Number of Kilos", "Cost/kg", "Heads", "Bags", "Total Purchase Cost"].map((column) => <th key={column} scope="col" className="px-3 py-2 font-bold">{column}</th>)}</tr></thead>
         <tbody className="divide-y divide-slate-100">{group.rows.map((item, index) => <tr key={`${item.productId || item.name}-${item.codeId || item.sizeCode || ""}-${item.classTypeId || item.classType || ""}-${index}`}>
           <td className="px-3 py-2 font-semibold text-slate-950">{whole ? wholeChickenLineLabel(item) : productLabel(item.name, item.sizeCode, item.classType, item.sizeCodeLabel, item.classTypeLabel)}</td>
           <td className="whitespace-nowrap px-3 py-2">{tripKilograms(item.originalQty)}</td>
@@ -420,7 +420,7 @@ function TripProductSections({ groups }) {
       <h4 className="text-sm font-extrabold uppercase text-slate-900">Grand Total</h4>
       <div className="mt-3 grid gap-4 sm:grid-cols-2">
         <TripHeaderField label="Total Kilograms" value={tripKilograms(groups.grand.kilos)} />
-        <TripHeaderField label="Total Cost (₱)" value={currency(groups.grand.cost)} />
+        <TripHeaderField label="Total Purchase Cost" value={currency(groups.grand.cost)} />
       </div>
     </section>
   </div>;
@@ -483,7 +483,7 @@ export function Trips({ trips, setTrips, addAudit, pushToast, plantConfigs, onSt
             <Field label="Total KG"><input className={inputClass()} type="number" min="0" step="0.01" value={item.qty} onChange={(e) => updateProduct(index, { qty: e.target.value })} /></Field>
             <Field label="Acquisition Type"><select className={inputClass()} value={item.acquisitionType} onChange={(e) => updateProduct(index, { acquisitionType: e.target.value, costPerKg: e.target.value === "Free from Plant" ? 0 : "" })}><option>Purchased</option>{config?.allowsFreeFromPlant && <option>Free from Plant</option>}</select></Field>
             <Field label="Cost/kg"><MoneyInput disabled={item.acquisitionType === "Free from Plant"} value={item.costPerKg} onChange={(e) => updateProduct(index, { costPerKg: e.target.value })} /></Field>
-            <StatMini label="Total Acquisition Cost" value={currency(Number(item.qty || 0) * Number(item.costPerKg || 0))} />
+            <StatMini label="Total Purchase Cost" value={currency(Number(item.qty || 0) * Number(item.costPerKg || 0))} />
             <div className="flex items-end gap-2">{item.acquisitionType === "Free from Plant" && <Badge tone="green">FREE FROM PLANT</Badge>}<Button variant="ghost" disabled={form.products.length === 1} onClick={() => setForm({ ...form, products: form.products.filter((_, i) => i !== index) })} aria-label="Remove product"><X size={18} /></Button></div>
           </div>
         </div>; })}
@@ -491,7 +491,7 @@ export function Trips({ trips, setTrips, addAudit, pushToast, plantConfigs, onSt
         <Button variant="secondary" disabled={!productOptions.length} onClick={() => setForm({ ...form, products: [...form.products, stockLine(productOptions[0])] })}><Plus size={18} />Add Product</Button>
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <StatMini label="Total Trip Acquisition Cost" value={currency(totalCost)} />
+        <StatMini label="Total Purchase Cost" value={currency(totalCost)} />
         <StatMini label="Total Bags" value={sum(form.products, "bags")} /><StatMini label="Total KG" value={kg(sum(form.products, "qty"))} />
         <StatMini label="Purchased KG" value={kg(sum(form.products.filter((item) => item.acquisitionType === "Purchased"), "qty"))} />
         <StatMini label="Free KG" value={kg(sum(form.products.filter((item) => item.acquisitionType === "Free from Plant"), "qty"))} />
@@ -804,7 +804,7 @@ export function InventoryDetail({ row, showCost = true }) {
           ["Sold KG", kg(row.totalOut)],
           ["Adjustments", kg(row.adjustments)],
           ["Remaining", kg(row.remainingQty)],
-          ...(showCost ? [["Cost / kg", currency(row.costPerKg)], ["Inventory Cost Value", currency(row.inventoryCostValue)], ["Original Acquisition Cost", currency(row.originalAcquisitionCost)]] : []),
+          ...(showCost ? [["Cost / kg", currency(row.costPerKg)], ["Inventory Cost Value", currency(row.inventoryCostValue)], ["Total Purchase Cost", currency(row.originalAcquisitionCost)]] : []),
         ].map(([label, value]) => (
           <div key={label} className="rounded-lg bg-slate-50 p-3">
             <p className="text-xs font-semibold text-slate-500">{label}</p>
@@ -1596,7 +1596,7 @@ export function Discrepancies({ discrepancies, setDiscrepancies, customers, user
               {item.amount && <Info label="Amount" value={currency(item.amount)} />}
               {item.normalPrice && <Info label="Normal Price" value={`${currency(item.normalPrice)}/kg`} />}
               {item.agentPrice && <Info label="Salesman Price" value={`${currency(item.agentPrice)}/kg`} />}
-              {item.acquisitionCost !== undefined && <Info label="Acquisition Cost" value={`${currency(item.acquisitionCost)}/kg`} />}
+              {item.acquisitionCost !== undefined && <Info label="Cost / KG" value={`${currency(item.acquisitionCost)}/kg`} />}
               {item.expectedGrossProfit !== undefined && <Info label="Expected Gross Profit" value={currency(item.expectedGrossProfit)} />}
               {item.actualGrossProfit !== undefined && <Info label="Actual Gross Profit" value={currency(item.actualGrossProfit)} />}
               {item.profitImpact !== undefined && <Info label="Profit Impact of Price Override" value={currency(item.profitImpact)} />}

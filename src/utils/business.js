@@ -1,10 +1,6 @@
-export const currency = (value = 0) =>
-  new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Number(value || 0));
+import { peso } from "./currency.js";
+
+export const currency = peso;
 
 export const kg = (value = 0) =>
   `${Number(value || 0).toLocaleString("en-PH", { maximumFractionDigits: 2 })} kg`;

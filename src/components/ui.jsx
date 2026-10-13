@@ -1,5 +1,6 @@
 import { useState, useEffect, useContext, useRef, createContext } from "react";
 import { X } from "lucide-react";
+import { editableMoneyText, moneyInputText } from "../utils/currency.js";
 export const UserContext = createContext([]);
 export const useUsers = () => useContext(UserContext);
 export const PlantContext = createContext([]);
@@ -34,8 +35,9 @@ export function Button({ children, variant = "primary", className = "", ...props
 }
 
 export function Field({ label, children }) {
+  const preserveCase = /password|username|e-?mail|url|reference|\bcode\b|\buuid\b|api key|identifier/i.test(label);
   return (
-    <label className="block">
+    <label className="block" data-preserve-case={preserveCase || undefined}>
       <span className="mb-1.5 block text-sm font-semibold text-slate-700">{label}</span>
       {children}
     </label>
@@ -114,6 +116,7 @@ export function SectionHeader({ title, eyebrow, action }) {
 
 export function ResponsiveTable({ columns, rows, footer }) {
   if (!rows.length) return <p className="border-y border-slate-200 py-5 text-sm text-slate-500">No records in this selection.</p>;
+  const caseSensitive = (column) => /reference|\bcode\b|\buuid\b|identifier|email|url/i.test(column);
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200">
       <div className="hidden overflow-x-auto md:block">
@@ -122,7 +125,7 @@ export function ResponsiveTable({ columns, rows, footer }) {
             <tr>{columns.map((column) => <th key={column} className="px-3 py-3 font-bold">{column}</th>)}</tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex} className="px-3 py-3">{cell}</td>)}</tr>)}
+            {rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex} className={`px-3 py-3 ${caseSensitive(columns[cellIndex]) ? "normal-case" : ""}`}>{cell}</td>)}</tr>)}
           </tbody>
           {footer && <tfoot className="bg-slate-950 text-sm font-bold text-white"><tr>{footer.map((cell, index) => <td key={index} className="px-3 py-3">{cell}</td>)}</tr></tfoot>}
         </table>
@@ -133,7 +136,7 @@ export function ResponsiveTable({ columns, rows, footer }) {
             {row.map((cell, cellIndex) => (
               <div key={cellIndex} className="mb-2 flex justify-between gap-3 text-sm">
                 <span className="font-semibold text-slate-500">{columns[cellIndex]}</span>
-                <span className="text-right font-semibold">{cell}</span>
+                <span className={`text-right font-semibold ${caseSensitive(columns[cellIndex]) ? "normal-case" : ""}`}>{cell}</span>
               </div>
             ))}
           </div>
@@ -162,19 +165,22 @@ export function Info({ label, value }) {
 }
 
 
-export function MoneyInput({ value, onChange, className = inputClass(), ...props }) {
-  const format = (number) => number === "" ? "" : Number(number || 0).toLocaleString("en-PH", { maximumFractionDigits: 2 });
-  const [text, setText] = useState(format(value));
-  useEffect(() => { setText(format(value)); }, [value]);
-  return <input {...props} className={className} type="text" inputMode="decimal" value={text}
-    onChange={(event) => {
-      const raw = event.target.value.replaceAll(",", "");
-      if (!/^[0-9]*([.][0-9]{0,2})?$/.test(raw)) return;
-      if (raw === ".") { setText("0."); onChange({ target: { value: 0 } }); return; }
-      setText(raw);
-      onChange({ target: { value: raw === "" ? "" : Number(raw) } });
-    }}
-    onBlur={() => setText(value === "" ? "" : Number(value || 0).toLocaleString("en-PH", { minimumFractionDigits: text.includes(".") ? 2 : 0, maximumFractionDigits: 2 }))} />;
+export function MoneyInput({ value, onChange, onBlur, className = inputClass(), ...props }) {
+  const [text, setText] = useState(() => moneyInputText(value));
+  const focused = useRef(false);
+  useEffect(() => { if (!focused.current) setText(moneyInputText(value)); }, [value]);
+  return <span className="relative block min-w-0">
+    <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-slate-500">₱</span>
+    <input {...props} className={`${className} pl-8`} type="text" inputMode="decimal" value={text}
+      onFocus={() => { focused.current = true; }}
+      onChange={(event) => {
+        const raw = editableMoneyText(event.target.value);
+        if (raw === null) return;
+        setText(raw);
+        onChange?.({ target: { value: raw } });
+      }}
+      onBlur={(event) => { focused.current = false; setText(moneyInputText(text)); onBlur?.(event); }} />
+  </span>;
 }
 export function DateRange({ range, setRange }) {
   return <fieldset className="date-range"><legend className="text-sm font-bold text-slate-600">Date Range</legend>
