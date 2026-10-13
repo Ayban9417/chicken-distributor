@@ -61,7 +61,6 @@ import {
   kg,
   ledgerWithRunningBalance,
   shortDate,
-  tripAcquisitionCost,
 } from "./utils/business";
 
 import { Badge, Button, Field, inputClass, StatCard, Drawer, SectionHeader, ResponsiveTable, StatMini, Info, MoneyInput, PlantName, UserContext, useUsers } from "./components/ui";
@@ -73,7 +72,7 @@ import { initialPlantConfigs, activeProducts, activeCodes, activeClassTypes, opt
 import { PlantManagement } from "./components/PlantManagement";
 import { PlantContext } from "./components/ui";
 import { isWholeChicken } from "./utils/business";
-import { groupTripProducts } from "./utils/tripPresentation";
+import { groupTripProducts, tripKilograms, wholeChickenLineLabel } from "./utils/tripPresentation";
 import { CustomerManagement, CustomerEditor, CustomerSelector, CustomerSearch } from "./components/CustomerManagement";
 import { normalizeCustomer, customerPermissions, matchesCustomer, hasCustomerHistory, availableCredit, exceedsCredit } from "./utils/customers";
 import { emptySalePayment, initialPaymentAmount, validateSalePayment, paymentAtSaleStatus, saleFinancialEvents } from "./utils/salePayment";
@@ -382,31 +381,48 @@ export default function App() {
   );
 }
 
-function TripProductSection({ title, group, emptyMessage }) {
+function TripHeaderField({ label, value }) {
+  return <span className="block min-w-0">
+    <span className="block text-xs font-bold uppercase text-slate-500">{label}</span>
+    <strong className="mt-1 block break-words text-base font-bold text-slate-950">{value}</strong>
+  </span>;
+}
+
+function TripProductSection({ title, group, emptyMessage, whole = false }) {
   return <section className="min-w-0 border-t border-slate-200 pt-4 first:border-0 first:pt-0">
     <h4 className="mb-3 text-sm font-extrabold uppercase text-slate-900">{title}</h4>
-    {!group.rows.length ? <p className="py-3 text-sm text-slate-500">{emptyMessage}</p> : <div className="max-w-full overflow-x-auto rounded-lg border border-slate-200">
+    {!group.rows.length ? <div className="flex flex-wrap justify-between gap-2 border-y border-slate-200 py-3 text-sm">
+      <p className="text-slate-500">{emptyMessage}</p>
+      <p className="font-bold text-slate-900">Subtotal: {tripKilograms(group.kilos)} / {currency(group.cost)}</p>
+    </div> : <div className="max-w-full overflow-x-auto rounded-lg border border-slate-200">
       <table className="w-full min-w-[640px] text-left text-sm">
-        <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr>{["Product", "Number of Kilos", "Cost/kg", "Heads", "Bags", "Total Cost"].map((column) => <th key={column} scope="col" className="px-3 py-2 font-bold">{column}</th>)}</tr></thead>
+        <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr>{[whole ? "Whole Dressed Chicken" : "Product", "Number of Kilos", "Cost/kg", "Heads", "Bags", "Total Cost"].map((column) => <th key={column} scope="col" className="px-3 py-2 font-bold">{column}</th>)}</tr></thead>
         <tbody className="divide-y divide-slate-100">{group.rows.map((item, index) => <tr key={`${item.productId || item.name}-${item.codeId || item.sizeCode || ""}-${item.classTypeId || item.classType || ""}-${index}`}>
-          <td className="px-3 py-2 font-semibold text-slate-950">{productLabel(item.name, item.sizeCode, item.classType, item.sizeCodeLabel, item.classTypeLabel)}</td>
-          <td className="whitespace-nowrap px-3 py-2">{kg(item.originalQty)}</td>
+          <td className="px-3 py-2 font-semibold text-slate-950">{whole ? wholeChickenLineLabel(item) : productLabel(item.name, item.sizeCode, item.classType, item.sizeCodeLabel, item.classTypeLabel)}</td>
+          <td className="whitespace-nowrap px-3 py-2">{tripKilograms(item.originalQty)}</td>
           <td className="whitespace-nowrap px-3 py-2">{currency(item.costPerKg)}</td>
           <td className="px-3 py-2">{item.headCount ?? "Not recorded"}</td>
           <td className="px-3 py-2">{item.bags ?? "Not recorded"}</td>
           <td className="whitespace-nowrap px-3 py-2">{currency(money(Number(item.originalQty || 0) * (item.acquisitionType === "Free from Plant" ? 0 : Number(item.costPerKg || 0))))}</td>
         </tr>)}</tbody>
-        <tfoot className="bg-slate-950 font-bold text-white"><tr><th scope="row" className="px-3 py-3">TOTAL</th><td className="whitespace-nowrap px-3 py-3">{kg(group.kilos)}</td><td /><td /><td /><td className="whitespace-nowrap px-3 py-3">{currency(group.cost)}</td></tr></tfoot>
+        <tfoot className="bg-slate-950 font-bold text-white"><tr><th scope="row" className="px-3 py-3">SUBTOTAL</th><td className="whitespace-nowrap px-3 py-3">{tripKilograms(group.kilos)}</td><td /><td /><td /><td className="whitespace-nowrap px-3 py-3">{currency(group.cost)}</td></tr></tfoot>
       </table>
     </div>}
   </section>;
 }
 
-function TripProductSections({ products }) {
-  const groups = groupTripProducts(products);
+function TripProductSections({ groups }) {
   return <div className="mt-4 space-y-5">
-    <TripProductSection title="Whole Dressed Chicken / Other Products" group={groups.main} emptyMessage="No whole dressed chicken or other products recorded for this trip." />
+    <TripProductSection title="Whole Dressed Chicken" group={groups.whole} emptyMessage="No whole dressed chicken recorded for this trip." whole />
     <TripProductSection title="By-products" group={groups.byproducts} emptyMessage="No by-products recorded for this trip." />
+    {groups.other.rows.length > 0 && <TripProductSection title="Other Products" group={groups.other} emptyMessage="" />}
+    <section className="border-t border-slate-200 pt-4">
+      <h4 className="text-sm font-extrabold uppercase text-slate-900">Grand Total</h4>
+      <div className="mt-3 grid gap-4 sm:grid-cols-2">
+        <TripHeaderField label="Total Kilograms" value={tripKilograms(groups.grand.kilos)} />
+        <TripHeaderField label="Total Cost (₱)" value={currency(groups.grand.cost)} />
+      </div>
+    </section>
   </div>;
 }
 
@@ -486,11 +502,22 @@ export function Trips({ trips, setTrips, addAudit, pushToast, plantConfigs, onSt
     <section className="report-section"><h2 className="mb-4 text-lg font-bold">Plant Trips</h2>
       {[...new Set(trips.map((trip) => trip.plant))].map((plant) => <div key={plant} className="mb-6">
         <h3 className="mb-3"><PlantName name={plant} /></h3>
-        <div className="space-y-3">{trips.filter((trip) => trip.plant === plant).sort((a, b) => b.date.localeCompare(a.date)).map((trip) => <details key={trip.id} className="min-w-0 rounded-lg border border-slate-200 bg-white p-4">
-          <summary className="cursor-pointer font-bold">{shortDate(trip.date)} / {trip.code} / {kg(sum(trip.products, "originalQty"))} / {currency(tripAcquisitionCost(trip))}</summary>
-          <TripProductSections products={trip.products} />
+        <div className="space-y-3">{trips.filter((trip) => trip.plant === plant).sort((a, b) => b.date.localeCompare(a.date)).map((trip) => { const groups = groupTripProducts(trip.products); return <details key={trip.id} className="group min-w-0 rounded-lg border border-slate-200 bg-white p-4">
+          <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+            <div className="flex min-w-0 items-start gap-3">
+              <span className={`grid min-w-0 flex-1 gap-4 sm:grid-cols-2 ${groups.other.rows.length ? "xl:grid-cols-5" : "xl:grid-cols-4"}`}>
+                <TripHeaderField label="Trip Date" value={shortDate(trip.date)} />
+                <TripHeaderField label="Reference Number" value={trip.reference || "-"} />
+                <TripHeaderField label="Whole Dressed Chicken" value={tripKilograms(groups.whole.kilos)} />
+                <TripHeaderField label="By-products" value={tripKilograms(groups.byproducts.kilos)} />
+                {groups.other.rows.length > 0 && <TripHeaderField label="Other Products" value={tripKilograms(groups.other.kilos)} />}
+              </span>
+              <ChevronRight aria-hidden="true" size={20} className="mt-3 shrink-0 text-slate-500 transition-transform group-open:rotate-90" />
+            </div>
+          </summary>
+          <TripProductSections groups={groups} />
           {onDeleteTrip && <div className="mt-4 flex justify-end"><Button variant="danger" onClick={() => onDeleteTrip(trip)}><Trash2 size={17} />Delete Trip</Button></div>}
-        </details>)}</div>
+        </details>; })}</div>
       </div>)}
     </section>
   </>;

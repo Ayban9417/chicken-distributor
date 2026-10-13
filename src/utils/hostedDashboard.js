@@ -37,6 +37,7 @@ export function normalizeHostedTrips({ trips = [], lines = [], plantProducts = [
     id: trip.id,
     date: trip.trip_date,
     code: trip.trip_number,
+    reference: trip.reference_number || "",
     plant: plantMap.get(trip.plant_id)?.name || "Unknown Plant",
     remainingQty: remainingByTrip.get(trip.id) || 0,
     products: (lineByTrip.get(trip.id) || []).map((line) => {
