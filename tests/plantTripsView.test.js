@@ -25,6 +25,7 @@ test("Plant Trips render the entered reference, category totals, code-only row a
       ],
     };
     const html = renderToStaticMarkup(createElement(Trips, { trips: [trip], plantConfigs, currentDate: "2026-10-03" }));
+    assert.ok(html.indexOf('>Cost/kg</span>') < html.indexOf('>Acquisition Type</span>'), "Stock In shows Cost/kg before Acquisition Type");
     const summary = html.match(/<summary\b[^>]*>([\s\S]*?)<\/summary>/)?.[1];
     assert.ok(summary, "native summary keeps the Trip expandable");
     assert.match(html, /<details\b/);
