@@ -28,6 +28,8 @@ test("Plant Trips render the entered reference, category totals, code-only row a
     const summary = html.match(/<summary\b[^>]*>([\s\S]*?)<\/summary>/)?.[1];
     assert.ok(summary, "native summary keeps the Trip expandable");
     assert.match(html, /<details\b/);
+    assert.match(summary, /grid-cols-1/);
+    assert.doesNotMatch(summary, /(?:sm|md|lg|xl|2xl):grid-cols-/);
     assert.match(summary, /Trip Date[\s\S]*Oct 3, 2026/);
     assert.match(summary, /Reference Number[\s\S]*0482/);
     assert.match(summary, /Whole Dressed Chicken[\s\S]*15 kg/);

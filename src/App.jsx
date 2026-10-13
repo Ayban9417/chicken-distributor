@@ -505,7 +505,7 @@ export function Trips({ trips, setTrips, addAudit, pushToast, plantConfigs, onSt
         <div className="space-y-3">{trips.filter((trip) => trip.plant === plant).sort((a, b) => b.date.localeCompare(a.date)).map((trip) => { const groups = groupTripProducts(trip.products); return <details key={trip.id} className="group min-w-0 rounded-lg border border-slate-200 bg-white p-4">
           <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
             <div className="flex min-w-0 items-start gap-3">
-              <span className={`grid min-w-0 flex-1 gap-4 sm:grid-cols-2 ${groups.other.rows.length ? "xl:grid-cols-5" : "xl:grid-cols-4"}`}>
+        <span className="grid min-w-0 flex-1 grid-cols-1 gap-3">
                 <TripHeaderField label="Trip Date" value={shortDate(trip.date)} />
                 <TripHeaderField label="Reference Number" value={trip.reference || "-"} />
                 <TripHeaderField label="Whole Dressed Chicken" value={tripKilograms(groups.whole.kilos)} />
