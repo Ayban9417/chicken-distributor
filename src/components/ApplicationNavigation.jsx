@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRightLeft, Banknote, BarChart3, ClipboardCheck, FileClock, Home, PackageCheck, ReceiptText, Settings, ShoppingCart, Truck, Users, WalletCards } from "lucide-react";
+import { AlertTriangle, ArrowRightLeft, Banknote, BarChart3, ClipboardCheck, FileClock, History, Home, PackageCheck, ReceiptText, Settings, ShoppingCart, Truck, Users, WalletCards } from "lucide-react";
 
 export const primaryNavigation = [
   { id: "dashboard", label: "Dashboard", icon: Home },
@@ -18,6 +18,8 @@ export const primaryNavigation = [
   { id: "trucks", label: "Trucks", icon: Truck },
   { id: "admin", label: "Administration", icon: Settings },
 ];
+
+export const transactionHistoryNavigationItem = { id: "transaction-history", label: "Transaction Edit History", icon: History };
 
 export const salesmanNavigation = [
   { id: "dashboard", label: "Dashboard", icon: Home },

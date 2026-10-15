@@ -22,6 +22,7 @@ export const screenRoles = {
   discrepancies: ["owner_admin"],
   trucks: ["owner_admin", "warehouse"],
   admin: ["owner_admin"],
+  "transaction-history": ["owner_admin"],
 };
 
 export const operationalRoles = ["owner_admin", "warehouse", "salesman", "payroll_admin"];

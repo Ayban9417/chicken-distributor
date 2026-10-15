@@ -8,8 +8,9 @@ import { HostedReports } from "./components/HostedReports";
 import { HostedTrucks } from "./components/HostedTrucks";
 import { HostedDtr } from "./components/HostedDtr";
 import { HostedPayroll } from "./components/HostedPayroll";
+import { TransactionEditHistory } from "./components/TransactionEditHistory";
 import { ChangePasswordForm } from "./components/AccountSecurity";
-import { Brand, PrimaryNav, primaryNavigation, salesmanNavigation } from "./components/ApplicationNavigation";
+import { Brand, PrimaryNav, primaryNavigation, salesmanNavigation, transactionHistoryNavigationItem } from "./components/ApplicationNavigation";
 import { HostedSalesmanDashboard, HostedSalesmanDtr, HostedSalesmanExpenses } from "./components/SalesmanWorkspace";
 import { Button, Drawer } from "./components/ui";
 import { supabaseConfigurationError } from "./lib/supabaseClient";
@@ -62,7 +63,7 @@ function Workspace() {
     setActive(target);
   };
   useEffect(() => { window.scrollTo({ top: 0 }); setMobileOpen(false); }, [active]);
-  const items = role === "salesman" ? salesmanNavigation : primaryNavigation.filter((item) => canAccessScreen(role, item.id));
+  const items = role === "salesman" ? salesmanNavigation : [...primaryNavigation, transactionHistoryNavigationItem].filter((item) => canAccessScreen(role, item.id));
   const screens = {
     dashboard: role === "salesman"
       ? <HostedSalesmanDashboard organizationId={organization.id} userId={user.id} name={profile.full_name} epoch={epoch} onChanged={changed} onNavigate={navigate} />
@@ -86,6 +87,7 @@ function Workspace() {
     trucks: <HostedTrucks organizationId={organization.id} userId={user.id} />,
     discrepancies: <HostedFinanceScreen organizationId={organization.id} role={role} userId={user.id} view="discrepancies" onChanged={changed} onNavigate={navigate} />,
     admin: <HostedAdministration organizationId={organization.id} role={role} onChanged={changed} onNavigate={navigate} />,
+    "transaction-history": <TransactionEditHistory organizationId={organization.id} role={role} />,
   };
   const content = screens[active] || screens.dashboard;
 
