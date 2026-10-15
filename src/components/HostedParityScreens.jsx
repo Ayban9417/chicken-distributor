@@ -226,7 +226,7 @@ export function HostedSalesScreen({ organizationId, role, userId, onChanged, onS
   </UserContext.Provider>;
 }
 
-export function HostedFinanceScreen({ organizationId, role, userId, view, initialCustomerId = "", onChanged, onNavigate }) {
+export function HostedFinanceScreen({ organizationId, role, userId, view, initialCustomerId = "", onPaymentRecorded, onChanged, onNavigate }) {
   const [epoch, setEpoch] = useState(0);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -330,6 +330,7 @@ export function HostedFinanceScreen({ organizationId, role, userId, view, initia
       busy={busy}
       pushToast={setNotice}
       onRecordPayment={(values) => run(() => recordHostedPayment(organizationId, values), (saved) => `${saved?.payment_number || "Payment"} recorded and allocated.`)}
+      onPaymentRecorded={onPaymentRecorded}
       onRecordExpense={(values) => run(() => recordHostedExpense(organizationId, values, userId), "Expense recorded.")}
     />
   </UserContext.Provider>;

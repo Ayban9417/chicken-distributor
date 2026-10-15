@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -76,6 +76,7 @@ import { groupTripProducts, tripKilograms, wholeChickenLineLabel } from "./utils
 import { CustomerManagement, CustomerEditor, CustomerSelector, CustomerSearch } from "./components/CustomerManagement";
 import { normalizeCustomer, customerPermissions, matchesCustomer, hasCustomerHistory } from "./utils/customers";
 import { emptySalePayment, initialPaymentAmount, validateSalePayment, paymentAtSaleStatus, saleFinancialEvents } from "./utils/salePayment";
+import { freshPaymentTransaction, freshSaleTransaction } from "./utils/transactionForms";
 import { compareInventoryProducts, compareInventoryTrips } from "./utils/inventory";
 import { Warehouse, SalesmanInventory } from "./components/InventoryFlow";
 import { getSalesmanAvailableQty, salesmanInventoryRows } from "./utils/inventoryFlow";
@@ -95,6 +96,7 @@ const categories = ["Fuel", "Parking", "Toll", "Meals", "Repairs", "Delivery Exp
 const paymentMethods = ["Cash", "GCash", "Bank Deposit"];
 const bankNames = ["Landbank", "BDO", "BPI", "Metrobank"];
 const wholeChickenProduct = "Whole Dressed Chicken";
+const emptySaleCustomer = { name: "Select Customer", pricing: {}, active: false };
 
 export default function App() {
   const [active, setActive] = useState("dashboard");
@@ -272,6 +274,7 @@ export default function App() {
         addAudit={addAudit}
         pushToast={pushToast}
         registerPostDcrChange={registerPostDcrChange}
+        onPaymentRecorded={() => setTargetCustomer("")}
         initialSalesmanId={demoRole === "Agent" ? demoSalesmanId : ""}
         canSelectSalesman={demoRole === "Owner / Admin"}
         showExpense={demoBackendRole !== "salesman"}
@@ -831,9 +834,8 @@ export function OutOrders({ customers, trips, movements = [], receivingTransfers
   const [trustReceipt, setTrustReceipt] = useState("");
   const [saleDate, setSaleDate] = useState(currentDate);
   const [saleAgent, setSaleAgent] = useState(initialSalesmanId);
-  const defaultCustomerId = customers.find((c) => c.active)?.id || "";
-  const [customerId, setCustomerId] = useState(defaultCustomerId);
-  const selectedCustomer = customers.find((customer) => customer.id === customerId) || { name: "Select Customer", pricing: {}, active: false };
+  const [customerId, setCustomerId] = useState("");
+  const selectedCustomer = customers.find((customer) => customer.id === customerId) || emptySaleCustomer;
   const selectedAgentId = saleAgent || (agents.some((agent) => agent.id === selectedCustomer.agentId && agent.active && agent.role === "Agent") ? selectedCustomer.agentId : agents.find((agent) => agent.active && agent.role === "Agent")?.id || "");
   const availableFor = (salesmanId, trip, item) => getAvailable ? getAvailable(salesmanId, trip, item) : getSalesmanAvailableQty(receivingTransfers, salesmanTransfers, movements, salesmanId, trip.id, item.name, item.sizeCode, item.classType);
   const saleableTrips = trips.filter((trip) => trip.products.some((item) => availableFor(selectedAgentId, trip, item) > 0));
@@ -911,12 +913,20 @@ export function OutOrders({ customers, trips, movements = [], receivingTransfers
     return buildOrderGroup(defaultTripId(), [{ product: "Whole Dressed Chicken", qty: 0 }], customer);
   }
 
+  useEffect(() => {
+    const group = groups[0];
+    if (customerId || trustReceipt || salePayment.enabled || groups.length !== 1 || group.lines.length !== 1 || Number(group.lines[0].qty || 0) > 0) return;
+    if (group.tripId !== defaultTripId() && !saleableTrips.some((trip) => trip.id === group.tripId)) {
+      setGroups([buildDefaultGroup(emptySaleCustomer)]);
+    }
+  }, [trips, selectedAgentId]);
+
   function resetOutForm() {
-    const defaultCustomer = customers.find((item) => item.id === defaultCustomerId);
-    setCustomerId(defaultCustomerId);
-    setTrustReceipt(""); setSaleDate(currentDate); setReview(false); setSaleAgent(initialSalesmanId);
-    setSalePayment(emptySalePayment());
-    setGroups([buildDefaultGroup(defaultCustomer)]);
+    const next = freshSaleTransaction(currentDate, selectedAgentId);
+    setCustomerId(next.customerId);
+    setTrustReceipt(next.trustReceipt); setSaleDate(next.saleDate); setReview(false); setSaleAgent(next.saleAgent);
+    setSalePayment(next.salePayment);
+    setGroups([buildDefaultGroup(emptySaleCustomer)]);
   }
 
   function handleCustomerChange(nextCustomerId, record) {
@@ -986,8 +996,9 @@ export function OutOrders({ customers, trips, movements = [], receivingTransfers
   }
 
   const [busy, setBusy] = useState(false);
+  const salePending = useRef(false);
   async function confirmOut() {
-    if (saleError || paymentError || !selectedAgentId || total <= 0) return;
+    if (salePending.current || saleError || paymentError || !selectedAgentId || total <= 0) return;
     const ref = "SALE-" + (1300 + outs.length + 1);
     const outGroups = groups.map((group) => {
       const trip = trips.find((item) => item.id === group.tripId);
@@ -1004,6 +1015,7 @@ export function OutOrders({ customers, trips, movements = [], receivingTransfers
     }).filter((group) => group?.lines.length);
     const out = { id: uid("out"), ref, trustReceipt: trustReceipt.trim(), date: saleDate, customerId, agentId: selectedAgentId, total, groups: outGroups };
     if (onConfirmSale) {
+      salePending.current = true;
       setBusy(true);
       try {
         const saved = await onConfirmSale({ customerId, salesmanId: selectedAgentId, date: saleDate, trustReceipt: trustReceipt.trim(), groups: outGroups, salePayment });
@@ -1013,6 +1025,7 @@ export function OutOrders({ customers, trips, movements = [], receivingTransfers
         setReview(false);
         pushToast?.(reason?.message || "Unable to confirm Sale.");
       } finally {
+        salePending.current = false;
         setBusy(false);
       }
       return;
@@ -1308,11 +1321,12 @@ export function Customers({ initialCustomerId = "", customers, ledgerEntries, ou
   );
 }
 
-export function Collections({ initialCustomerId = "", customers, ledgerEntries, setLedgerEntries, collections, setCollections, expenses, setExpenses, setDiscrepancies, addAudit, pushToast, registerPostDcrChange, users: providedUsers, currentDate = today, initialSalesmanId = "", canSelectSalesman = true, allowManualAllocation = true, onRecordPayment, onRecordExpense, busy = false, showExpense = true }) {
+export function Collections({ initialCustomerId = "", customers, ledgerEntries, setLedgerEntries, collections, setCollections, expenses, setExpenses, setDiscrepancies, addAudit, pushToast, registerPostDcrChange, users: providedUsers, currentDate = today, initialSalesmanId = "", canSelectSalesman = true, allowManualAllocation = true, onRecordPayment, onRecordExpense, onPaymentRecorded, busy = false, showExpense = true }) {
   const contextUsers = useUsers();
   const agents = providedUsers || contextUsers;
   const firstAgent = initialSalesmanId || agents.find((agent) => agent.active && agent.role === "Agent")?.id || "";
-  const [collection, setCollection] = useState({ agentId: firstAgent, customerId: customers.some((c) => c.id === initialCustomerId) ? initialCustomerId : customers[0]?.id || "", amount: "", method: "Cash", date: currentDate, reference: "", bank: "", notes: "", manual: false, allocations: [] });
+  const [collection, setCollection] = useState(() => freshPaymentTransaction(firstAgent, currentDate, customers.some((c) => c.id === initialCustomerId) ? initialCustomerId : ""));
+  const paymentPending = useRef(false);
   const [expense, setExpense] = useState({ agentId: firstAgent, date: currentDate, category: "Fuel", amount: "", source: "Cash Collection", description: "", status: "Approved" });
   const autoAllocations = allocateOldestFirst(ledgerEntries, collection.customerId, collection.amount, collection.date);
   const allocations = collection.manual ? collection.allocations.filter((item) => Number(item.amount) > 0) : autoAllocations;
@@ -1321,12 +1335,18 @@ export function Collections({ initialCustomerId = "", customers, ledgerEntries, 
   const collectionInvalid = Boolean(paymentError) || !customers.some((c) => c.id === collection.customerId) || !agents.some((agent) => agent.id === collection.agentId && agent.active && agent.role === "Agent");
 
   async function recordCollection() {
-    if (collectionInvalid) return;
+    if (paymentPending.current || busy || collectionInvalid) return;
     if (onRecordPayment) {
-      const saved = await onRecordPayment({ ...collection, amount: Number(collection.amount), allocations });
-      if (!saved) return;
-      setCollection((current) => ({ ...current, amount: "", reference: "", notes: "", allocations: [] }));
-      pushToast?.(`${saved?.payment_number || "Payment"} recorded and allocated`);
+      paymentPending.current = true;
+      try {
+        const saved = await onRecordPayment({ ...collection, amount: Number(collection.amount), allocations });
+        if (!saved) return;
+        setCollection((current) => freshPaymentTransaction(current.agentId, currentDate));
+        onPaymentRecorded?.();
+        pushToast?.(`${saved?.payment_number || "Payment"} recorded and allocated`);
+      } finally {
+        paymentPending.current = false;
+      }
       return;
     }
     const ref = `PAY-${3000 + collections.length + 1}`;
@@ -1356,7 +1376,8 @@ export function Collections({ initialCustomerId = "", customers, ledgerEntries, 
     }
     addAudit(`Recorded ${currency(collection.amount)} ${collection.method.toLowerCase()} payment`, getAgentName(agents, collection.agentId));
     registerPostDcrChange(collection.agentId, collection.date, `${ref} payment was added after lock`);
-    setCollection((current) => ({ ...current, amount: "", reference: "", notes: "", allocations: [] }));
+    setCollection((current) => freshPaymentTransaction(current.agentId, currentDate));
+    onPaymentRecorded?.();
     pushToast(`${ref} recorded and allocated`);
   }
 
