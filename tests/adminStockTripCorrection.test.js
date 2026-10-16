@@ -75,13 +75,14 @@ test("Edge function uses the Phase 1 password guard and never logs or stores cre
 test("Plant Trip edit and history controls render only when the hosted callbacks are supplied", async () => {
   const vite = await createServer({ server: { middlewareMode: true }, appType: "custom", logLevel: "silent" });
   try {
-    const { Trips } = await vite.ssrLoadModule("/src/App.jsx");
+    const { Trips, LocalStockTripCorrectionDialog } = await vite.ssrLoadModule("/src/App.jsx");
     const { StockTripCorrectionDialog } = await vite.ssrLoadModule("/src/components/StockTripCorrectionDialog.jsx");
     const props = { trips: [trip], setTrips() {}, plantConfigs: [], currentDate: "2026-10-16" };
     const local = renderToStaticMarkup(createElement(Trips, props));
     assert.doesNotMatch(local, />Edit<|View Edit History/);
     const hosted = renderToStaticMarkup(createElement(Trips, { ...props, onEditTrip() {}, onViewEditHistory() {} }));
     assert.match(hosted, />Edit</);
+    assert.match(hosted, /<\/details>\s*<div[^>]*>.*?>Edit</s);
     assert.doesNotMatch(hosted, /View Edit History/);
     const corrected = renderToStaticMarkup(createElement(Trips, { ...props, trips: [{ ...trip, corrected: true }], onEditTrip() {}, onViewEditHistory() {} }));
     assert.match(corrected, /View Edit History/);
@@ -94,6 +95,12 @@ test("Plant Trip edit and history controls render only when the hosted callbacks
     assert.match(dialog, /sm:grid-cols-2/);
     assert.match(dialog, /overflow-x-auto/);
     assert.match(dialog, /Bags Before \/ After/);
+    const localDialog = renderToStaticMarkup(createElement(LocalStockTripCorrectionDialog, { trip, onClose() {} }));
+    assert.match(localDialog, /Correction services are not configured in local demo mode/);
+    assert.match(localDialog, /REF-QA-001/);
+    assert.match(localDialog, /type="password"/);
+    assert.match(localDialog, /Correction Reason/);
+    assert.match(localDialog, /<button[^>]*disabled=""[^>]*>.*?Confirm Correction/s);
   } finally {
     await vite.close();
   }

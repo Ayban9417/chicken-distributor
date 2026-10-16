@@ -86,6 +86,8 @@ import { buildLocalInventoryOverviewRows } from "./utils/inventoryOverview";
 import { Brand, PrimaryNav, primaryNavigation, salesmanNavigation } from "./components/ApplicationNavigation";
 import { canAccessScreen, initialScreenForRole } from "./lib/roleAccess";
 import { LocalSalesmanDashboard, LocalSalesmanDtr, SalesmanExpenses } from "./components/SalesmanWorkspace";
+import { CorrectionDialog } from "./components/CorrectionDialog";
+import { buildCorrectionPreview } from "./utils/correctionPreview";
 
 const today = demoToday;
 
@@ -130,6 +132,7 @@ export default function App() {
   const [salesmanTransfers, setSalesmanTransfers] = useState(initialSalesmanTransfers);
   const [targetCustomer, setTargetCustomer] = useState("");
   const [drawer, setDrawer] = useState(null);
+  const [editTrip, setEditTrip] = useState(null);
   const [toast, setToast] = useState("");
   const [postDcrAlert, setPostDcrAlert] = useState("");
   const demoBackendRole = demoRole === "Owner / Admin" ? "owner_admin" : demoRole === "Agent" ? "salesman" : "warehouse";
@@ -222,6 +225,7 @@ export default function App() {
         setTrips={setTrips}
         addAudit={addAudit}
         pushToast={pushToast}
+        onEditTrip={permissions.manage ? setEditTrip : undefined}
       />
     ),
     warehouse: <Warehouse inventoryRows={inventoryRows} trips={trips} movements={movements} receivingTransfers={receivingTransfers} setReceivingTransfers={setReceivingTransfers} salesmanTransfers={salesmanTransfers} users={userRecords} addAudit={addAudit} pushToast={pushToast} onOpen={(row) => setDrawer({ type: "inventory", row })} />,
@@ -344,7 +348,7 @@ export default function App() {
         </Button>
         <div className="hidden text-sm font-semibold text-slate-500 xl:block">Concept Workflow Prototype by Noderno</div>
         <div className="flex items-center gap-2">
-          <select aria-label="Demo Role" className="min-h-11 max-w-40 rounded-lg border border-slate-200 bg-white px-2 text-sm" value={demoRole} onChange={(e) => { const nextRole = e.target.value; const backendRole = nextRole === "Owner / Admin" ? "owner_admin" : nextRole === "Agent" ? "salesman" : "warehouse"; setDemoRole(nextRole); setActive(initialScreenForRole(backendRole)); setManagePlants(false); setManageCustomers(false); setCustomerEditor(null); }}><option>Owner / Admin</option><option value="Agent">Salesman</option><option>Warehouse</option></select>
+          <select aria-label="Demo Role" className="min-h-11 max-w-40 rounded-lg border border-slate-200 bg-white px-2 text-sm" value={demoRole} onChange={(e) => { const nextRole = e.target.value; const backendRole = nextRole === "Owner / Admin" ? "owner_admin" : nextRole === "Agent" ? "salesman" : "warehouse"; setDemoRole(nextRole); setActive(initialScreenForRole(backendRole)); setManagePlants(false); setManageCustomers(false); setCustomerEditor(null); setEditTrip(null); }}><option>Owner / Admin</option><option value="Agent">Salesman</option><option>Warehouse</option></select>
           <Badge tone="blue">Demo: {shortDate(today)}</Badge>
         </div>
       </header>
@@ -373,6 +377,7 @@ export default function App() {
       {toast && <div className="fixed right-4 top-20 z-50 rounded-lg bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-xl">{toast}</div>}
       {resetOpen && permissions.manage && <Drawer title="Reset all operational demo data?" onClose={() => setResetOpen(false)}><p>This clears Stock In, Warehouse and Salesman transfers, Inventory, Sales, Payments, Ledgers, DCRs, expenses and report activity. Plant and system configuration will remain.</p><p className="mt-3">Customers, DTR entries, payroll runs, truck assets, maintenance activity and audit activity will also be cleared. This cannot be undone.</p><div className="mt-6 flex flex-wrap gap-3"><Button variant="secondary" onClick={() => setResetOpen(false)}>Cancel</Button><Button variant="danger" onClick={resetOperationalData}>Reset Operational Data</Button></div></Drawer>}
       {customerEditor && <CustomerEditor {...customerEditor} customers={customers} productNames={[...new Set([...plantConfigs.flatMap((p) => p.products.map((product) => product.productName)), ...trips.flatMap((trip) => trip.products.map((p) => p.name))])]} onSave={saveCustomer} onClose={() => setCustomerEditor(null)} onExisting={(c) => { customerEditor.onSelected?.(c); if (!customerEditor.quick) goCustomer("customers", c.id); setCustomerEditor(null); }} />}
+      {editTrip && permissions.manage && <LocalStockTripCorrectionDialog trip={editTrip} onClose={() => setEditTrip(null)} />}
 
       {drawer && (
         <Drawer title={drawerTitle(drawer)} onClose={() => setDrawer(null)}>
@@ -391,6 +396,24 @@ function TripHeaderField({ label, value }) {
     <span className="block text-xs font-bold uppercase text-slate-500">{label}</span>
     <strong className={`mt-1 block break-words text-base font-bold text-slate-950 ${label === "Reference Number" ? "normal-case" : ""}`}>{value}</strong>
   </span>;
+}
+
+export function LocalStockTripCorrectionDialog({ trip, onClose }) {
+  const unavailable = "Correction services are not configured in local demo mode. Switch to hosted Supabase mode to review and apply corrections.";
+  const values = {
+    tripDate: trip.date, reference: trip.reference, notes: trip.notes,
+    lines: trip.products.map((line) => ({ product: line.name, quantityKg: line.originalQty, costPerKg: line.costPerKg, bags: line.bags, headCount: line.headCount })),
+  };
+  return <CorrectionDialog
+    title={`Edit Stock In / ${trip.reference || trip.code}`}
+    preview={buildCorrectionPreview({
+      originalValues: values,
+      proposedValues: values,
+      blockedReasons: [unavailable],
+    })}
+    onClose={onClose}
+    onConfirm={async () => { throw new Error(unavailable); }}
+  />;
 }
 
 function TripProductSection({ title, group, emptyMessage, whole = false }) {
@@ -507,7 +530,8 @@ export function Trips({ trips, setTrips, addAudit, pushToast, plantConfigs, onSt
     <section className="report-section"><h2 className="mb-4 text-lg font-bold">Plant Trips</h2>
       {[...new Set(trips.map((trip) => trip.plant))].map((plant) => <div key={plant} className="mb-6">
         <h3 className="mb-3"><PlantName name={plant} /></h3>
-        <div className="space-y-3">{trips.filter((trip) => trip.plant === plant).sort((a, b) => b.date.localeCompare(a.date)).map((trip) => { const groups = groupTripProducts(trip.products); return <details key={trip.id} className="group min-w-0 rounded-lg border border-slate-200 bg-white p-4">
+        <div className="space-y-3">{trips.filter((trip) => trip.plant === plant).sort((a, b) => b.date.localeCompare(a.date)).map((trip) => { const groups = groupTripProducts(trip.products); return <div key={trip.id} className="min-w-0 rounded-lg border border-slate-200 bg-white">
+          <details className="group min-w-0 p-4">
           <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
             <div className="flex min-w-0 items-start gap-3">
         <span className="grid min-w-0 flex-1 grid-cols-1 gap-3">
@@ -521,12 +545,13 @@ export function Trips({ trips, setTrips, addAudit, pushToast, plantConfigs, onSt
             </div>
           </summary>
           <TripProductSections groups={groups} />
-          {(onEditTrip || onDeleteTrip) && <div className="mt-4 flex flex-wrap justify-end gap-2">
+          </details>
+          {(onEditTrip || onDeleteTrip) && <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 px-4 py-2">
             {onViewEditHistory && trip.corrected && <Button variant="secondary" onClick={() => onViewEditHistory(trip)}><History size={17} />View Edit History</Button>}
             {onEditTrip && <Button variant="secondary" onClick={() => onEditTrip(trip)}><Pencil size={17} />Edit</Button>}
             {onDeleteTrip && <Button variant="danger" onClick={() => onDeleteTrip(trip)}><Trash2 size={17} />Delete Trip</Button>}
           </div>}
-        </details>; })}</div>
+        </div>; })}</div>
       </div>)}
     </section>
   </>;
