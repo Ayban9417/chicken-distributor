@@ -21,6 +21,7 @@ import { DestructiveActionDialog } from "./DestructiveActionDialog";
 import { StockTripCorrectionDialog } from "./StockTripCorrectionDialog";
 import { TransferCorrectionDialog } from "./TransferCorrectionDialog";
 import { SaleCorrectionDialog } from "./SaleCorrectionDialog";
+import { PaymentCorrectionDialog } from "./PaymentCorrectionDialog";
 import { deleteHostedStockTrip, deleteUnusedHostedCustomer } from "../services/protectedDeletionService";
 import { currency, kg, shortDate } from "../utils/business";
 import { sum } from "../utils/operations";
@@ -257,6 +258,7 @@ export function HostedFinanceScreen({ organizationId, role, userId, view, initia
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [detail, setDetail] = useState(null);
+  const [editPayment, setEditPayment] = useState(null);
   const [customerEditor, setCustomerEditor] = useState(null);
   const remote = useRemote(() => loadHostedFinanceParity(organizationId, undefined, role === "salesman" ? userId : null), `${organizationId}-${userId}-${epoch}`);
   const refresh = () => { setEpoch((value) => value + 1); onChanged?.(); };
@@ -357,7 +359,12 @@ export function HostedFinanceScreen({ organizationId, role, userId, view, initia
       onRecordPayment={(values) => run(() => recordHostedPayment(organizationId, values), (saved) => `${saved?.payment_number || "Payment"} recorded and allocated.`)}
       onPaymentRecorded={onPaymentRecorded}
       onRecordExpense={(values) => run(() => recordHostedExpense(organizationId, values, userId), "Expense recorded.")}
+      onEditPayment={role === "owner_admin" ? setEditPayment : undefined}
+      onViewPaymentHistory={role === "owner_admin" ? (payment) => onNavigate?.("transaction-history", payment.id) : undefined}
     />
+    {editPayment && role === "owner_admin" && <PaymentCorrectionDialog
+      organizationId={organizationId} paymentRecord={editPayment} customers={data.customers}
+      onClose={() => setEditPayment(null)} onSaved={() => { setEditPayment(null); setNotice("Payment correction recorded."); refresh(); }} />}
   </UserContext.Provider>;
 }
 

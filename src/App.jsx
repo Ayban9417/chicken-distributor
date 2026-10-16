@@ -1370,7 +1370,7 @@ export function Customers({ initialCustomerId = "", customers, ledgerEntries, ou
   );
 }
 
-export function Collections({ initialCustomerId = "", customers, ledgerEntries, setLedgerEntries, collections, setCollections, expenses, setExpenses, setDiscrepancies, addAudit, pushToast, registerPostDcrChange, users: providedUsers, currentDate = today, initialSalesmanId = "", canSelectSalesman = true, allowManualAllocation = true, onRecordPayment, onRecordExpense, onPaymentRecorded, busy = false, showExpense = true }) {
+export function Collections({ initialCustomerId = "", customers, ledgerEntries, setLedgerEntries, collections, setCollections, expenses, setExpenses, setDiscrepancies, addAudit, pushToast, registerPostDcrChange, users: providedUsers, currentDate = today, initialSalesmanId = "", canSelectSalesman = true, allowManualAllocation = true, onRecordPayment, onRecordExpense, onPaymentRecorded, onEditPayment, onViewPaymentHistory, busy = false, showExpense = true }) {
   const contextUsers = useUsers();
   const agents = providedUsers || contextUsers;
   const firstAgent = initialSalesmanId || agents.find((agent) => agent.active && agent.role === "Agent")?.id || "";
@@ -1504,6 +1504,16 @@ export function Collections({ initialCustomerId = "", customers, ledgerEntries, 
           </div>
         </div>
       </div>
+      {onEditPayment && <section className="report-section mt-5"><h2 className="mb-3 text-lg font-bold">Payment History</h2>
+        <ResponsiveTable columns={["Date", "Payment", "Customer", "Method", "Amount", "Verification", "Actions"]}
+          rows={collections.slice().sort((a, b) => b.date.localeCompare(a.date) || b.ref.localeCompare(a.ref)).map((item) => [
+            shortDate(item.date), item.ref, getCustomerName(customers, item.customerId), item.method, currency(item.amount),
+            item.verificationStatus || "-", <span className="flex flex-wrap gap-2">
+              <Button variant="secondary" onClick={() => onEditPayment(item)}><Pencil size={16} />Edit</Button>
+              {onViewPaymentHistory && <Button variant="ghost" title="View Edit History" onClick={() => onViewPaymentHistory(item)}><History size={16} />History</Button>}
+            </span>,
+          ])} />
+      </section>}
     </>
   );
 }
