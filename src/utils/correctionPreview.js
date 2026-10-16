@@ -13,9 +13,9 @@ export function redactCorrectionData(value) {
 
 // Informational contract only. A future correction RPC must recompute eligibility
 // and its version token from locked database rows before changing anything.
-export function buildCorrectionPreview({ originalValues = {}, proposedValues = {}, affectedRecords = [], blockedReasons = [], expectedInventoryChanges = [], expectedFinancialChanges = [], versionToken = "" } = {}) {
+export function buildCorrectionPreview({ originalValues = {}, proposedValues = {}, affectedRecords = [], blockedReasons = [], expectedInventoryChanges = [], expectedFinancialChanges = [], versionToken = "", versionRequired = true } = {}) {
   const reasons = [...blockedReasons];
-  if (!versionToken) reasons.push("Refresh the transaction before correcting it.");
+  if (versionRequired && !versionToken) reasons.push("Refresh the transaction before correcting it.");
   return {
     originalValues: redactCorrectionData(originalValues),
     proposedValues: redactCorrectionData(proposedValues),

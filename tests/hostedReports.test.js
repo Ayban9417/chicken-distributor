@@ -83,7 +83,7 @@ test("DCR totals and inclusive date checks are deterministic", () => {
   assert.equal(inDateRange("2026-10-01", { start: "2026-09-01", end: "2026-09-30" }), false);
 });
 
-test("hosted reporting service applies inclusive database date filters", async () => {
+test("hosted reporting service filters financial records in SQL and transfer receipts by current date", async () => {
   const client = recordingClient();
   const range = { start: "2026-09-01", end: "2026-09-30" };
   const result = await loadHostedReports("org-1", range, client);
@@ -94,7 +94,6 @@ test("hosted reporting service applies inclusive database date filters", async (
     ["expenses", "expense_date"],
     ["sales_by_plant", "sale_date"],
     ["daily_cash_reports", "report_date"],
-    ["inventory_movements", "effective_date"],
   ]);
   for (const [table, column] of expected) {
     const query = client.queries.find((item) => item.table === table);
@@ -102,9 +101,34 @@ test("hosted reporting service applies inclusive database date filters", async (
     assert.ok(query.steps.some((step) => step[0] === "gte" && step[1] === column && step[2] === range.start));
     assert.ok(query.steps.some((step) => step[0] === "lte" && step[1] === column && step[2] === range.end));
   }
+  const movements = client.queries.find((item) => item.table === "inventory_movements");
+  assert.ok(movements);
+  assert.equal(movements.steps.some((step) => step[0] === "gte" || step[0] === "lte"), false);
   const paymentQueries = client.queries.filter((item) => item.table === "payments");
   assert.equal(paymentQueries.length, 2);
   assert.ok(paymentQueries.some((query) => query.steps.some((step) => step[0] === "gte" && step[1] === "payment_date")));
+});
+
+test("transfer report uses corrected receipt date, lot, custody and quantity", async () => {
+  const client = recordingClient({
+    inventory_movements: [{ id: "movement-1", inventory_lot_id: "old-lot", reference_type: "receiving_receipt",
+      reference_id: "rr-1", reference_line_id: "rr-line-1", movement_type: "warehouse_to_salesman",
+      effective_date: "2026-08-31", quantity_kg: 10, from_location_type: "warehouse", to_location_type: "salesman", to_salesman_user_id: "s1" }],
+    receiving_receipts: [{ id: "rr-1", receipt_number: "RR-1", salesman_user_id: "s2", effective_date: "2026-09-03" }],
+    receiving_receipt_lines: [{ id: "rr-line-1", inventory_lot_id: "new-lot", quantity_kg: 12 }],
+    inventory_lots: [{ id: "new-lot", stock_trip_line_id: "stock-line-1", plant_id: "plant-1", product_id: "product-1" }],
+    stock_trip_lines: [{ id: "stock-line-1", stock_trip_id: "trip-1" }],
+    stock_trips: [{ id: "trip-1", trip_number: "ST-1", reference_number: "SOURCE-1", trip_date: "2026-08-30" }],
+    plants: [{ id: "plant-1", name: "QA Plant" }],
+    products: [{ id: "product-1", name: "Chicken" }],
+    profiles: [{ id: "s1", full_name: "Original" }, { id: "s2", full_name: "Corrected" }],
+  });
+  const result = await loadHostedReports("org-1", { start: "2026-09-01", end: "2026-09-30" }, client);
+  assert.equal(result.transfers.length, 1);
+  assert.equal(result.transfers[0].effective_date, "2026-09-03");
+  assert.equal(result.transfers[0].quantity_kg, 12);
+  assert.equal(result.transfers[0].to_name, "Corrected");
+  assert.equal(result.transfers[0].plant_name, "QA Plant");
 });
 
 test("hosted inventory report reads acquisition type from the stock trip line", async () => {

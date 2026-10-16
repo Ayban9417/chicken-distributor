@@ -28,7 +28,7 @@ export async function loadHostedReports(organizationId, range, client = requireS
     client.from("collectibles").select("*").eq("organization_id", organizationId).order("sale_date"),
     client.from("warehouse_stock_summary").select("*").eq("organization_id", organizationId).order("trip_date", { ascending: false }),
     client.from("salesman_stock_summary").select("*").eq("organization_id", organizationId).order("trip_date", { ascending: false }),
-    period(client.from("inventory_movements").select("*").eq("organization_id", organizationId).in("movement_type", ["warehouse_to_salesman", "salesman_to_salesman"]), "effective_date", range).order("effective_date", { ascending: false }),
+    client.from("inventory_movements").select("*").eq("organization_id", organizationId).in("movement_type", ["warehouse_to_salesman", "salesman_to_salesman"]).order("effective_date", { ascending: false }),
     client.from("products").select("id, name, category").eq("organization_id", organizationId),
     client.from("plants").select("id, name").eq("organization_id", organizationId),
     client.from("plant_product_codes").select("id, code"),
@@ -56,9 +56,13 @@ export async function loadHostedReports(organizationId, range, client = requireS
   const customers = fail(customersResult);
 
   const saleLines = await selectIn(client, "sale_lines", "sale_id, product_id, code_id, class_type_id, quantity_kg, line_sales, line_cogs, line_gross_profit", "sale_id", ids(sales, "id"));
-  const lotRows = await selectIn(client, "inventory_lots", "id, stock_trip_line_id, plant_id, product_id, code_id, class_type_id", "id", ids(movements, "inventory_lot_id"));
-  const receivingReceipts = await selectIn(client, "receiving_receipts", "id, receipt_number, salesman_user_id", "id", ids(movements.filter((row) => row.reference_type === "receiving_receipt"), "reference_id"));
-  const transferReceipts = await selectIn(client, "transfer_receipts", "id, receipt_number, from_salesman_user_id, to_salesman_user_id", "id", ids(movements.filter((row) => row.reference_type === "transfer_receipt"), "reference_id"));
+  const receivingMovements = movements.filter((row) => row.reference_type === "receiving_receipt");
+  const transferMovements = movements.filter((row) => row.reference_type === "transfer_receipt");
+  const receivingReceipts = await selectIn(client, "receiving_receipts", "*", "id", ids(receivingMovements, "reference_id"));
+  const transferReceipts = await selectIn(client, "transfer_receipts", "*", "id", ids(transferMovements, "reference_id"));
+  const receivingLines = await selectIn(client, "receiving_receipt_lines", "id, inventory_lot_id, quantity_kg", "id", ids(receivingMovements, "reference_line_id"));
+  const transferLines = await selectIn(client, "transfer_receipt_lines", "id, inventory_lot_id, quantity_kg", "id", ids(transferMovements, "reference_line_id"));
+  const lotRows = await selectIn(client, "inventory_lots", "id, stock_trip_line_id, plant_id, product_id, code_id, class_type_id", "id", ids([...movements, ...receivingLines, ...transferLines], "inventory_lot_id"));
   const stockLots = await selectIn(client, "inventory_lots", "id, stock_trip_line_id, original_quantity_kg", "id", ids([...warehouseStock, ...salesmanStock], "inventory_lot_id"));
   const tripLines = await selectIn(client, "stock_trip_lines", "id, stock_trip_id, acquisition_type", "id", ids([...lotRows, ...stockLots], "stock_trip_line_id"));
   const trips = await selectIn(client, "stock_trips", "id, trip_number, reference_number, trip_date", "id", ids(tripLines, "stock_trip_id"));
@@ -73,6 +77,7 @@ export async function loadHostedReports(organizationId, range, client = requireS
   const tripMap = mapBy(trips);
   const receivingMap = mapBy(receivingReceipts);
   const transferMap = mapBy(transferReceipts);
+  const receiptLineMap = mapBy([...receivingLines, ...transferLines]);
   const stockLotMap = mapBy(stockLots);
   const customerMap = mapBy(customers);
   const namedDcrs = dcrs.map((row) => ({
@@ -93,13 +98,18 @@ export async function loadHostedReports(organizationId, range, client = requireS
   }));
 
   const transfers = movements.map((row) => {
-    const lot = lotMap.get(row.inventory_lot_id) || {};
+    const line = receiptLineMap.get(row.reference_line_id) || {};
+    const lot = lotMap.get(line.inventory_lot_id || row.inventory_lot_id) || {};
     const trip = tripMap.get(tripLineMap.get(lot.stock_trip_line_id)?.stock_trip_id) || {};
     const receipt = row.reference_type === "receiving_receipt" ? receivingMap.get(row.reference_id) : transferMap.get(row.reference_id);
-    const fromName = row.from_location_type === "warehouse" ? "Warehouse" : profileMap.get(row.from_salesman_user_id)?.full_name || "Salesman";
-    const toName = profileMap.get(row.to_salesman_user_id)?.full_name || (row.to_location_type === "warehouse" ? "Warehouse" : "Salesman");
+    const fromSalesmanId = receipt?.from_salesman_user_id || row.from_salesman_user_id;
+    const toSalesmanId = receipt?.to_salesman_user_id || receipt?.salesman_user_id || row.to_salesman_user_id;
+    const fromName = row.from_location_type === "warehouse" ? "Warehouse" : profileMap.get(fromSalesmanId)?.full_name || "Salesman";
+    const toName = profileMap.get(toSalesmanId)?.full_name || "Salesman";
     return {
       ...row,
+      effective_date: receipt?.effective_date || row.effective_date,
+      quantity_kg: line.quantity_kg ?? row.quantity_kg,
       receipt_number: receipt?.receipt_number || "-",
       from_name: fromName,
       to_name: toName,
@@ -111,7 +121,7 @@ export async function loadHostedReports(organizationId, range, client = requireS
       trip_reference: trip.reference_number || "",
       trip_date: trip.trip_date || null,
     };
-  });
+  }).filter((row) => row.effective_date >= range.start && row.effective_date <= range.end);
 
   const withStockMetadata = (row) => {
     const lot = stockLotMap.get(row.inventory_lot_id) || {};

@@ -39,7 +39,7 @@ export function TransactionEditHistory({ organizationId, role, transactionId = "
   const update = (key, value) => setFilters((current) => ({ ...current, [key]: value }));
   return <div>
     <SectionHeader title="Transaction Edit History" action={<Button variant="secondary" aria-label="Refresh history" title="Refresh history" onClick={() => setRefreshKey((value) => value + 1)}><RefreshCw size={17} />Refresh</Button>} />
-    {transactionId && <div className="mb-4 flex flex-wrap items-center gap-3 border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-900"><span>Showing corrections for one Stock-In Trip.</span><Button variant="secondary" onClick={onClearTrip}>Show All History</Button></div>}
+    {transactionId && <div className="mb-4 flex flex-wrap items-center gap-3 border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-900"><span>Showing corrections for one transaction.</span><Button variant="secondary" onClick={onClearTrip}>Show All History</Button></div>}
     <section className="report-section mb-5"><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
       <Field label="Module"><select className={inputClass()} value={filters.module} onChange={(event) => update("module", event.target.value)}><option value="">All Modules</option>{modules.map((module) => <option key={module} value={module}>{humanize(module)}</option>)}</select></Field>
       <Field label="From Date"><input type="date" className={inputClass()} value={filters.dateFrom} onChange={(event) => update("dateFrom", event.target.value)} /></Field>

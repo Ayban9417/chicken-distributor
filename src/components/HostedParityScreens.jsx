@@ -19,6 +19,7 @@ import { CustomerEditor, CustomerManagement } from "./CustomerManagement";
 import { SalesmanAccounts } from "./SalesmanAccounts";
 import { DestructiveActionDialog } from "./DestructiveActionDialog";
 import { StockTripCorrectionDialog } from "./StockTripCorrectionDialog";
+import { TransferCorrectionDialog } from "./TransferCorrectionDialog";
 import { deleteHostedStockTrip, deleteUnusedHostedCustomer } from "../services/protectedDeletionService";
 import { currency, kg, shortDate } from "../utils/business";
 import { sum } from "../utils/operations";
@@ -81,10 +82,11 @@ export function HostedPlantsScreen({ organizationId, role, onChanged, onNavigate
   </PlantContext.Provider>;
 }
 
-export function HostedWarehouseScreen({ organizationId, onChanged }) {
+export function HostedWarehouseScreen({ organizationId, role, onChanged, onNavigate }) {
   const [epoch, setEpoch] = useState(0);
   const [notice, setNotice] = useState("");
   const [detail, setDetail] = useState(null);
+  const [editReceipt, setEditReceipt] = useState(null);
   const remote = useRemote(() => loadHostedWarehouse(organizationId), `${organizationId}-${epoch}`);
   const refresh = () => { setEpoch((value) => value + 1); onChanged?.(); };
   if (!remote.data) return <RemoteState loading={remote.loading} error={remote.error} onRefresh={remote.refresh} />;
@@ -97,6 +99,8 @@ export function HostedWarehouseScreen({ organizationId, onChanged }) {
       receivingTransfers={remote.data.receivingTransfers}
       users={remote.data.users}
       onOpen={setDetail}
+      onEditReceipt={role === "owner_admin" ? setEditReceipt : undefined}
+      onViewEditHistory={role === "owner_admin" ? (receipt) => onNavigate?.("transaction-history", receipt.id) : undefined}
       currentDate={today()}
       onTransfer={async (values) => {
         const saved = await createHostedWarehouseTransfer(organizationId, values);
@@ -107,6 +111,9 @@ export function HostedWarehouseScreen({ organizationId, onChanged }) {
       pushToast={setNotice}
     />
     {detail && <Drawer title="Inventory Detail" onClose={() => setDetail(null)}><InventoryDetail row={detail} /></Drawer>}
+    {editReceipt && role === "owner_admin" && <TransferCorrectionDialog organizationId={organizationId}
+      module="warehouse_transfer" receipt={editReceipt} users={remote.data.users} lots={remote.data.rows}
+      onClose={() => setEditReceipt(null)} onSaved={() => { setEditReceipt(null); setNotice("Receiving Receipt correction recorded."); refresh(); }} />}
   </>;
 }
 
@@ -122,10 +129,11 @@ export function HostedCompanyInventoryScreen({ organizationId, role, onStockIn }
   </>;
 }
 
-export function HostedInventoryScreen({ organizationId, role, userId, onChanged, onWarehouse, showTransferActions = true, showReceipts = true, transferMode = false }) {
+export function HostedInventoryScreen({ organizationId, role, userId, onChanged, onWarehouse, onNavigate, showTransferActions = true, showReceipts = true, transferMode = false }) {
   const [epoch, setEpoch] = useState(0);
   const [notice, setNotice] = useState("");
   const [detail, setDetail] = useState(null);
+  const [editReceipt, setEditReceipt] = useState(null);
   const remote = useRemote(() => loadHostedSalesmanInventory(organizationId, undefined, role === "salesman" ? userId : null), `${organizationId}-${userId}-${epoch}`);
   const refresh = () => { setEpoch((value) => value + 1); onChanged?.(); };
   if (!remote.data) return <RemoteState loading={remote.loading} error={remote.error} onRefresh={remote.refresh} />;
@@ -143,6 +151,8 @@ export function HostedInventoryScreen({ organizationId, role, userId, onChanged,
       currentDate={today()}
       onWarehouse={onWarehouse}
       onOpen={setDetail}
+      onEditReceipt={role === "owner_admin" && showReceipts ? setEditReceipt : undefined}
+      onViewEditHistory={role === "owner_admin" && showReceipts ? (receipt) => onNavigate?.("transaction-history", receipt.id) : undefined}
       onTransfer={async (values) => {
         const saved = await createHostedSalesmanTransfer(organizationId, values);
         setNotice(`${saved.receipt_number} created.`);
@@ -157,6 +167,9 @@ export function HostedInventoryScreen({ organizationId, role, userId, onChanged,
       eyebrow={transferMode ? "Salesman to Salesman" : "Salesman Inventory"}
     />
     {detail && <Drawer title="Inventory Detail" onClose={() => setDetail(null)}><InventoryDetail row={detail} showCost={role !== "salesman"} /></Drawer>}
+    {editReceipt && role === "owner_admin" && <TransferCorrectionDialog organizationId={organizationId}
+      module="salesman_transfer" receipt={editReceipt} users={remote.data.users} lots={remote.data.rows}
+      onClose={() => setEditReceipt(null)} onSaved={() => { setEditReceipt(null); setNotice("Transfer Receipt correction recorded."); refresh(); }} />}
   </>;
 }
 

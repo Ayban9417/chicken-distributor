@@ -14,7 +14,7 @@ const display = (key, value) => {
   return String(value);
 };
 
-export function CorrectionDialog({ title = "Correct Transaction", preview, onClose, onConfirm, editor, onReview, reviewing = false, reviewRequired = false }) {
+export function CorrectionDialog({ title = "Correct Transaction", preview, onClose, onConfirm, editor, onReview, reviewing = false, reviewRequired = false, displayValue = display, fieldLabel = labelFor, hiddenFields = [] }) {
   const [reason, setReason] = useState("");
   const [password, setPassword] = useState("");
   const [requestId] = useState(() => crypto.randomUUID());
@@ -24,7 +24,7 @@ export function CorrectionDialog({ title = "Correct Transaction", preview, onClo
   const proposedValues = redactCorrectionData(preview?.proposedValues || {});
   const affectedRecords = redactCorrectionData(preview?.affectedRecords || []);
   const expectedChanges = redactCorrectionData([...(preview?.expectedInventoryChanges || []), ...(preview?.expectedFinancialChanges || [])]);
-  const keys = [...new Set([...Object.keys(originalValues), ...Object.keys(proposedValues)])].filter((key) => key !== "lines");
+  const keys = [...new Set([...Object.keys(originalValues), ...Object.keys(proposedValues)])].filter((key) => key !== "lines" && !hiddenFields.includes(key));
 
   async function confirm() {
     if (reviewRequired || !preview?.eligible || !preview.versionToken) return setError("Review the latest changes before confirming.");
@@ -49,7 +49,7 @@ export function CorrectionDialog({ title = "Correct Transaction", preview, onClo
       {onReview && <Button variant="secondary" disabled={busy || reviewing} onClick={onReview}>{reviewing ? "Reviewing..." : "Review Changes"}</Button>}
       {preview?.blockedReasons?.length > 0 && <div role="alert" className="border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">{preview.blockedReasons.map((item) => <p key={item}>{item}</p>)}</div>}
       <div className="overflow-x-auto border-y border-slate-200 py-3">
-        <table className="w-full text-left text-sm"><thead><tr className="text-slate-500"><th className="p-2">Field</th><th className="p-2">Original</th><th className="p-2">Proposed</th></tr></thead><tbody>{keys.map((key) => <tr key={key} className="border-t border-slate-100"><th className="p-2 font-semibold">{labelFor(key)}</th><td className="max-w-48 break-words p-2">{display(key, originalValues[key])}</td><td className="max-w-48 break-words p-2 font-semibold">{display(key, proposedValues[key])}</td></tr>)}</tbody></table>
+        <table className="w-full text-left text-sm"><thead><tr className="text-slate-500"><th className="p-2">Field</th><th className="p-2">Original</th><th className="p-2">Proposed</th></tr></thead><tbody>{keys.map((key) => <tr key={key} className="border-t border-slate-100"><th className="p-2 font-semibold">{fieldLabel(key)}</th><td className="max-w-48 break-words p-2">{displayValue(key, originalValues[key])}</td><td className="max-w-48 break-words p-2 font-semibold">{displayValue(key, proposedValues[key])}</td></tr>)}</tbody></table>
       </div>
       {Array.isArray(originalValues.lines) && originalValues.lines.length > 0 && <div className="overflow-x-auto border-y border-slate-200 py-3"><table className="w-full text-left text-sm"><thead><tr className="text-slate-500"><th className="p-2">Product</th><th className="p-2">Original KG</th><th className="p-2">Proposed KG</th><th className="p-2">Original Cost/KG</th><th className="p-2">Proposed Cost/KG</th><th className="p-2">Bags Before / After</th><th className="p-2">Heads Before / After</th></tr></thead><tbody>{originalValues.lines.map((line, index) => { const next = proposedValues.lines?.[index] || line; return <tr key={line.id || index} className="border-t border-slate-100"><th className="p-2 font-semibold">{line.product}</th><td className="p-2 whitespace-nowrap">{exactKg(line.quantityKg)}</td><td className="p-2 whitespace-nowrap">{exactKg(next.quantityKg)}</td><td className="p-2 whitespace-nowrap">{currency(line.costPerKg)}</td><td className="p-2 whitespace-nowrap">{currency(next.costPerKg)}</td><td className="p-2 whitespace-nowrap">{line.bags ?? "-"} / {next.bags ?? "-"}</td><td className="p-2 whitespace-nowrap">{line.headCount ?? "-"} / {next.headCount ?? "-"}</td></tr>; })}</tbody></table></div>}
       <div className="grid gap-3 sm:grid-cols-2"><PreviewList title="Affected Records" rows={affectedRecords} /><PreviewList title="Expected Inventory / Financial Changes" rows={expectedChanges} /></div>

@@ -71,16 +71,16 @@ function Workspace() {
       ? <HostedSalesmanDashboard organizationId={organization.id} userId={user.id} name={profile.full_name} epoch={epoch} onChanged={changed} onNavigate={navigate} />
       : <HostedDashboard organizationId={organization.id} epoch={epoch} onNavigate={navigate} onPayment={(customerId) => navigate("collections", customerId)} onLedger={(customerId) => navigate("customers", customerId)} />,
     trips: <HostedPlantsScreen organizationId={organization.id} role={role} onChanged={changed} onNavigate={navigate} />,
-    warehouse: <HostedWarehouseScreen organizationId={organization.id} onChanged={changed} />,
+    warehouse: <HostedWarehouseScreen organizationId={organization.id} role={role} onChanged={changed} onNavigate={navigate} />,
     inventory: role === "owner_admin"
       ? <HostedCompanyInventoryScreen organizationId={organization.id} role={role} onStockIn={() => navigate("trips")} />
       : <HostedInventoryScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} showTransferActions={false} showReceipts={false} />,
-    "salesman-inventory": <HostedInventoryScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} onWarehouse={() => navigate("warehouse")} />,
+    "salesman-inventory": <HostedInventoryScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} onWarehouse={() => navigate("warehouse")} onNavigate={navigate} />,
     out: <HostedSalesScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} onStockIn={() => navigate("trips")} />,
     collections: <HostedFinanceScreen organizationId={organization.id} role={role} userId={user.id} view="payments" initialCustomerId={financeCustomerId} onPaymentRecorded={() => setFinanceCustomerId("")} onChanged={changed} onNavigate={navigate} />,
     customers: <HostedFinanceScreen organizationId={organization.id} role={role} userId={user.id} view="ledger" initialCustomerId={financeCustomerId} onChanged={changed} onNavigate={navigate} />,
     collectibles: <HostedFinanceScreen organizationId={organization.id} role={role} userId={user.id} view="collectibles" onChanged={changed} onNavigate={navigate} />,
-    transfers: <HostedInventoryScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} transferMode />,
+    transfers: <HostedInventoryScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} onNavigate={navigate} transferMode />,
     expenses: <HostedSalesmanExpenses organizationId={organization.id} userId={user.id} epoch={epoch} onChanged={changed} />,
     dcr: <HostedFinanceScreen organizationId={organization.id} role={role} userId={user.id} view="dcr" onChanged={changed} onNavigate={navigate} />,
     dtr: role === "salesman" ? <HostedSalesmanDtr organizationId={organization.id} userId={user.id} epoch={epoch} onChanged={changed} /> : <HostedDtr organizationId={organization.id} userId={user.id} role={role} />,

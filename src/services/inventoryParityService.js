@@ -35,8 +35,8 @@ export async function loadHostedWarehouse(organizationId, client = requireSupaba
   const receiptIds = [...new Set(movements.map((row) => row.reference_id))];
   const receiptLineIds = [...new Set(movements.map((row) => row.reference_line_id).filter(Boolean))];
   const [receipts, receiptLines] = await Promise.all([
-    receiptIds.length ? client.from("receiving_receipts").select("id, receipt_number, notes").in("id", receiptIds).then(fail) : [],
-    receiptLineIds.length ? client.from("receiving_receipt_lines").select("id, bags, head_count").in("id", receiptLineIds).then(fail) : [],
+    receiptIds.length ? client.from("receiving_receipts").select("*").in("id", receiptIds).then(fail) : [],
+    receiptLineIds.length ? client.from("receiving_receipt_lines").select("id, inventory_lot_id, quantity_kg, bags, head_count").in("id", receiptLineIds).then(fail) : [],
   ]);
   const lotMap = new Map(lots.map((row) => [row.id, row]));
   const lineMap = new Map(tripLines.map((row) => [row.id, row]));
@@ -70,14 +70,18 @@ export async function loadHostedWarehouse(organizationId, client = requireSupaba
     };
   });
   const receivingTransfers = movements.map((movement) => {
-    const row = stockMap.get(movement.inventory_lot_id) || {};
     const receipt = receiptMap.get(movement.reference_id) || {};
     const receiptLine = receiptLineMap.get(movement.reference_line_id) || {};
+    const lotId = receiptLine.inventory_lot_id || movement.inventory_lot_id;
+    const row = stockMap.get(lotId) || {};
     return {
-      id: movement.id,
+      id: receipt.id || movement.reference_id,
+      lineId: receiptLine.id || movement.reference_line_id,
+      lotId,
+      movementId: movement.id,
       receipt: receipt.receipt_number || "-",
-      date: movement.effective_date,
-      toSalesmanId: movement.to_salesman_user_id,
+      date: receipt.effective_date || movement.effective_date,
+      toSalesmanId: receipt.salesman_user_id || movement.to_salesman_user_id,
       tripId: row.stock_trip_id,
       plant: row.plant_name || "-",
       tripDate: row.trip_date,
@@ -86,7 +90,7 @@ export async function loadHostedWarehouse(organizationId, client = requireSupaba
       product: row.product_name || "-",
       sizeCode: row.product_code || "",
       classType: row.class_type || "",
-      qty: number(movement.quantity_kg),
+      qty: number(receiptLine.quantity_kg ?? movement.quantity_kg),
       bags: receiptLine.bags ?? null,
       headCount: receiptLine.head_count ?? null,
       costPerKg: number(row.cost_per_kg),
@@ -128,8 +132,8 @@ export async function loadHostedSalesmanInventory(organizationId, client = requi
   const [receipts, receiptLines] = snapshot
     ? [snapshot.transferReceipts, snapshot.transferReceiptLines]
     : await Promise.all([
-      receiptIds.length ? client.from("transfer_receipts").select("id, receipt_number, notes").in("id", receiptIds).then(fail) : [],
-      receiptLineIds.length ? client.from("transfer_receipt_lines").select("id, bags, head_count").in("id", receiptLineIds).then(fail) : [],
+      receiptIds.length ? client.from("transfer_receipts").select("*").in("id", receiptIds).then(fail) : [],
+      receiptLineIds.length ? client.from("transfer_receipt_lines").select("id, inventory_lot_id, quantity_kg, bags, head_count").in("id", receiptLineIds).then(fail) : [],
     ]);
   const originalMap = new Map(lots.map((row) => [row.id, number(row.original_quantity_kg)]));
   const receiptMap = new Map(receipts.map((row) => [row.id, row]));
@@ -163,15 +167,20 @@ export async function loadHostedSalesmanInventory(organizationId, client = requi
     };
   });
   const salesmanTransfers = transferMovements.map((movement) => {
-    const row = stockMap.get(`${movement.inventory_lot_id}|${movement.from_salesman_user_id}`) || stock.find((item) => item.inventory_lot_id === movement.inventory_lot_id) || {};
     const receipt = receiptMap.get(movement.reference_id) || {};
     const receiptLine = receiptLineMap.get(movement.reference_line_id) || {};
+    const lotId = receiptLine.inventory_lot_id || movement.inventory_lot_id;
+    const fromSalesmanId = receipt.from_salesman_user_id || movement.from_salesman_user_id;
+    const row = stockMap.get(`${lotId}|${fromSalesmanId}`) || stock.find((item) => item.inventory_lot_id === lotId) || {};
     return {
-      id: movement.id,
+      id: receipt.id || movement.reference_id,
+      lineId: receiptLine.id || movement.reference_line_id,
+      lotId,
+      movementId: movement.id,
       receipt: receipt.receipt_number || "-",
-      date: movement.effective_date,
-      fromSalesmanId: movement.from_salesman_user_id,
-      toSalesmanId: movement.to_salesman_user_id,
+      date: receipt.effective_date || movement.effective_date,
+      fromSalesmanId,
+      toSalesmanId: receipt.to_salesman_user_id || movement.to_salesman_user_id,
       tripId: row.stock_trip_id,
       plant: row.plant_name || "-",
       tripDate: row.trip_date,
@@ -180,7 +189,7 @@ export async function loadHostedSalesmanInventory(organizationId, client = requi
       product: row.product_name || "-",
       sizeCode: row.product_code || "",
       classType: row.class_type || "",
-      qty: number(movement.quantity_kg),
+      qty: number(receiptLine.quantity_kg ?? movement.quantity_kg),
       bags: receiptLine.bags ?? null,
       headCount: receiptLine.head_count ?? null,
       notes: receipt.notes || "",
