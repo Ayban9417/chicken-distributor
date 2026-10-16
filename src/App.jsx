@@ -13,6 +13,7 @@ import {
   Home,
   Menu,
   PackageCheck,
+  Pencil,
   Plus,
   ReceiptText,
   Search,
@@ -430,7 +431,7 @@ function TripProductSections({ groups }) {
   </div>;
 }
 
-export function Trips({ trips, setTrips, addAudit, pushToast, plantConfigs, onStockIn, onDeleteTrip, currentDate = today }) {
+export function Trips({ trips, setTrips, addAudit, pushToast, plantConfigs, onStockIn, onDeleteTrip, onEditTrip, onViewEditHistory, currentDate = today }) {
   const [form, setForm] = useState(() => tripForm(plantConfigs.find((p) => p.active), currentDate));
   const plant = plantConfigs.find((p) => p.id === form.plantId);
   const productOptions = activeProducts(plant);
@@ -520,7 +521,11 @@ export function Trips({ trips, setTrips, addAudit, pushToast, plantConfigs, onSt
             </div>
           </summary>
           <TripProductSections groups={groups} />
-          {onDeleteTrip && <div className="mt-4 flex justify-end"><Button variant="danger" onClick={() => onDeleteTrip(trip)}><Trash2 size={17} />Delete Trip</Button></div>}
+          {(onEditTrip || onDeleteTrip) && <div className="mt-4 flex flex-wrap justify-end gap-2">
+            {onViewEditHistory && trip.corrected && <Button variant="secondary" onClick={() => onViewEditHistory(trip)}><History size={17} />View Edit History</Button>}
+            {onEditTrip && <Button variant="secondary" onClick={() => onEditTrip(trip)}><Pencil size={17} />Edit</Button>}
+            {onDeleteTrip && <Button variant="danger" onClick={() => onDeleteTrip(trip)}><Trash2 size={17} />Delete Trip</Button>}
+          </div>}
         </details>; })}</div>
       </div>)}
     </section>

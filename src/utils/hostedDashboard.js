@@ -38,6 +38,9 @@ export function normalizeHostedTrips({ trips = [], lines = [], plantProducts = [
     date: trip.trip_date,
     code: trip.trip_number,
     reference: trip.reference_number || "",
+    notes: trip.notes || "",
+    deliveryNote: trip.delivery_note || "",
+    corrected: Boolean(trip.corrected),
     plant: plantMap.get(trip.plant_id)?.name || "Unknown Plant",
     remainingQty: remainingByTrip.get(trip.id) || 0,
     products: (lineByTrip.get(trip.id) || []).map((line) => {
@@ -45,6 +48,7 @@ export function normalizeHostedTrips({ trips = [], lines = [], plantProducts = [
       const code = codeMap.get(line.code_id);
       const classType = classMap.get(line.class_type_id);
       return {
+        lineId: line.id,
         productId: line.plant_product_id,
         name: product.name || "Unknown Product",
         category: displayProductCategory(product.category),
@@ -59,6 +63,8 @@ export function normalizeHostedTrips({ trips = [], lines = [], plantProducts = [
         headCount: line.head_count ?? null,
         acquisitionType: line.acquisition_type === "free_from_plant" ? "Free from Plant" : "Purchased",
         costPerKg: number(line.cost_per_kg),
+        usesBags: Boolean(plantProductMap.get(line.plant_product_id)?.uses_bags),
+        usesHeadCount: Boolean(plantProductMap.get(line.plant_product_id)?.uses_head_count),
       };
     }),
   }));

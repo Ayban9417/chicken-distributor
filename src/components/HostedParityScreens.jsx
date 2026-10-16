@@ -18,6 +18,7 @@ import { InventoryOverview } from "./InventoryOverview";
 import { CustomerEditor, CustomerManagement } from "./CustomerManagement";
 import { SalesmanAccounts } from "./SalesmanAccounts";
 import { DestructiveActionDialog } from "./DestructiveActionDialog";
+import { StockTripCorrectionDialog } from "./StockTripCorrectionDialog";
 import { deleteHostedStockTrip, deleteUnusedHostedCustomer } from "../services/protectedDeletionService";
 import { currency, kg, shortDate } from "../utils/business";
 import { sum } from "../utils/operations";
@@ -30,11 +31,12 @@ function RemoteState({ error, loading, onRefresh }) {
   return <p role="alert" className="border border-rose-200 bg-rose-50 p-3 font-semibold text-rose-800">{error} <button type="button" className="underline" onClick={onRefresh}>Try again</button></p>;
 }
 
-export function HostedPlantsScreen({ organizationId, role, onChanged }) {
+export function HostedPlantsScreen({ organizationId, role, onChanged, onNavigate }) {
   const [epoch, setEpoch] = useState(0);
   const [manage, setManage] = useState(false);
   const [notice, setNotice] = useState("");
   const [deleteTrip, setDeleteTrip] = useState(null);
+  const [editTrip, setEditTrip] = useState(null);
   const remote = useRemote(() => loadHostedPlants(organizationId), `${organizationId}-${epoch}`);
   const refresh = () => { setEpoch((value) => value + 1); onChanged?.(); };
   if (role !== "owner_admin") return <RemoteState error="Stock In and Plant configuration are available only to the Owner / Admin." />;
@@ -56,9 +58,12 @@ export function HostedPlantsScreen({ organizationId, role, onChanged }) {
         return saved;
       }}
       onDeleteTrip={setDeleteTrip}
+      onEditTrip={setEditTrip}
+      onViewEditHistory={(trip) => onNavigate?.("transaction-history", trip.id)}
       currentDate={today()}
       pushToast={setNotice}
     />
+    {editTrip && <StockTripCorrectionDialog organizationId={organizationId} trip={editTrip} onClose={() => setEditTrip(null)} onSaved={() => { setEditTrip(null); setNotice("Stock-In correction recorded."); refresh(); }} />}
     {deleteTrip && <DestructiveActionDialog
       title="Delete Trip?"
       description="This permanently removes the erroneous Stock-In Trip and its unused source inventory."

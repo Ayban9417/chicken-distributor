@@ -52,6 +52,7 @@ function Workspace() {
   const { changePassword, organization, profile, refreshAccess, role, signOut, user } = useAppContext();
   const [active, setActive] = useState(() => initialScreenForRole(role));
   const [financeCustomerId, setFinanceCustomerId] = useState("");
+  const [historyTripId, setHistoryTripId] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [epoch, setEpoch] = useState(0);
   const [securityOpen, setSecurityOpen] = useState(false);
@@ -60,6 +61,7 @@ function Workspace() {
   const navigate = (screen, customerId = "") => {
     const target = { payments: "collections", ledger: "customers", sales: "out", plants: "trips", "stock-in": "trips" }[screen] || screen;
     setFinanceCustomerId(target === "collections" || target === "customers" ? customerId : "");
+    setHistoryTripId(target === "transaction-history" ? customerId : "");
     setActive(target);
   };
   useEffect(() => { window.scrollTo({ top: 0 }); setMobileOpen(false); }, [active]);
@@ -68,7 +70,7 @@ function Workspace() {
     dashboard: role === "salesman"
       ? <HostedSalesmanDashboard organizationId={organization.id} userId={user.id} name={profile.full_name} epoch={epoch} onChanged={changed} onNavigate={navigate} />
       : <HostedDashboard organizationId={organization.id} epoch={epoch} onNavigate={navigate} onPayment={(customerId) => navigate("collections", customerId)} onLedger={(customerId) => navigate("customers", customerId)} />,
-    trips: <HostedPlantsScreen organizationId={organization.id} role={role} onChanged={changed} />,
+    trips: <HostedPlantsScreen organizationId={organization.id} role={role} onChanged={changed} onNavigate={navigate} />,
     warehouse: <HostedWarehouseScreen organizationId={organization.id} onChanged={changed} />,
     inventory: role === "owner_admin"
       ? <HostedCompanyInventoryScreen organizationId={organization.id} role={role} onStockIn={() => navigate("trips")} />
@@ -87,7 +89,7 @@ function Workspace() {
     trucks: <HostedTrucks organizationId={organization.id} userId={user.id} />,
     discrepancies: <HostedFinanceScreen organizationId={organization.id} role={role} userId={user.id} view="discrepancies" onChanged={changed} onNavigate={navigate} />,
     admin: <HostedAdministration organizationId={organization.id} role={role} onChanged={changed} onNavigate={navigate} />,
-    "transaction-history": <TransactionEditHistory organizationId={organization.id} role={role} />,
+    "transaction-history": <TransactionEditHistory organizationId={organization.id} role={role} transactionId={historyTripId} onClearTrip={() => navigate("transaction-history")} />,
   };
   const content = screens[active] || screens.dashboard;
 

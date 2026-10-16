@@ -3,6 +3,7 @@ import { normalizeHostedTrips } from "../utils/hostedDashboard.js";
 import { createStockTrip } from "./operationsService.js";
 import { loadPlantConfiguration } from "./plantsService.js";
 import { displayProductCategory } from "../utils/business.js";
+import { isMissingCorrectionLedger } from "./correctionHistoryService.js";
 
 const fail = (result) => {
   if (result.error) throw result.error;
@@ -60,11 +61,17 @@ export async function loadHostedPlants(organizationId, client = requireSupabase(
   const trips = fail(await client.from("stock_trips").select("id, plant_id, trip_number, trip_date, reference_number, delivery_note, notes").eq("organization_id", organizationId).neq("status", "cancelled").order("trip_date", { ascending: false }));
   const tripIds = trips.map((row) => row.id);
   const lines = tripIds.length ? fail(await client.from("stock_trip_lines").select("id, stock_trip_id, plant_product_id, code_id, class_type_id, bags, head_count, quantity_kg, acquisition_type, cost_per_kg").in("stock_trip_id", tripIds)) : [];
+  let correctedIds = new Set();
+  if (tripIds.length) {
+    const result = await client.from("transaction_corrections").select("transaction_id").eq("organization_id", organizationId).eq("module", "stock_in").in("transaction_id", tripIds);
+    if (result.error && !isMissingCorrectionLedger(result.error)) throw result.error;
+    correctedIds = new Set((result.data || []).map((row) => row.transaction_id));
+  }
   const links = configuration.plants.flatMap((plant) => plant.products);
   return {
     plantConfigs: normalizePlantConfiguration(configuration),
     trips: normalizeHostedTrips({
-      trips,
+      trips: trips.map((trip) => ({ ...trip, corrected: correctedIds.has(trip.id) })),
       lines,
       plantProducts: links,
       products: configuration.products,

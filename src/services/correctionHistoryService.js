@@ -11,6 +11,7 @@ export async function loadCorrectionHistory(organizationId, filters = {}, client
   if (filters.dateTo) query = query.lt("created_at", nextDay(filters.dateTo));
   if (filters.reference?.trim()) query = query.ilike("transaction_reference", `%${filters.reference.trim()}%`);
   if (filters.adminUserId) query = query.eq("admin_user_id", filters.adminUserId);
+  if (filters.transactionId) query = query.eq("transaction_id", filters.transactionId);
   const rows = fail(await query);
   const ids = [...new Set(rows.map((row) => row.admin_user_id))];
   const profiles = ids.length ? fail(await client.from("profiles").select("id, full_name").in("id", ids)) : [];
