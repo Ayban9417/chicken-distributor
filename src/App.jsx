@@ -135,6 +135,7 @@ export default function App() {
   const [drawer, setDrawer] = useState(null);
   const [editTrip, setEditTrip] = useState(null);
   const [editTransfer, setEditTransfer] = useState(null);
+  const [editSale, setEditSale] = useState(null);
   const [toast, setToast] = useState("");
   const [postDcrAlert, setPostDcrAlert] = useState("");
   const demoBackendRole = demoRole === "Owner / Admin" ? "owner_admin" : demoRole === "Agent" ? "salesman" : "warehouse";
@@ -255,6 +256,7 @@ export default function App() {
         pushToast={pushToast}
         initialSalesmanId={demoRole === "Agent" ? demoSalesmanId : ""}
         canSelectSalesman={demoRole === "Owner / Admin"}
+        onEditSale={permissions.manage ? setEditSale : undefined}
       />
     ),
     expenses: <SalesmanExpenses userId={demoSalesmanId} users={userRecords} expenses={expenses} date={today} onRecord={async (values) => { const item = { ...values, id: uid("exp") }; setExpenses((items) => [item, ...items]); addAudit(`Recorded ${currency(item.amount)} ${item.category.toLowerCase()} expense`, getAgentName(userRecords, demoSalesmanId)); registerPostDcrChange(demoSalesmanId, item.date, `${item.category} expense was added after lock`); pushToast("Expense recorded"); return item; }} />,
@@ -350,7 +352,7 @@ export default function App() {
         </Button>
         <div className="hidden text-sm font-semibold text-slate-500 xl:block">Concept Workflow Prototype by Noderno</div>
         <div className="flex items-center gap-2">
-          <select aria-label="Demo Role" className="min-h-11 max-w-40 rounded-lg border border-slate-200 bg-white px-2 text-sm" value={demoRole} onChange={(e) => { const nextRole = e.target.value; const backendRole = nextRole === "Owner / Admin" ? "owner_admin" : nextRole === "Agent" ? "salesman" : "warehouse"; setDemoRole(nextRole); setActive(initialScreenForRole(backendRole)); setManagePlants(false); setManageCustomers(false); setCustomerEditor(null); setEditTrip(null); setEditTransfer(null); }}><option>Owner / Admin</option><option value="Agent">Salesman</option><option>Warehouse</option></select>
+          <select aria-label="Demo Role" className="min-h-11 max-w-40 rounded-lg border border-slate-200 bg-white px-2 text-sm" value={demoRole} onChange={(e) => { const nextRole = e.target.value; const backendRole = nextRole === "Owner / Admin" ? "owner_admin" : nextRole === "Agent" ? "salesman" : "warehouse"; setDemoRole(nextRole); setActive(initialScreenForRole(backendRole)); setManagePlants(false); setManageCustomers(false); setCustomerEditor(null); setEditTrip(null); setEditTransfer(null); setEditSale(null); }}><option>Owner / Admin</option><option value="Agent">Salesman</option><option>Warehouse</option></select>
           <Badge tone="blue">Demo: {shortDate(today)}</Badge>
         </div>
       </header>
@@ -384,6 +386,17 @@ export default function App() {
         module={editTransfer.module} receipt={editTransfer.receipt} users={userRecords}
         lots={inventoryRows.map((row) => ({ ...row, lotId: row.id, warehouseAvailable: row.remainingQty }))}
         localMode onClose={() => setEditTransfer(null)} />}
+      {editSale && permissions.manage && <CorrectionDialog
+        title={`Edit Sale / ${editSale.trustReceipt || editSale.ref}`}
+        preview={buildCorrectionPreview({
+          originalValues: { saleDate: editSale.date, customer: getCustomerName(customers, editSale.customerId),
+            trustReceiptNumber: editSale.trustReceipt || editSale.ref, netSales: editSale.total,
+            lines: (editSale.groups || []).flatMap((group) => group.lines.map((line) => ({ product: line.product,
+              quantityKg: line.qty, sellingPricePerKg: line.price }))) },
+          blockedReasons: ["Secure Sale correction services are not configured in local demo mode. No changes can be saved."],
+          versionRequired: false,
+        })}
+        reviewRequired onClose={() => setEditSale(null)} />}
 
       {drawer && (
         <Drawer title={drawerTitle(drawer)} onClose={() => setDrawer(null)}>
@@ -863,7 +876,7 @@ export function InventoryDetail({ row, showCost = true }) {
   );
 }
 
-export function OutOrders({ customers, trips, movements = [], receivingTransfers = [], salesmanTransfers = [], setMovements, outs = [], setOuts, ledgerEntries = [], setLedgerEntries, setDiscrepancies, addAudit, pushToast, onQuickAdd, collections = [], setCollections, registerPostDcrChange, onStockIn, getAvailable, onConfirmSale, currentDate = today, requireTrustReceipt = false, canSelectSalesman = true, initialSalesmanId = "" }) {
+export function OutOrders({ customers, trips, movements = [], receivingTransfers = [], salesmanTransfers = [], setMovements, outs = [], setOuts, ledgerEntries = [], setLedgerEntries, setDiscrepancies, addAudit, pushToast, onQuickAdd, collections = [], setCollections, registerPostDcrChange, onStockIn, getAvailable, onConfirmSale, onEditSale, onViewSaleHistory, currentDate = today, requireTrustReceipt = false, canSelectSalesman = true, initialSalesmanId = "" }) {
   const agents = useUsers();
   const [review, setReview] = useState(false);
   const [salePayment, setSalePayment] = useState(emptySalePayment);
@@ -1293,7 +1306,7 @@ export function OutOrders({ customers, trips, movements = [], receivingTransfers
         <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => setReview(false)}>Edit Sale</Button><Button disabled={busy || hasInsufficient || !!paymentError || !selectedAgentId || total <= 0} onClick={confirmOut}><ClipboardCheck size={18} />{busy ? "Confirming..." : "Confirm Sale"}</Button></div>
       </Drawer>}
       <section className="report-section"><h2 className="mb-3 text-lg font-bold">Sales</h2>
-        <ResponsiveTable columns={["Date", "Sale", "Trust Receipt", "Customer", "Total", "Payment Status"]} rows={outs.slice().sort((a, b) => b.date.localeCompare(a.date)).map((out) => { const paymentStatus = out.status ? ({ paid: "Paid", partially_paid: "Partially Paid", unpaid: "Unpaid" }[out.status] || out.status) : salePaymentStatus(ledgerEntries, out.ref); return [shortDate(out.date), out.ref, out.trustReceipt || "-", getCustomerName(customers, out.customerId), currency(out.total), <Badge tone={paymentStatus === "Paid" ? "green" : "amber"}>{paymentStatus}</Badge>]; })} />
+        <ResponsiveTable columns={["Date", "Sale", "Trust Receipt", "Customer", "Total", "Payment Status", ...(onEditSale ? ["Actions"] : [])]} rows={outs.slice().sort((a, b) => b.date.localeCompare(a.date)).map((out) => { const paymentStatus = out.status ? ({ paid: "Paid", partially_paid: "Partially Paid", unpaid: "Unpaid" }[out.status] || out.status) : salePaymentStatus(ledgerEntries, out.ref); return [shortDate(out.date), out.ref, out.trustReceipt || "-", getCustomerName(customers, out.customerId), currency(out.total), <Badge tone={paymentStatus === "Paid" ? "green" : "amber"}>{paymentStatus}</Badge>, ...(onEditSale ? [<span className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => onEditSale(out)}><Pencil size={16} />Edit</Button>{onViewSaleHistory && <Button variant="ghost" title="View Edit History" onClick={() => onViewSaleHistory(out)}><History size={16} />History</Button>}</span>] : [])]; })} />
       </section>
     </>
   );

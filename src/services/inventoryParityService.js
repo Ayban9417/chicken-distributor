@@ -141,8 +141,8 @@ export async function loadHostedSalesmanInventory(organizationId, client = requi
   const stockMap = new Map(stock.map((row) => [`${row.inventory_lot_id}|${row.salesman_user_id}`, row]));
   const rows = stock.map((row) => {
     const relevant = movements.filter((movement) => movement.inventory_lot_id === row.inventory_lot_id);
-    const assignedQty = relevant.filter((movement) => movement.to_location_type === "salesman" && movement.to_salesman_user_id === row.salesman_user_id).reduce((total, movement) => total + number(movement.quantity_kg), 0);
-    const soldQty = relevant.filter((movement) => movement.movement_type === "sale" && movement.from_salesman_user_id === row.salesman_user_id).reduce((total, movement) => total + number(movement.quantity_kg), 0);
+    const assignedQty = relevant.filter((movement) => movement.to_location_type === "salesman" && movement.to_salesman_user_id === row.salesman_user_id && movement.from_location_type !== "customer").reduce((total, movement) => total + number(movement.quantity_kg), 0);
+    const soldQty = relevant.reduce((total, movement) => total + (movement.from_location_type === "salesman" && movement.from_salesman_user_id === row.salesman_user_id && movement.to_location_type === "customer" ? number(movement.quantity_kg) : movement.from_location_type === "customer" && movement.to_salesman_user_id === row.salesman_user_id ? -number(movement.quantity_kg) : 0), 0);
     return {
       id: row.inventory_lot_id,
       lotId: row.inventory_lot_id,
@@ -237,8 +237,10 @@ export function buildHostedInventoryOverviewRows({ warehouseStock = [], salesman
   return warehouseStock.map((row) => {
     const line = lineMap.get(row.stock_trip_line_id) || {};
     const relevant = movements.filter((movement) => movement.inventory_lot_id === row.inventory_lot_id);
-    const soldQty = relevant.reduce((total, movement) => total + (movement.movement_type === "sale" ? number(movement.quantity_kg) : movement.movement_type === "void_reversal" ? -number(movement.quantity_kg) : 0), 0);
-    const adjustments = relevant.reduce((total, movement) => total + (movement.movement_type === "adjustment_in" ? number(movement.quantity_kg) : movement.movement_type === "adjustment_out" ? -number(movement.quantity_kg) : 0), 0);
+    const soldQty = relevant.reduce((total, movement) => total + (movement.from_location_type === "customer" ? -number(movement.quantity_kg)
+      : movement.to_location_type === "customer" || (movement.movement_type === "sale" && !movement.to_location_type)
+        ? number(movement.quantity_kg) : 0), 0);
+    const adjustments = relevant.reduce((total, movement) => total + (movement.from_location_type === "adjustment" ? number(movement.quantity_kg) : movement.to_location_type === "adjustment" ? -number(movement.quantity_kg) : 0), 0);
     const warehouseQty = number(row.available_quantity_kg);
     const salesmanQty = number(salesmanByLot.get(row.inventory_lot_id));
     const remainingQty = money(warehouseQty + salesmanQty);
@@ -247,6 +249,7 @@ export function buildHostedInventoryOverviewRows({ warehouseStock = [], salesman
       const reference = movement.reference_type === "receiving_receipt" ? receivingMap.get(movement.reference_id)?.receipt_number
         : movement.reference_type === "transfer_receipt" ? transferMap.get(movement.reference_id)?.receipt_number
           : movement.reference_type === "sale" ? saleMap.get(movement.reference_id)?.trust_receipt_number
+            : movement.reference_type === "transaction_correction" ? `Correction ${movement.reference_id}`
             : tripMap.get(row.stock_trip_id)?.reference_number || "Not recorded";
       return {
         id: movement.id,

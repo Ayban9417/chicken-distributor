@@ -76,7 +76,7 @@ function Workspace() {
       ? <HostedCompanyInventoryScreen organizationId={organization.id} role={role} onStockIn={() => navigate("trips")} />
       : <HostedInventoryScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} showTransferActions={false} showReceipts={false} />,
     "salesman-inventory": <HostedInventoryScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} onWarehouse={() => navigate("warehouse")} onNavigate={navigate} />,
-    out: <HostedSalesScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} onStockIn={() => navigate("trips")} />,
+    out: <HostedSalesScreen organizationId={organization.id} role={role} userId={user.id} onChanged={changed} onStockIn={() => navigate("trips")} onNavigate={navigate} />,
     collections: <HostedFinanceScreen organizationId={organization.id} role={role} userId={user.id} view="payments" initialCustomerId={financeCustomerId} onPaymentRecorded={() => setFinanceCustomerId("")} onChanged={changed} onNavigate={navigate} />,
     customers: <HostedFinanceScreen organizationId={organization.id} role={role} userId={user.id} view="ledger" initialCustomerId={financeCustomerId} onChanged={changed} onNavigate={navigate} />,
     collectibles: <HostedFinanceScreen organizationId={organization.id} role={role} userId={user.id} view="collectibles" onChanged={changed} onNavigate={navigate} />,

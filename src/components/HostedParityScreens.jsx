@@ -20,6 +20,7 @@ import { SalesmanAccounts } from "./SalesmanAccounts";
 import { DestructiveActionDialog } from "./DestructiveActionDialog";
 import { StockTripCorrectionDialog } from "./StockTripCorrectionDialog";
 import { TransferCorrectionDialog } from "./TransferCorrectionDialog";
+import { SaleCorrectionDialog } from "./SaleCorrectionDialog";
 import { deleteHostedStockTrip, deleteUnusedHostedCustomer } from "../services/protectedDeletionService";
 import { currency, kg, shortDate } from "../utils/business";
 import { sum } from "../utils/operations";
@@ -173,10 +174,11 @@ export function HostedInventoryScreen({ organizationId, role, userId, onChanged,
   </>;
 }
 
-export function HostedSalesScreen({ organizationId, role, userId, onChanged, onStockIn }) {
+export function HostedSalesScreen({ organizationId, role, userId, onChanged, onStockIn, onNavigate }) {
   const [epoch, setEpoch] = useState(0);
   const [notice, setNotice] = useState("");
   const [customerEditor, setCustomerEditor] = useState(null);
+  const [editSale, setEditSale] = useState(null);
   const remote = useRemote(() => loadHostedSales(organizationId, undefined, role === "salesman" ? userId : null), `${organizationId}-${userId}-${epoch}`);
   const refresh = () => { setEpoch((value) => value + 1); onChanged?.(); };
   if (!remote.data) return <RemoteState loading={remote.loading} error={remote.error} onRefresh={remote.refresh} />;
@@ -208,8 +210,13 @@ export function HostedSalesScreen({ organizationId, role, userId, onChanged, onS
         }
       }}
       onStockIn={onStockIn}
+      onEditSale={role === "owner_admin" ? setEditSale : undefined}
+      onViewSaleHistory={role === "owner_admin" ? (sale) => onNavigate?.("transaction-history", sale.id) : undefined}
       pushToast={setNotice}
     />
+    {editSale && role === "owner_admin" && <SaleCorrectionDialog
+      organizationId={organizationId} saleRecord={editSale} customers={data.customers} trips={data.trips}
+      onClose={() => setEditSale(null)} onSaved={() => { setEditSale(null); setNotice("Sale correction recorded."); refresh(); }} />}
     {customerEditor && <CustomerEditor
       quick
       initialName={customerEditor.initialName}
