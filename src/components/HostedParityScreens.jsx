@@ -22,6 +22,7 @@ import { StockTripCorrectionDialog } from "./StockTripCorrectionDialog";
 import { TransferCorrectionDialog } from "./TransferCorrectionDialog";
 import { SaleCorrectionDialog } from "./SaleCorrectionDialog";
 import { PaymentCorrectionDialog } from "./PaymentCorrectionDialog";
+import { FinanceCorrectionDialog } from "./FinanceCorrectionDialog";
 import { deleteHostedStockTrip, deleteUnusedHostedCustomer } from "../services/protectedDeletionService";
 import { currency, kg, shortDate } from "../utils/business";
 import { sum } from "../utils/operations";
@@ -259,8 +260,10 @@ export function HostedFinanceScreen({ organizationId, role, userId, view, initia
   const [busy, setBusy] = useState(false);
   const [detail, setDetail] = useState(null);
   const [editPayment, setEditPayment] = useState(null);
+  const [editFinance, setEditFinance] = useState(null);
   const [customerEditor, setCustomerEditor] = useState(null);
-  const remote = useRemote(() => loadHostedFinanceParity(organizationId, undefined, role === "salesman" ? userId : null), `${organizationId}-${userId}-${epoch}`);
+  const remote = useRemote(() => loadHostedFinanceParity(organizationId, undefined,
+    role === "salesman" ? userId : null, role === "owner_admin"), `${organizationId}-${userId}-${epoch}`);
   const refresh = () => { setEpoch((value) => value + 1); onChanged?.(); };
   const run = async (action, success) => {
     setBusy(true); setError(""); setNotice("");
@@ -330,7 +333,13 @@ export function HostedFinanceScreen({ organizationId, role, userId, view, initia
       postDcrAlert={data.discrepancies.find((item) => item.backendType === "post_dcr_adjustment" && item.status !== "Resolved")?.details || ""}
       pushToast={setNotice}
       onSubmitDcr={(values) => run(() => submitHostedDcr(organizationId, values), (saved) => `DCR locked. Difference: ${currency(saved?.difference || 0)}.`)}
+      onAmendDcr={role === "owner_admin" ? (record) => setEditFinance({ module: "dcr", record }) : undefined}
+      onViewDcrHistory={role === "owner_admin" ? (record) => onNavigate?.("transaction-history", record.id) : undefined}
     />
+    {data.amendmentUnavailable && <p role="status" className="mt-3 text-sm text-amber-800">DCR amendment services are not configured on this database.</p>}
+    {editFinance && role === "owner_admin" && <FinanceCorrectionDialog key={editFinance.record.id}
+      {...editFinance} organizationId={organizationId} users={data.users}
+      onClose={() => setEditFinance(null)} onSaved={() => { setEditFinance(null); setNotice("DCR amendment recorded."); refresh(); }} />}
   </UserContext.Provider>;
 
   if (view === "discrepancies") return <UserContext.Provider value={data.users}>
@@ -361,10 +370,15 @@ export function HostedFinanceScreen({ organizationId, role, userId, view, initia
       onRecordExpense={(values) => run(() => recordHostedExpense(organizationId, values, userId), "Expense recorded.")}
       onEditPayment={role === "owner_admin" ? setEditPayment : undefined}
       onViewPaymentHistory={role === "owner_admin" ? (payment) => onNavigate?.("transaction-history", payment.id) : undefined}
+      onEditExpense={role === "owner_admin" ? (record) => setEditFinance({ module: "expense", record }) : undefined}
+      onViewExpenseHistory={role === "owner_admin" ? (record) => onNavigate?.("transaction-history", record.id) : undefined}
     />
     {editPayment && role === "owner_admin" && <PaymentCorrectionDialog
       organizationId={organizationId} paymentRecord={editPayment} customers={data.customers}
       onClose={() => setEditPayment(null)} onSaved={() => { setEditPayment(null); setNotice("Payment correction recorded."); refresh(); }} />}
+    {editFinance && role === "owner_admin" && <FinanceCorrectionDialog key={editFinance.record.id}
+      {...editFinance} organizationId={organizationId} users={data.users}
+      onClose={() => setEditFinance(null)} onSaved={() => { setEditFinance(null); setNotice("Expense correction recorded."); refresh(); }} />}
   </UserContext.Provider>;
 }
 

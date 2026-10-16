@@ -87,6 +87,7 @@ import { Brand, PrimaryNav, primaryNavigation, salesmanNavigation } from "./comp
 import { canAccessScreen, initialScreenForRole } from "./lib/roleAccess";
 import { LocalSalesmanDashboard, LocalSalesmanDtr, SalesmanExpenses } from "./components/SalesmanWorkspace";
 import { CorrectionDialog } from "./components/CorrectionDialog";
+import { FinanceCorrectionDialog } from "./components/FinanceCorrectionDialog";
 import { buildCorrectionPreview } from "./utils/correctionPreview";
 import { TransferCorrectionDialog } from "./components/TransferCorrectionDialog";
 
@@ -136,6 +137,7 @@ export default function App() {
   const [editTrip, setEditTrip] = useState(null);
   const [editTransfer, setEditTransfer] = useState(null);
   const [editSale, setEditSale] = useState(null);
+  const [editFinance, setEditFinance] = useState(null);
   const [toast, setToast] = useState("");
   const [postDcrAlert, setPostDcrAlert] = useState("");
   const demoBackendRole = demoRole === "Owner / Admin" ? "owner_admin" : demoRole === "Agent" ? "salesman" : "warehouse";
@@ -287,6 +289,8 @@ export default function App() {
         initialSalesmanId={demoRole === "Agent" ? demoSalesmanId : ""}
         canSelectSalesman={demoRole === "Owner / Admin"}
         showExpense={demoBackendRole !== "salesman"}
+        onEditExpense={permissions.manage ? (record) => setEditFinance({ module: "expense", record }) : undefined}
+        onViewExpenseHistory={permissions.manage ? (record) => setEditFinance({ module: "expense", record }) : undefined}
       />
     ),
     dcr: (
@@ -302,6 +306,8 @@ export default function App() {
         postDcrAlert={postDcrAlert}
         initialSalesmanId={demoRole === "Agent" ? demoSalesmanId : ""}
         canSelectSalesman={demoRole === "Owner / Admin"}
+        onAmendDcr={permissions.manage ? (record) => setEditFinance({ module: "dcr", record }) : undefined}
+        onViewDcrHistory={permissions.manage ? (record) => setEditFinance({ module: "dcr", record }) : undefined}
       />
     ),
     discrepancies: (
@@ -352,7 +358,7 @@ export default function App() {
         </Button>
         <div className="hidden text-sm font-semibold text-slate-500 xl:block">Concept Workflow Prototype by Noderno</div>
         <div className="flex items-center gap-2">
-          <select aria-label="Demo Role" className="min-h-11 max-w-40 rounded-lg border border-slate-200 bg-white px-2 text-sm" value={demoRole} onChange={(e) => { const nextRole = e.target.value; const backendRole = nextRole === "Owner / Admin" ? "owner_admin" : nextRole === "Agent" ? "salesman" : "warehouse"; setDemoRole(nextRole); setActive(initialScreenForRole(backendRole)); setManagePlants(false); setManageCustomers(false); setCustomerEditor(null); setEditTrip(null); setEditTransfer(null); setEditSale(null); }}><option>Owner / Admin</option><option value="Agent">Salesman</option><option>Warehouse</option></select>
+          <select aria-label="Demo Role" className="min-h-11 max-w-40 rounded-lg border border-slate-200 bg-white px-2 text-sm" value={demoRole} onChange={(e) => { const nextRole = e.target.value; const backendRole = nextRole === "Owner / Admin" ? "owner_admin" : nextRole === "Agent" ? "salesman" : "warehouse"; setDemoRole(nextRole); setActive(initialScreenForRole(backendRole)); setManagePlants(false); setManageCustomers(false); setCustomerEditor(null); setEditTrip(null); setEditTransfer(null); setEditSale(null); setEditFinance(null); }}><option>Owner / Admin</option><option value="Agent">Salesman</option><option>Warehouse</option></select>
           <Badge tone="blue">Demo: {shortDate(today)}</Badge>
         </div>
       </header>
@@ -382,6 +388,8 @@ export default function App() {
       {resetOpen && permissions.manage && <Drawer title="Reset all operational demo data?" onClose={() => setResetOpen(false)}><p>This clears Stock In, Warehouse and Salesman transfers, Inventory, Sales, Payments, Ledgers, DCRs, expenses and report activity. Plant and system configuration will remain.</p><p className="mt-3">Customers, DTR entries, payroll runs, truck assets, maintenance activity and audit activity will also be cleared. This cannot be undone.</p><div className="mt-6 flex flex-wrap gap-3"><Button variant="secondary" onClick={() => setResetOpen(false)}>Cancel</Button><Button variant="danger" onClick={resetOperationalData}>Reset Operational Data</Button></div></Drawer>}
       {customerEditor && <CustomerEditor {...customerEditor} customers={customers} productNames={[...new Set([...plantConfigs.flatMap((p) => p.products.map((product) => product.productName)), ...trips.flatMap((trip) => trip.products.map((p) => p.name))])]} onSave={saveCustomer} onClose={() => setCustomerEditor(null)} onExisting={(c) => { customerEditor.onSelected?.(c); if (!customerEditor.quick) goCustomer("customers", c.id); setCustomerEditor(null); }} />}
       {editTrip && permissions.manage && <LocalStockTripCorrectionDialog trip={editTrip} onClose={() => setEditTrip(null)} />}
+      {editFinance && permissions.manage && <FinanceCorrectionDialog {...editFinance} users={userRecords}
+        localMode onClose={() => setEditFinance(null)} />}
       {editTransfer && permissions.manage && <TransferCorrectionDialog
         module={editTransfer.module} receipt={editTransfer.receipt} users={userRecords}
         lots={inventoryRows.map((row) => ({ ...row, lotId: row.id, warehouseAvailable: row.remainingQty }))}
@@ -1370,7 +1378,7 @@ export function Customers({ initialCustomerId = "", customers, ledgerEntries, ou
   );
 }
 
-export function Collections({ initialCustomerId = "", customers, ledgerEntries, setLedgerEntries, collections, setCollections, expenses, setExpenses, setDiscrepancies, addAudit, pushToast, registerPostDcrChange, users: providedUsers, currentDate = today, initialSalesmanId = "", canSelectSalesman = true, allowManualAllocation = true, onRecordPayment, onRecordExpense, onPaymentRecorded, onEditPayment, onViewPaymentHistory, busy = false, showExpense = true }) {
+export function Collections({ initialCustomerId = "", customers, ledgerEntries, setLedgerEntries, collections, setCollections, expenses, setExpenses, setDiscrepancies, addAudit, pushToast, registerPostDcrChange, users: providedUsers, currentDate = today, initialSalesmanId = "", canSelectSalesman = true, allowManualAllocation = true, onRecordPayment, onRecordExpense, onPaymentRecorded, onEditPayment, onViewPaymentHistory, onEditExpense, onViewExpenseHistory, busy = false, showExpense = true }) {
   const contextUsers = useUsers();
   const agents = providedUsers || contextUsers;
   const firstAgent = initialSalesmanId || agents.find((agent) => agent.active && agent.role === "Agent")?.id || "";
@@ -1514,6 +1522,16 @@ export function Collections({ initialCustomerId = "", customers, ledgerEntries, 
             </span>,
           ])} />
       </section>}
+      {onEditExpense && <section className="report-section mt-5"><h2 className="mb-3 text-lg font-bold">Expense History</h2>
+        <ResponsiveTable columns={["Date", "Salesman", "Category", "Amount", "Approval", "Actions"]}
+          rows={expenses.slice().sort((a, b) => b.date.localeCompare(a.date)).map((item) => [
+            shortDate(item.date), getAgentName(agents, item.agentId), item.category, currency(item.amount), item.status,
+            <span className="flex flex-wrap gap-2">
+              <Button variant="secondary" onClick={() => onEditExpense(item)}><Pencil size={16} />Edit</Button>
+              {onViewExpenseHistory && <Button variant="ghost" title="View Edit History" onClick={() => onViewExpenseHistory(item)}><History size={16} />History</Button>}
+            </span>,
+          ])} />
+      </section>}
     </>
   );
 }
@@ -1550,18 +1568,20 @@ function AllocationPreview({ collection, ledgerEntries, allocations, setCollecti
   );
 }
 
-export function Dcr({ outs, customers, collections, expenses, dcrs, setDcrs, setDiscrepancies, addAudit, pushToast, postDcrAlert, users: providedUsers, currentDate = today, initialSalesmanId = "", canSelectSalesman = true, onSubmitDcr, busy = false }) {
+export function Dcr({ outs, customers, collections, expenses, dcrs, setDcrs, setDiscrepancies, addAudit, pushToast, postDcrAlert, users: providedUsers, currentDate = today, initialSalesmanId = "", canSelectSalesman = true, onSubmitDcr, onAmendDcr, onViewDcrHistory, busy = false }) {
   const contextUsers = useUsers();
   const agents = providedUsers || contextUsers;
   const [agentId, setAgentId] = useState(initialSalesmanId || agents.find((agent) => agent.active && agent.role === "Agent")?.id || "");
   const [date, setDate] = useState(currentDate);
   const [actual, setActual] = useState(0);
   const [explanation, setExplanation] = useState("");
+  const [showOriginal, setShowOriginal] = useState(false);
   const liveDcr = buildDcr({ collections, expenses, customers, agentId, date });
   const locked = dcrs.find((item) => item.agentId === agentId && item.date === date && item.status === "LOCKED");
-  const dcr = locked?.snapshot || liveDcr;
-  const actualRemittance = locked ? locked.actual : actual;
-  const diff = locked ? locked.diff : money(Number(actual || 0) - dcr.expectedCashRemittance);
+  const amended = locked?.currentSnapshot && !showOriginal;
+  const dcr = amended ? locked.currentSnapshot : locked?.snapshot || liveDcr;
+  const actualRemittance = locked ? amended ? locked.currentActual : locked.actual : actual;
+  const diff = locked ? amended ? locked.currentDiff : locked.diff : money(Number(actual || 0) - dcr.expectedCashRemittance);
   const hasActivity = Boolean(locked) || dcr.collections.length > 0 || dcr.expenses.length > 0 || outs.some((out) => out.agentId === agentId && out.date === date);
   async function submitDcr() {
     if (!hasActivity || !agentId || locked || !date || !Number.isFinite(Number(actual)) || Number(actual) < 0 || (diff !== 0 && !explanation.trim())) return;
@@ -1594,17 +1614,23 @@ export function Dcr({ outs, customers, collections, expenses, dcrs, setDcrs, set
             <Button disabled={Boolean(locked) || !hasActivity} variant="secondary" onClick={() => setActual(Math.max(0, dcr.expectedCashRemittance))}><FileText size={18} />Generate DCR</Button>
           </div>
           {locked && <div className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm font-bold text-emerald-800">DCR submitted and locked</div>}
+          {locked && <div className="mt-3 flex flex-wrap gap-2">
+            {locked.currentSnapshot && <Button variant="secondary" onClick={() => setShowOriginal((value) => !value)}>{showOriginal ? "Show Current" : "Show Original"}</Button>}
+            {onAmendDcr && <Button variant="secondary" onClick={() => onAmendDcr(locked)}>Amend</Button>}
+            {onViewDcrHistory && <Button variant="ghost" onClick={() => onViewDcrHistory(locked)}>View Edit History</Button>}
+          </div>}
           {postDcrAlert && <div className="mt-4 rounded-lg bg-rose-50 p-3 text-sm font-bold text-rose-800">{postDcrAlert}</div>}
         </div>
         <div className="rounded-lg border border-slate-200 bg-white p-4">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h2 className="text-xl font-bold">Daily Cash Report</h2>
+              <h2 className="text-xl font-bold">Daily Cash Report{amended ? " / Current Amended" : locked ? " / Original Submission" : ""}</h2>
               <p className="text-sm text-slate-500">Salesman: {getAgentName(agents, agentId)} - Date: {shortDate(date)}</p>
             </div>
             <Badge tone={locked ? "green" : "blue"}>{locked ? "LOCKED" : "Draft"}</Badge>
           </div>
           <StatMini label="Sales Handled" value={currency(sum(outs.filter((out) => out.agentId === agentId && out.date === date), "total"))} />
+          {locked && !amended && <p className="mt-2 text-xs text-slate-500">Submitted totals are fixed. Payment and Expense detail rows are reconstructed from source records and may reflect later corrections.</p>}
           <h3 className="mb-2 mt-4 font-bold">Payments</h3>
           <ResponsiveTable
             columns={["Customer", "Cash", "GCash", "Bank", "Total"]}
@@ -1626,7 +1652,8 @@ export function Dcr({ outs, customers, collections, expenses, dcrs, setDcrs, set
           <div className={`mt-4 rounded-lg p-4 text-center text-lg font-bold ${diff === 0 ? "bg-emerald-50 text-emerald-700" : diff < 0 ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-800"}`}>
             {diff === 0 ? "Balanced ✓" : diff < 0 ? `SHORT ${currency(Math.abs(diff))}` : `OVER ${currency(diff)}`}
           </div>
-          {diff !== 0 && <Field label="Explanation required"><textarea disabled={Boolean(locked)} className={`${inputClass()} mt-3 min-h-20 py-3`} value={locked ? locked.explanation : explanation} onChange={(e) => setExplanation(e.target.value)} /></Field>}
+          {diff !== 0 && <Field label="Explanation required"><textarea disabled={Boolean(locked)} className={`${inputClass()} mt-3 min-h-20 py-3`} value={locked ? amended ? locked.currentExplanation : locked.explanation : explanation} onChange={(e) => setExplanation(e.target.value)} /></Field>}
+          {amended && locked.currentNotes && <p className="mt-3 text-sm text-slate-600">Reconciliation notes: {locked.currentNotes}</p>}
         </div>
       </div>
     </>

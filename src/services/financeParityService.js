@@ -107,6 +107,30 @@ export function normalizeHostedDcr(row, { collections = [], expenses = [], custo
   return normalized;
 }
 
+export function applyHostedDcrAmendment(original, amendment, { collections = [], expenses = [], customers = [] } = {}) {
+  if (!amendment) return original;
+  const current = amendment.proposed_values;
+  const currentLive = buildDcr({ collections, expenses, customers,
+    agentId: original.agentId, date: original.date });
+  return {
+    ...original,
+    currentSnapshot: {
+      ...currentLive,
+      totals: {
+        Cash: number(current.cashCollected), GCash: number(current.gcashCollected),
+        "Bank Deposit": number(current.bankCollected),
+        total: number(current.cashCollected) + number(current.gcashCollected) + number(current.bankCollected),
+      },
+      expenseTotals: { ...currentLive.expenseTotals, cashPaid: number(current.cashPaidExpenses) },
+      expectedCashRemittance: number(current.expectedCashRemittance),
+    },
+    currentActual: number(current.actualCashRemittance),
+    currentDiff: number(current.difference),
+    currentExplanation: current.explanation || "",
+    currentNotes: current.reconciliationNotes || "",
+  };
+}
+
 export function normalizeHostedDiscrepancies(rows) {
   return rows.map((row) => ({
     id: row.id,
@@ -192,7 +216,7 @@ export function normalizeHostedLedgerEntries(rows, sales, payments, allocations)
   });
 }
 
-export async function loadHostedFinanceParity(organizationId, client = requireSupabase(), salesmanUserId = null) {
+export async function loadHostedFinanceParity(organizationId, client = requireSupabase(), salesmanUserId = null, includeAmendments = false) {
   const snapshot = salesmanUserId ? await loadSalesmanWorkspaceData(organizationId, client) : null;
   const [customerRows, finance, people, operations, prices, products, discrepancyRows, auditRows] = snapshot
     ? [
@@ -291,7 +315,23 @@ export async function loadHostedFinanceParity(organizationId, client = requireSu
     status: title(row.approval_status),
     createdAt: row.created_at,
   }));
-  const dcrs = (operations.dcrs || []).map((row) => normalizeHostedDcr(row, { collections, expenses, customers }));
+  let amendmentRows = [];
+  let amendmentUnavailable = false;
+  if (includeAmendments) {
+    const result = await client.from("dcr_amendments").select("*")
+      .eq("organization_id", organizationId).order("created_at", { ascending: false }).order("id", { ascending: false });
+    if (result.error) {
+      if (["PGRST205", "42P01"].includes(result.error.code)) amendmentUnavailable = true;
+      else throw result.error;
+    } else amendmentRows = result.data || [];
+  }
+  const amendmentsByDcr = new Map();
+  amendmentRows.forEach((row) => {
+    if (!amendmentsByDcr.has(row.dcr_id)) amendmentsByDcr.set(row.dcr_id, row);
+  });
+  const dcrs = (operations.dcrs || []).map((row) => applyHostedDcrAmendment(
+    normalizeHostedDcr(row, { collections, expenses, customers }), amendmentsByDcr.get(row.id),
+    { collections, expenses, customers }));
   const discrepancies = normalizeHostedDiscrepancies(discrepancyRows);
   const auditLog = auditRows.map((row) => ({
     id: row.id,
@@ -300,7 +340,8 @@ export async function loadHostedFinanceParity(organizationId, client = requireSu
     actor: profileMap.get(row.actor_user_id)?.name || "System",
     action: `${title(row.entity_type)}: ${title(row.action)}`,
   }));
-  return { customers, users, outs, collections, ledgerEntries, expenses, dcrs, discrepancies, auditLog, productNames: products.map((product) => product.name) };
+  return { customers, users, outs, collections, ledgerEntries, expenses, dcrs, discrepancies, auditLog,
+    amendmentUnavailable, productNames: products.map((product) => product.name) };
 }
 
 export async function saveHostedCustomer(organizationId, record, client = requireSupabase()) {
