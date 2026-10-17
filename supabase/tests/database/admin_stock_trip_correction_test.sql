@@ -51,10 +51,10 @@ select is((select (preview->'expectedInventoryChanges'->0->>'warehouseDeltaKg'):
 select is((select (preview->'expectedFinancialChanges'->0->>'acquisitionValueDelta')::numeric from qa_correction), 3200::numeric, 'preview computes acquisition value change');
 select is((private.inspect_stock_trip_correction(
   'f2000000-0000-4000-8000-000000000001', 'f2000000-0000-4000-8000-000000000021',
-  jsonb_set((select changes from qa_correction), '{reference}', '"REF-QA-002"')))->>'eligible'), 'false', 'duplicate manual reference is blocked');
+  jsonb_set((select changes from qa_correction), '{reference}', '"REF-QA-002"'))->>'eligible'), 'false', 'duplicate manual reference is blocked');
 select is((private.inspect_stock_trip_correction(
   'f2000000-0000-4000-8000-000000000001', 'f2000000-0000-4000-8000-000000000021',
-  jsonb_set((select changes from qa_correction), '{tripDate}', '"2099-01-01"')))->>'eligible'), 'false', 'future Trip date is blocked');
+  jsonb_set((select changes from qa_correction), '{tripDate}', '"2099-01-01"'))->>'eligible'), 'false', 'future Trip date is blocked');
 
 set local role authenticated;
 set local request.jwt.claim.sub = 'f2000000-0000-4000-8000-000000000102';
@@ -64,7 +64,7 @@ select throws_ok($$select public.preview_stock_trip_correction(
 set local request.jwt.claim.sub = 'f2000000-0000-4000-8000-000000000101';
 select is((public.preview_stock_trip_correction(
   'f2000000-0000-4000-8000-000000000001', 'f2000000-0000-4000-8000-000000000021',
-  (select changes from qa_correction)))->>'eligible'), 'true', 'Owner can preview the correction');
+  (select changes from qa_correction))->>'eligible'), 'true', 'Owner can preview the correction');
 reset role;
 
 set local role service_role;
@@ -139,10 +139,10 @@ insert into public.inventory_movements (organization_id, inventory_lot_id, movem
    'f2000000-0000-4000-8000-000000000062', '2026-01-03', 'f2000000-0000-4000-8000-000000000101');
 select is((private.inspect_stock_trip_correction(
   'f2000000-0000-4000-8000-000000000001', 'f2000000-0000-4000-8000-000000000021',
-  jsonb_set((select changes from qa_correction), '{lines,0,quantityKg}', '111')))->>'eligible'), 'false', 'downstream Warehouse transfer blocks quantity edit');
+  jsonb_set((select changes from qa_correction), '{lines,0,quantityKg}', '111'))->>'eligible'), 'false', 'downstream Warehouse transfer blocks quantity edit');
 select is((private.inspect_stock_trip_correction(
   'f2000000-0000-4000-8000-000000000001', 'f2000000-0000-4000-8000-000000000021',
-  jsonb_set((select changes from qa_correction), '{lines,0,costPerKg}', '151')))->>'eligible'), 'false', 'downstream transfer blocks cost edit');
+  jsonb_set((select changes from qa_correction), '{lines,0,costPerKg}', '151'))->>'eligible'), 'false', 'downstream transfer blocks cost edit');
 select is((private.inspect_stock_trip_correction(
   'f2000000-0000-4000-8000-000000000001', 'f2000000-0000-4000-8000-000000000021',
   (select changes from qa_correction))->>'eligible'), 'false', 'unchanged proposal is rejected');
@@ -170,7 +170,7 @@ select ok((private.inspect_stock_trip_correction(
   'a downstream Sale is named in the blocked reason');
 select is((private.inspect_stock_trip_correction(
   'f2000000-0000-4000-8000-000000000001', 'f2000000-0000-4000-8000-000000000021',
-  jsonb_set((select changes from qa_correction), '{tripDate}', '"2026-01-04"')))->>'eligible'),
+  jsonb_set((select changes from qa_correction), '{tripDate}', '"2026-01-04"'))->>'eligible'),
   'false', 'Trip date cannot move after downstream activity');
 
 update qa_correction set fresh_preview = private.inspect_stock_trip_correction(

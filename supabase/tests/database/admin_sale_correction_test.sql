@@ -124,13 +124,13 @@ select is((select (preview->'proposedValues'->>'totalCogs')::numeric from qa_sal
   'COGS uses exact lot acquisition cost');
 select is((private.inspect_sale_correction(
   'f4000000-0000-4000-8000-000000000001', 'f4000000-0000-4000-8000-000000000061',
-  jsonb_set((select changes from qa_sale), '{lines,0,quantityKg}', '8'::jsonb)))->>'eligible'),
+  jsonb_set((select changes from qa_sale), '{lines,0,quantityKg}', '8'::jsonb))->>'eligible'),
   'true', 'quantity decrease is eligible before downstream use');
 select is((private.inspect_sale_correction(
   'f4000000-0000-4000-8000-000000000001', 'f4000000-0000-4000-8000-000000000061',
   jsonb_set(jsonb_set((select changes from qa_sale), '{lines,0,lotId}',
     '"f4000000-0000-4000-8000-000000000043"'::jsonb), '{lines,0,quantityKg}', '8'::jsonb)
-  )->'proposedValues'->>'totalCogs'), '720', 'different product and source lot use exact COGS');
+  )->'proposedValues'->>'totalCogs')::numeric, 720::numeric, 'different product and source lot use exact COGS');
 
 set local role authenticated;
 set local request.jwt.claim.sub = 'f4000000-0000-4000-8000-000000000102';
@@ -140,7 +140,7 @@ select throws_ok($$select public.preview_sale_correction(
 set local request.jwt.claim.sub = 'f4000000-0000-4000-8000-000000000101';
 select is((public.preview_sale_correction(
   'f4000000-0000-4000-8000-000000000001', 'f4000000-0000-4000-8000-000000000061',
-  (select changes from qa_sale)))->>'eligible'), 'true', 'Owner can preview Sale correction');
+  (select changes from qa_sale))->>'eligible'), 'true', 'Owner can preview Sale correction');
 reset role;
 
 set local role service_role;
@@ -154,6 +154,7 @@ select lives_ok($$select public.apply_sale_correction(
   'f4000000-0000-4000-8000-000000000101', 'Correct test Sale details',
   'f4000000-0000-4000-8000-000000000201', (select preview->>'versionToken' from qa_sale),
   (select changes from qa_sale))$$, 'eligible correction commits');
+reset role;
 select is((select trust_receipt_number from public.sales where id = 'f4000000-0000-4000-8000-000000000061'),
   'TR-QA-CORRECTED', 'Sale ID is preserved while TR changes');
 select is((select net_sales from public.sales where id = 'f4000000-0000-4000-8000-000000000061'),
@@ -189,8 +190,7 @@ reset role;
 update qa_sale set changes = jsonb_set(changes, '{lines,0,quantityKg}', '1000'::jsonb);
 select is((private.inspect_sale_correction(
   'f4000000-0000-4000-8000-000000000001', 'f4000000-0000-4000-8000-000000000061',
-  (select changes from qa_sale)))->>'eligible'), 'false', 'insufficient stock is blocked');
-set local role service_role;
+  (select changes from qa_sale))->>'eligible'), 'false', 'insufficient stock is blocked');
 select throws_ok($$select public.apply_sale_correction(
   'f4000000-0000-4000-8000-000000000001', 'f4000000-0000-4000-8000-000000000061',
   'f4000000-0000-4000-8000-000000000101', 'Increase beyond source stock',
@@ -212,10 +212,10 @@ update qa_sale set changes = jsonb_set(jsonb_set(changes, '{lines,0,quantityKg}'
   '{trustReceiptNumber}', '"TR-QA-OTHER"'::jsonb);
 select is((private.inspect_sale_correction(
   'f4000000-0000-4000-8000-000000000001', 'f4000000-0000-4000-8000-000000000061',
-  (select changes from qa_sale)))->>'eligible'), 'false', 'duplicate Trust Receipt is blocked');
-select like((private.inspect_sale_correction(
+  (select changes from qa_sale))->>'eligible'), 'false', 'duplicate Trust Receipt is blocked');
+select ok((private.inspect_sale_correction(
   'f4000000-0000-4000-8000-000000000001', 'f4000000-0000-4000-8000-000000000061',
-  (select changes from qa_sale)))->>'blockedReasons', '%Trust Receipt number is already used%',
+  (select changes from qa_sale))->>'blockedReasons') like '%Trust Receipt number is already used%',
   'duplicate Trust Receipt blocker is explicit');
 
 insert into public.payments (id, organization_id, payment_number, customer_id,
@@ -227,32 +227,32 @@ insert into public.payments (id, organization_id, payment_number, customer_id,
    'f4000000-0000-4000-8000-000000000181', 'f4000000-0000-4000-8000-000000000101');
 insert into public.payment_allocations (payment_id, sale_id, amount) values
   ('f4000000-0000-4000-8000-000000000081', 'f4000000-0000-4000-8000-000000000061', 100);
-select like((private.inspect_sale_correction(
+select ok((private.inspect_sale_correction(
   'f4000000-0000-4000-8000-000000000001', 'f4000000-0000-4000-8000-000000000061',
-  (select changes from qa_sale)))->>'blockedReasons', '%Payment allocations%',
+  (select changes from qa_sale))->>'blockedReasons') like '%Payment allocations%',
   'allocated Payment blocks direct correction');
 update public.payments set method = 'gcash', reference_number = 'QA-GCASH-REF', verification_status = 'verified'
   where id = 'f4000000-0000-4000-8000-000000000081';
-select like((private.inspect_sale_correction(
+select ok((private.inspect_sale_correction(
   'f4000000-0000-4000-8000-000000000001', 'f4000000-0000-4000-8000-000000000061',
-  (select changes from qa_sale)))->>'blockedReasons', '%Payment allocations%',
+  (select changes from qa_sale))->>'blockedReasons') like '%Payment allocations%',
   'verified GCash collection blocks direct correction');
 update public.payments set method = 'bank', reference_number = 'QA-BANK-REF'
   where id = 'f4000000-0000-4000-8000-000000000081';
-select like((private.inspect_sale_correction(
+select ok((private.inspect_sale_correction(
   'f4000000-0000-4000-8000-000000000001', 'f4000000-0000-4000-8000-000000000061',
-  (select changes from qa_sale)))->>'blockedReasons', '%Payment allocations%',
+  (select changes from qa_sale))->>'blockedReasons') like '%Payment allocations%',
   'verified Bank collection blocks direct correction');
 insert into public.daily_cash_reports (organization_id, salesman_user_id, report_date,
   cash_collected, gcash_collected, bank_collected, cash_paid_expenses,
   expected_cash_remittance, actual_cash_remittance, difference, source_snapshot,
-  client_request_id, created_by) values
+  client_request_id) values
   ('f4000000-0000-4000-8000-000000000001', 'f4000000-0000-4000-8000-000000000102',
    '2026-01-03', 0, 0, 0, 0, 0, 0, 0, '{}'::jsonb,
-   'f4000000-0000-4000-8000-000000000191', 'f4000000-0000-4000-8000-000000000101');
-select like((private.inspect_sale_correction(
+   'f4000000-0000-4000-8000-000000000191');
+select ok((private.inspect_sale_correction(
   'f4000000-0000-4000-8000-000000000001', 'f4000000-0000-4000-8000-000000000061',
-  (select changes from qa_sale)))->>'blockedReasons', '%submitted DCR%',
+  (select changes from qa_sale))->>'blockedReasons') like '%submitted DCR%',
   'submitted DCR blocks direct correction');
 select * from finish();
 rollback;

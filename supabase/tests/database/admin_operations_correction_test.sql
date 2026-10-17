@@ -55,6 +55,7 @@ alter table qa7 add column dtr_version text;
 alter table qa7 add column pay_version text;
 alter table qa7 add column truck_version text;
 grant select on qa7 to authenticated,service_role;
+grant update on qa7 to service_role;
 update qa7 set dtr_version=(private.inspect_dtr_correction(
   'f7000000-0000-4000-8000-000000000001','f7000000-0000-4000-8000-000000000011',dtr_changes))->>'versionToken',
   pay_version=(private.inspect_payroll_correction(
@@ -73,7 +74,7 @@ select throws_ok($$select public.preview_payroll_correction(
 set local request.jwt.claim.sub='f7000000-0000-4000-8000-000000000101';
 select is((public.preview_dtr_correction(
   'f7000000-0000-4000-8000-000000000001','f7000000-0000-4000-8000-000000000011',
-  (select dtr_changes from qa7)))->>'eligible'),'true','Owner can preview DTR correction');
+  (select dtr_changes from qa7))->>'eligible'),'true','Owner can preview DTR correction');
 reset role;
 
 select is((private.inspect_dtr_correction('f7000000-0000-4000-8000-000000000001',
@@ -112,6 +113,8 @@ select throws_ok($$select public.apply_dtr_correction(
 select is((select count(*) from public.transaction_corrections where module='dtr'
   and organization_id='f7000000-0000-4000-8000-000000000001'),
   1::bigint,'rejected replay leaves exactly one DTR audit record');
+reset role;
+set local request.jwt.claim.sub='';
 update qa7 set pay_version=(private.inspect_payroll_correction(
   'f7000000-0000-4000-8000-000000000001','f7000000-0000-4000-8000-000000000022','entry',pay_changes))->>'versionToken';
 select lives_ok($$select public.apply_payroll_correction(

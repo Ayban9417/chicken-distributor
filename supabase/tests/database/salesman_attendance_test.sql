@@ -60,23 +60,22 @@ select throws_ok(
   $$insert into public.time_entries (organization_id, user_id, work_date, time_in) values ('f0000000-0000-4000-8000-000000000001', 'f0000000-0000-4000-8000-000000000102', current_date - 1, '01:00')$$,
   '42501', null, 'Salesman cannot create arbitrary attendance for another employee'
 );
-select results_eq(
-  $$update public.time_entries set time_in = '01:00' where user_id = 'f0000000-0000-4000-8000-000000000102' returning 1$$,
-  $$select 1 where false$$,
-  'Salesman cannot modify a completed DTR'
+select throws_ok(
+  $$update public.time_entries set time_in = '01:00' where user_id = 'f0000000-0000-4000-8000-000000000102'$$,
+  '42501', null, 'Salesman cannot modify a completed DTR'
 );
 
 set local request.jwt.claim.sub = 'f0000000-0000-4000-8000-000000000101';
 select is((select count(*) from public.time_entries), 1::bigint, 'Owner can view Salesman attendance');
 select throws_ok(
   $$update public.time_entries set break_minutes = 15 where user_id = 'f0000000-0000-4000-8000-000000000102'$$,
-  '22023', null, 'Owner correction requires a reason'
+  '42501', null, 'Owner direct update is blocked even without a reason'
 );
-select lives_ok(
+select throws_ok(
   $$update public.time_entries set break_minutes = 15, correction_reason = 'Approved route break correction' where user_id = 'f0000000-0000-4000-8000-000000000102'$$,
-  'Owner can correct attendance with a reason'
+  '42501', null, 'Owner direct update cannot bypass the protected correction flow'
 );
-select is((select count(*) from public.audit_events where entity_type = 'time_entry' and action = 'corrected'), 1::bigint, 'Owner correction creates an audit event');
+select is((select count(*) from public.audit_events where entity_type = 'time_entry' and action = 'corrected'), 0::bigint, 'rejected direct updates create no correction audit event');
 select isnt((select total_minutes from public.time_entries), null::integer, 'completed attendance remains payroll-compatible');
 
 select * from finish();

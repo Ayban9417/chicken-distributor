@@ -76,30 +76,30 @@ select is((private.inspect_payment_correction(
   jsonb_set(jsonb_set((select changes from qa_payment), '{customerId}',
     '"f5000000-0000-4000-8000-000000000012"'::jsonb), '{amount}', '90'::jsonb)
   )->>'eligible'), 'true', 'Customer reassignment is eligible when the new Customer has capacity');
-select like((private.inspect_payment_correction(
+select ok((private.inspect_payment_correction(
   'f5000000-0000-4000-8000-000000000001', 'f5000000-0000-4000-8000-000000000061',
   jsonb_set((select changes from qa_payment), '{referenceNumber}', '""'::jsonb)
-  )->>'blockedReasons'), '%GCash requires a reference%', 'GCash reference is required');
-select like((private.inspect_payment_correction(
+  )->>'blockedReasons') like '%GCash requires a reference%', 'GCash reference is required');
+select ok((private.inspect_payment_correction(
   'f5000000-0000-4000-8000-000000000001', 'f5000000-0000-4000-8000-000000000061',
   jsonb_set(jsonb_set((select changes from qa_payment), '{method}', '"bank"'::jsonb),
     '{bankName}', '""'::jsonb)
-  )->>'blockedReasons'), '%Bank Payment requires a bank name%', 'Bank name is required');
+  )->>'blockedReasons') like '%Bank Payment requires a bank name%', 'Bank name is required');
 select is((private.inspect_payment_correction(
   'f5000000-0000-4000-8000-000000000001', 'f5000000-0000-4000-8000-000000000061',
   jsonb_set(jsonb_set((select changes from qa_payment), '{method}', '"bank"'::jsonb),
     '{bankName}', '"BDO"'::jsonb)
   )->>'eligible'), 'true', 'unverified Cash to Bank method correction can be reviewed');
-select like((private.inspect_payment_correction(
+select ok((private.inspect_payment_correction(
   'f5000000-0000-4000-8000-000000000001', 'f5000000-0000-4000-8000-000000000061',
   jsonb_set((select changes from qa_payment), '{amount}', '1000'::jsonb)
-  )->>'blockedReasons'), '%exceeds eligible Customer open balances%', 'overpayment is rejected');
-select like((private.inspect_payment_correction(
+  )->>'blockedReasons') like '%exceeds eligible Customer open balances%', 'overpayment is rejected');
+select ok((private.inspect_payment_correction(
   'f5000000-0000-4000-8000-000000000001', 'f5000000-0000-4000-8000-000000000061',
   jsonb_set(jsonb_set((select changes from qa_payment), '{allocationMode}', '"manual"'::jsonb),
     '{allocations}', '[{"saleId":"f5000000-0000-4000-8000-000000000041","amount":120},
       {"saleId":"f5000000-0000-4000-8000-000000000041","amount":1}]'::jsonb)
-  )->>'blockedReasons'), '%Duplicate Sale allocations%', 'duplicate manual allocation is rejected');
+  )->>'blockedReasons') like '%Duplicate Sale allocations%', 'duplicate manual allocation is rejected');
 
 set local role authenticated;
 set local request.jwt.claim.sub = 'f5000000-0000-4000-8000-000000000102';
@@ -109,7 +109,7 @@ select throws_ok($$select public.preview_payment_correction(
 set local request.jwt.claim.sub = 'f5000000-0000-4000-8000-000000000101';
 select is((public.preview_payment_correction(
   'f5000000-0000-4000-8000-000000000001', 'f5000000-0000-4000-8000-000000000061',
-  (select changes from qa_payment)))->>'eligible'), 'true', 'Owner can preview Payment correction');
+  (select changes from qa_payment))->>'eligible'), 'true', 'Owner can preview Payment correction');
 reset role;
 
 update qa_payment set changes = jsonb_set(jsonb_set(changes, '{allocationMode}', '"manual"'::jsonb),
@@ -129,6 +129,7 @@ select lives_ok($$select public.apply_payment_correction(
   'f5000000-0000-4000-8000-000000000101', 'Correct QA Payment details',
   'f5000000-0000-4000-8000-000000000201', (select preview->>'versionToken' from qa_payment),
   (select changes from qa_payment))$$, 'eligible manual correction commits');
+reset role;
 select is((select amount from public.payments where id = 'f5000000-0000-4000-8000-000000000061'),
   120::numeric, 'Payment ID and new amount reconcile');
 select is((select amount from public.payment_allocations where sale_id = 'f5000000-0000-4000-8000-000000000041'),
@@ -164,7 +165,6 @@ reset role;
 update qa_payment set changes = jsonb_set(jsonb_set(changes, '{allocationMode}', '"fifo"'::jsonb),
   '{allocations}', '[]'::jsonb);
 update qa_payment set changes = jsonb_set(changes, '{amount}', '1000'::jsonb);
-set local role service_role;
 select throws_ok($$select public.apply_payment_correction(
   'f5000000-0000-4000-8000-000000000001', 'f5000000-0000-4000-8000-000000000061',
   'f5000000-0000-4000-8000-000000000101', 'Increase beyond open balances',
@@ -183,28 +183,28 @@ select is((private.inspect_payment_correction(
   )->>'eligible'), 'true', 'pending GCash to Bank correction can be reviewed');
 update public.payments set method = 'gcash', reference_number = 'GC-VERIFIED-QA',
   verification_status = 'verified' where id = 'f5000000-0000-4000-8000-000000000061';
-select like((private.inspect_payment_correction(
+select ok((private.inspect_payment_correction(
   'f5000000-0000-4000-8000-000000000001', 'f5000000-0000-4000-8000-000000000061',
-  (select changes from qa_payment)))->>'blockedReasons'), '%Finalized or verified Payment%',
+  (select changes from qa_payment))->>'blockedReasons') like '%Finalized or verified Payment%',
   'verified GCash Payment is protected');
 update public.payments set method = 'bank', bank_name = 'BDO', verification_status = 'verified'
   where id = 'f5000000-0000-4000-8000-000000000061';
-select like((private.inspect_payment_correction(
+select ok((private.inspect_payment_correction(
   'f5000000-0000-4000-8000-000000000001', 'f5000000-0000-4000-8000-000000000061',
-  (select changes from qa_payment)))->>'blockedReasons'), '%Finalized or verified Payment%',
+  (select changes from qa_payment))->>'blockedReasons') like '%Finalized or verified Payment%',
   'verified Bank Payment is protected');
 update public.payments set method = 'cash', bank_name = null, reference_number = null,
   verification_status = 'not_required' where id = 'f5000000-0000-4000-8000-000000000061';
 insert into public.daily_cash_reports (organization_id, salesman_user_id, report_date,
   cash_collected, gcash_collected, bank_collected, cash_paid_expenses,
   expected_cash_remittance, actual_cash_remittance, difference, source_snapshot,
-  client_request_id, created_by) values
+  client_request_id) values
   ('f5000000-0000-4000-8000-000000000001', 'f5000000-0000-4000-8000-000000000102',
    '2026-01-04', 0, 0, 0, 0, 0, 0, 0, '{}'::jsonb,
-   'f5000000-0000-4000-8000-000000000191', 'f5000000-0000-4000-8000-000000000101');
-select like((private.inspect_payment_correction(
+   'f5000000-0000-4000-8000-000000000191');
+select ok((private.inspect_payment_correction(
   'f5000000-0000-4000-8000-000000000001', 'f5000000-0000-4000-8000-000000000061',
-  (select changes from qa_payment)))->>'blockedReasons'), '%submitted DCR%',
+  (select changes from qa_payment))->>'blockedReasons') like '%submitted DCR%',
   'submitted DCR blocks direct Payment correction');
 select * from finish();
 rollback;

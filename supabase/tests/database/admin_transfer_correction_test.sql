@@ -83,7 +83,7 @@ select throws_ok($$select public.preview_receiving_receipt_correction(
 set local request.jwt.claim.sub = 'f3000000-0000-4000-8000-000000000101';
 select is((public.preview_receiving_receipt_correction(
   'f3000000-0000-4000-8000-000000000001', 'f3000000-0000-4000-8000-000000000061',
-  (select changes from qa_rr)))->>'eligible'), 'true', 'Owner can preview RR correction');
+  (select changes from qa_rr))->>'eligible'), 'true', 'Owner can preview RR correction');
 reset role;
 
 set local role service_role;
@@ -97,12 +97,14 @@ select lives_ok($$select public.apply_receiving_receipt_correction(
   'f3000000-0000-4000-8000-000000000101', 'Correct receiving details',
   'f3000000-0000-4000-8000-000000000201', (select preview->>'versionToken' from qa_rr),
   (select changes from qa_rr))$$, 'eligible RR correction commits atomically');
+reset role;
 select is((select receipt_number from public.receiving_receipts where id = 'f3000000-0000-4000-8000-000000000061'), 'RR-QA-1', 'RR identity is preserved');
 select is(private.custody_balance('f3000000-0000-4000-8000-000000000041', 'warehouse', null), 100::numeric, 'old lot returns to Warehouse');
 select is(private.custody_balance('f3000000-0000-4000-8000-000000000043', 'salesman', 'f3000000-0000-4000-8000-000000000104'), 25::numeric, 'corrected RR custody belongs to new recipient and lot');
 select is((select count(*) from public.inventory_movements where reference_type = 'transaction_correction' and inventory_lot_id in ('f3000000-0000-4000-8000-000000000041', 'f3000000-0000-4000-8000-000000000043')), 2::bigint, 'original movement remains with reversal and replacement');
 select is((select count(*) from public.transaction_corrections where module = 'warehouse_transfer' and transaction_id = 'f3000000-0000-4000-8000-000000000061'), 1::bigint, 'RR correction appears in edit history');
 select is((select count(*) from public.audit_events where entity_id = 'f3000000-0000-4000-8000-000000000061' and action = 'CORRECT_TRANSFER_RECEIPT'), 1::bigint, 'RR audit event is written');
+set local role service_role;
 select throws_ok($$select public.apply_receiving_receipt_correction(
   'f3000000-0000-4000-8000-000000000001', 'f3000000-0000-4000-8000-000000000061',
   'f3000000-0000-4000-8000-000000000101', 'Correct receiving details',
@@ -110,21 +112,25 @@ select throws_ok($$select public.apply_receiving_receipt_correction(
   (select changes from qa_rr))$$, '40001', null, 'stale concurrent preview is rejected');
 select is((select count(*) from public.transaction_corrections where module = 'warehouse_transfer'), 1::bigint,
   'failed stale request leaves the correction ledger unchanged');
+reset role;
 update qa_rr set changes = jsonb_set(changes, '{notes}', '"Notes reviewed again"'::jsonb);
 update qa_rr set preview = private.inspect_transfer_correction(
   'f3000000-0000-4000-8000-000000000001', 'f3000000-0000-4000-8000-000000000061', 'warehouse_transfer', changes);
 select is((select preview->>'eligible' from qa_rr), 'true', 'notes may be updated after an audited custody correction');
+set local role service_role;
 select lives_ok($$select public.apply_receiving_receipt_correction(
   'f3000000-0000-4000-8000-000000000001', 'f3000000-0000-4000-8000-000000000061',
   'f3000000-0000-4000-8000-000000000101', 'Clarify receiving notes',
   'f3000000-0000-4000-8000-000000000203', (select preview->>'versionToken' from qa_rr),
   (select changes from qa_rr))$$, 'metadata-only correction preserves custody');
+reset role;
 select is((select count(*) from public.inventory_movements where reference_type = 'transaction_correction'
   and inventory_lot_id in ('f3000000-0000-4000-8000-000000000041', 'f3000000-0000-4000-8000-000000000043')), 2::bigint,
   'metadata-only correction adds no movement');
 update qa_rr set changes = jsonb_set(changes, '{notes}', '"Final notes"'::jsonb);
 update qa_rr set preview = private.inspect_transfer_correction(
   'f3000000-0000-4000-8000-000000000001', 'f3000000-0000-4000-8000-000000000061', 'warehouse_transfer', changes);
+set local role service_role;
 select throws_ok($$select public.apply_receiving_receipt_correction(
   'f3000000-0000-4000-8000-000000000001', 'f3000000-0000-4000-8000-000000000061',
   'f3000000-0000-4000-8000-000000000101', 'Clarify receiving notes',
@@ -156,13 +162,14 @@ update qa_tf set preview = private.inspect_transfer_correction(
 select is((select preview->>'eligible' from qa_tf), 'true', 'TF recipient, date and quantity are eligible without downstream use');
 select is((private.inspect_transfer_correction(
   'f3000000-0000-4000-8000-000000000001', 'f3000000-0000-4000-8000-000000000071', 'salesman_transfer',
-  jsonb_set((select changes from qa_tf), '{fromSalesmanId}', '"f3000000-0000-4000-8000-000000000102"')))->>'eligible'), 'false', 'sender without source stock is blocked');
+  jsonb_set((select changes from qa_tf), '{fromSalesmanId}', '"f3000000-0000-4000-8000-000000000102"'))->>'eligible'), 'false', 'sender without source stock is blocked');
 set local role service_role;
 select lives_ok($$select public.apply_transfer_receipt_correction(
   'f3000000-0000-4000-8000-000000000001', 'f3000000-0000-4000-8000-000000000071',
   'f3000000-0000-4000-8000-000000000101', 'Correct transfer custody',
   'f3000000-0000-4000-8000-000000000202', (select preview->>'versionToken' from qa_tf),
   (select changes from qa_tf))$$, 'eligible TF correction commits atomically');
+reset role;
 select is((select receipt_number from public.transfer_receipts where id = 'f3000000-0000-4000-8000-000000000071'), 'TF-QA-1', 'TF identity is preserved');
 select is(private.custody_balance('f3000000-0000-4000-8000-000000000042', 'salesman', 'f3000000-0000-4000-8000-000000000103'), 18::numeric, 'sender retains reconciled stock');
 select is(private.custody_balance('f3000000-0000-4000-8000-000000000042', 'salesman', 'f3000000-0000-4000-8000-000000000104'), 12::numeric, 'new recipient receives corrected quantity');
@@ -178,7 +185,7 @@ insert into public.inventory_movements (organization_id, inventory_lot_id, movem
    '2026-01-05', 'f3000000-0000-4000-8000-000000000101');
 select is((private.inspect_transfer_correction(
   'f3000000-0000-4000-8000-000000000001', 'f3000000-0000-4000-8000-000000000071', 'salesman_transfer',
-  jsonb_set((select changes from qa_tf), '{quantityKg}', '11'::jsonb)))->>'eligible'), 'false',
+  jsonb_set((select changes from qa_tf), '{quantityKg}', '11'::jsonb))->>'eligible'), 'false',
   'downstream custody movement blocks another TF stock correction');
 select * from finish();
 rollback;

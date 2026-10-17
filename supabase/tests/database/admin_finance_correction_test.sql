@@ -75,7 +75,7 @@ select throws_ok($$select public.preview_dcr_amendment(
 set local request.jwt.claim.sub = 'f6000000-0000-4000-8000-000000000101';
 select is((public.preview_expense_correction(
   'f6000000-0000-4000-8000-000000000001', 'f6000000-0000-4000-8000-000000000071',
-  (select expense_changes from qa_finance)))->>'eligible'), 'true', 'Owner can preview Expense correction');
+  (select expense_changes from qa_finance))->>'eligible'), 'true', 'Owner can preview Expense correction');
 reset role;
 
 set local role service_role;
