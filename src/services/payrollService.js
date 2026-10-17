@@ -3,7 +3,7 @@ import { buildPayrollEntryPayload } from "../utils/hostedPayroll.js";
 
 const fail = (result) => { if (result.error) throw result.error; return result.data || []; };
 
-export async function loadPayroll(organizationId, client = requireSupabase()) {
+export async function loadPayroll(organizationId, client = requireSupabase(), owner = false) {
   const [periodResult, membershipResult, timeResult] = await Promise.all([
     client.from("payroll_periods").select("*").eq("organization_id", organizationId).order("period_start", { ascending: false }),
     client.from("organization_memberships").select("user_id, role, active").eq("organization_id", organizationId),
@@ -18,7 +18,24 @@ export async function loadPayroll(organizationId, client = requireSupabase()) {
   ]);
   const profiles = fail(profileResult);
   const people = memberships.map((membership) => ({ ...membership, ...profiles.find((profile) => profile.id === membership.user_id) })).filter((person) => person.id);
-  return { periods, entries: fail(entryResult), timeEntries, people };
+  let adjustments = [];
+  let adjustmentsUnavailable = false;
+  if (owner) {
+    const result = await client.from("payroll_adjustment_requests").select("*")
+      .eq("organization_id", organizationId).order("created_at", { ascending: false });
+    if (result.error && ["42P01", "PGRST205"].includes(result.error.code)) adjustmentsUnavailable = true;
+    else {
+      adjustments = fail(result);
+      if (adjustments.length) {
+        const approvalResult = await client.from("payroll_adjustment_approvals").select("*")
+          .in("adjustment_id", adjustments.map((row) => row.id));
+        const approvals = fail(approvalResult);
+        adjustments = adjustments.map((row) => ({ ...row,
+          approval: approvals.find((approval) => approval.adjustment_id === row.id) || null }));
+      }
+    }
+  }
+  return { periods, entries: fail(entryResult), timeEntries, people, adjustments, adjustmentsUnavailable };
 }
 
 export async function createPayrollPeriod(organizationId, values, createdBy, client = requireSupabase()) {
@@ -26,15 +43,16 @@ export async function createPayrollPeriod(organizationId, values, createdBy, cli
 }
 
 export async function savePayrollEntry(values, attendance, client = requireSupabase()) {
+  if (values.id) throw new Error("Historical payroll edits require Owner/Admin correction authorization.");
   const payload = buildPayrollEntryPayload(values, attendance);
-  const result = values.id
-    ? await client.from("payroll_entries").update(payload).eq("id", values.id).select("*").single()
-    : await client.from("payroll_entries").insert(payload).select("*").single();
+  let result = await client.from("payroll_entries").insert(payload).select("*").single();
+  if (["42703", "PGRST204"].includes(result.error?.code)) {
+    const { hourly_rate, overtime_rate, notes, ...legacyPayload } = payload;
+    result = await client.from("payroll_entries").insert(legacyPayload).select("*").single();
+  }
   return fail(result);
 }
 
 export async function setPayrollPeriodStatus(periodId, status, client = requireSupabase()) {
-  const entries = await client.from("payroll_entries").update({ status }).eq("payroll_period_id", periodId);
-  fail(entries);
-  return fail(await client.from("payroll_periods").update({ status }).eq("id", periodId).select("*").single());
+  throw new Error("Payroll period finalization requires Owner/Admin correction authorization.");
 }

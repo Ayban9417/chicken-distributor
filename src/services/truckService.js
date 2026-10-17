@@ -18,15 +18,14 @@ export async function loadTrucks(organizationId, client = requireSupabase()) {
 }
 
 export async function saveTruck(organizationId, values, client = requireSupabase()) {
+  if (values.id) throw new Error("Historical Truck edits require Owner/Admin correction authorization.");
   const payload = buildTruckPayload(organizationId, values);
-  const result = values.id
-    ? await client.from("trucks").update(payload).eq("id", values.id).eq("organization_id", organizationId).select("*").single()
-    : await client.from("trucks").insert(payload).select("*").single();
+  const result = await client.from("trucks").insert(payload).select("*").single();
   return fail(result);
 }
 
 export async function setTruckActive(organizationId, truckId, active, client = requireSupabase()) {
-  return fail(await client.from("trucks").update({ active }).eq("id", truckId).eq("organization_id", organizationId).select("*").single());
+  throw new Error("Truck status changes require Owner/Admin correction authorization.");
 }
 
 export async function recordTruckRenewal(truckId, values, createdBy, client = requireSupabase()) {
@@ -34,7 +33,13 @@ export async function recordTruckRenewal(truckId, values, createdBy, client = re
 }
 
 export async function recordTruckMaintenance(organizationId, truckId, values, createdBy, client = requireSupabase()) {
+  const capability = await client.from("time_entries").select("attendance_status").limit(0);
+  const legacy = ["42703", "PGRST204"].includes(capability.error?.code);
+  if (capability.error && !legacy) throw capability.error;
   const maintenance = fail(await client.from("truck_maintenance").insert(buildMaintenancePayload(truckId, values, createdBy)).select("*").single());
-  const truck = fail(await client.from("trucks").update({ current_mileage: Number(values.mileage) }).eq("id", truckId).eq("organization_id", organizationId).select("*").single());
-  return { maintenance, truck };
+  if (legacy) {
+    await fail(await client.from("trucks").update({ current_mileage: Number(values.mileage) })
+      .eq("id", truckId).eq("organization_id", organizationId).select("*").single());
+  }
+  return maintenance;
 }

@@ -33,6 +33,6 @@ test("payroll validation requires DTR time and a nonnegative net", () => {
 
 test("persisted payroll entries restore editable rate inputs", () => {
   assert.deepEqual(payrollEntryForm({ id: "entry-1", payroll_period_id: period.id, user_id: "user-1", base_pay: 1600, regular_minutes: 960, overtime_minutes: 120, overtime_pay: 250, allowances: 0, deductions: 0, status: "draft" }), {
-    id: "entry-1", periodId: period.id, userId: "user-1", hourlyRate: 100, overtimeHours: 2, overtimeRate: 125, allowances: 0, deductions: 0, status: "draft",
+    id: "entry-1", periodId: period.id, userId: "user-1", hourlyRate: 100, overtimeHours: 2, overtimeRate: 125, allowances: 0, deductions: 0, notes: "", status: "draft",
   });
 });

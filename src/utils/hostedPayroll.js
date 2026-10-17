@@ -22,6 +22,9 @@ export function buildPayrollEntryPayload(values, attendance = []) {
   return {
     payroll_period_id: values.periodId,
     user_id: values.userId,
+    hourly_rate: money(values.hourlyRate),
+    overtime_rate: money(values.overtimeRate),
+    notes: values.notes?.trim() || null,
     base_pay: totals.basePay,
     regular_minutes: totals.regularMinutes,
     overtime_minutes: totals.overtimeMinutes,
@@ -41,11 +44,12 @@ export function payrollEntryForm(entry) {
     id: entry.id,
     periodId: entry.payroll_period_id,
     userId: entry.user_id,
-    hourlyRate: regularHours ? money(number(entry.base_pay) / regularHours) : 0,
+    hourlyRate: entry.hourly_rate == null ? regularHours ? money(number(entry.base_pay) / regularHours) : 0 : number(entry.hourly_rate),
     overtimeHours,
-    overtimeRate: overtimeHours ? money(number(entry.overtime_pay) / overtimeHours) : 0,
+    overtimeRate: entry.overtime_rate == null ? overtimeHours ? money(number(entry.overtime_pay) / overtimeHours) : 0 : number(entry.overtime_rate),
     allowances: number(entry.allowances),
     deductions: number(entry.deductions),
+    notes: entry.notes || "",
     status: entry.status,
   };
 }

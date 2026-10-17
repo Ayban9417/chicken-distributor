@@ -20,10 +20,9 @@ export async function loadDtrEntries(organizationId, range, employeeId = "", cli
 }
 
 export async function saveTimeEntry(organizationId, values, client = requireSupabase()) {
+  if (values.id) throw new Error("Historical DTR edits require Owner/Admin correction authorization.");
   const payload = buildTimeEntryPayload(organizationId, values);
-  const result = values.id
-    ? await client.from("time_entries").update(payload).eq("id", values.id).eq("organization_id", organizationId).select("*").single()
-    : await client.from("time_entries").insert(payload).select("*").single();
+  const result = await client.from("time_entries").insert(payload).select("*").single();
   return fail(result);
 }
 
