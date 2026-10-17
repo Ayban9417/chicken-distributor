@@ -148,8 +148,8 @@ select is((select count(*) from public.audit_events where entity_id = 'f5000000-
 select throws_ok($$select public.apply_payment_correction(
   'f5000000-0000-4000-8000-000000000001', 'f5000000-0000-4000-8000-000000000061',
   'f5000000-0000-4000-8000-000000000101', 'Correct QA Payment details',
-  'f5000000-0000-4000-8000-000000000201', (select preview->>'versionToken' from qa_payment),
-  (select changes from qa_payment))$$, '40001', null, 'concurrent stale version is rejected');
+  'f5000000-0000-4000-8000-000000000299', (select preview->>'versionToken' from qa_payment),
+  (select changes from qa_payment))$$, '55000', null, 'concurrent stale version is rejected');
 select throws_ok($$select public.apply_payment_correction(
   'f5000000-0000-4000-8000-000000000001', 'f5000000-0000-4000-8000-000000000061',
   'f5000000-0000-4000-8000-000000000101', 'Correct QA Payment details',

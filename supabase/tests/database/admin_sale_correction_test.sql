@@ -173,8 +173,8 @@ select is((select count(*) from public.audit_events where entity_id = 'f4000000-
 select throws_ok($$select public.apply_sale_correction(
   'f4000000-0000-4000-8000-000000000001', 'f4000000-0000-4000-8000-000000000061',
   'f4000000-0000-4000-8000-000000000101', 'Correct test Sale details',
-  'f4000000-0000-4000-8000-000000000201', (select preview->>'versionToken' from qa_sale),
-  (select changes from qa_sale))$$, '40001', null, 'stale version is rejected');
+  'f4000000-0000-4000-8000-000000000299', (select preview->>'versionToken' from qa_sale),
+  (select changes from qa_sale))$$, '55000', null, 'stale version is rejected');
 select throws_ok($$select public.apply_sale_correction(
   'f4000000-0000-4000-8000-000000000001', 'f4000000-0000-4000-8000-000000000061',
   'f4000000-0000-4000-8000-000000000101', 'Correct test Sale details',

@@ -108,8 +108,8 @@ set local role service_role;
 select throws_ok($$select public.apply_receiving_receipt_correction(
   'f3000000-0000-4000-8000-000000000001', 'f3000000-0000-4000-8000-000000000061',
   'f3000000-0000-4000-8000-000000000101', 'Correct receiving details',
-  'f3000000-0000-4000-8000-000000000201', (select preview->>'versionToken' from qa_rr),
-  (select changes from qa_rr))$$, '40001', null, 'stale concurrent preview is rejected');
+  'f3000000-0000-4000-8000-000000000299', (select preview->>'versionToken' from qa_rr),
+  (select changes from qa_rr))$$, '55000', null, 'stale concurrent preview is rejected');
 select is((select count(*) from public.transaction_corrections where module = 'warehouse_transfer'), 1::bigint,
   'failed stale request leaves the correction ledger unchanged');
 reset role;

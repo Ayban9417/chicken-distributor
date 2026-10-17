@@ -240,7 +240,10 @@ export function buildHostedInventoryOverviewRows({ warehouseStock = [], salesman
     const soldQty = relevant.reduce((total, movement) => total + (movement.from_location_type === "customer" ? -number(movement.quantity_kg)
       : movement.to_location_type === "customer" || (movement.movement_type === "sale" && !movement.to_location_type)
         ? number(movement.quantity_kg) : 0), 0);
-    const adjustments = relevant.reduce((total, movement) => total + (movement.from_location_type === "adjustment" ? number(movement.quantity_kg) : movement.to_location_type === "adjustment" ? -number(movement.quantity_kg) : 0), 0);
+    // Stock In corrections already change the lot's original quantity; their movements remain history only.
+    const adjustments = relevant.reduce((total, movement) => total + (movement.reference_type === "transaction_correction" ? 0
+      : movement.from_location_type === "adjustment" ? number(movement.quantity_kg)
+        : movement.to_location_type === "adjustment" ? -number(movement.quantity_kg) : 0), 0);
     const warehouseQty = number(row.available_quantity_kg);
     const salesmanQty = number(salesmanByLot.get(row.inventory_lot_id));
     const remainingQty = money(warehouseQty + salesmanQty);

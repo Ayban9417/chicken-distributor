@@ -37,7 +37,7 @@ export const applyFinanceCorrection = (module, organizationId, transactionId, ch
 export async function loadDcrAmendments(organizationId, dcrId, client = requireSupabase()) {
   const { data, error } = await client.from("dcr_amendments").select("*")
     .eq("organization_id", organizationId).eq("dcr_id", dcrId)
-    .order("created_at", { ascending: false }).order("id", { ascending: false });
+    .order("amendment_seq", { ascending: false });
   if (error) throw error;
   return data || [];
 }

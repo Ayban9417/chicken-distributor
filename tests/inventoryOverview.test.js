@@ -106,6 +106,22 @@ test("hosted inventory mapping derives sold stock and movement references from a
   assert.deepEqual(row.history.map((movement) => movement.ref), ["FK-REF-1", "RR-000123", "TF-000044", "TR-10239"]);
 });
 
+test("hosted Inventory does not double-count audited Stock In corrections", () => {
+  const [row] = buildHostedInventoryOverviewRows({
+    warehouseStock: [{ inventory_lot_id: "lot-qa", stock_trip_line_id: "line-qa", stock_trip_id: "trip-qa", trip_date: "2026-10-18", trip_number: "ST-000001", plant_name: "QA Plant", product_name: "Chicken", category: "whole_chicken", original_quantity_kg: 12, available_quantity_kg: 13, cost_per_kg: 40 }],
+    movements: [
+      { id: "in", inventory_lot_id: "lot-qa", movement_type: "stock_in", quantity_kg: 10, reference_type: "stock_trip", reference_id: "trip-qa" },
+      { id: "correction", inventory_lot_id: "lot-qa", movement_type: "adjustment_in", quantity_kg: 2, from_location_type: "adjustment", to_location_type: "warehouse", reference_type: "transaction_correction", reference_id: "correction-qa" },
+      { id: "other", inventory_lot_id: "lot-qa", movement_type: "adjustment_in", quantity_kg: 1, from_location_type: "adjustment", to_location_type: "warehouse", reference_type: "inventory_adjustment" },
+    ],
+    tripLines: [{ id: "line-qa", acquisition_type: "purchased" }],
+    trips: [{ id: "trip-qa", reference_number: "QA-REF" }],
+  });
+  assert.deepEqual([row.originalQty, row.adjustments, row.warehouseQty, row.reconciliationDelta], [12, 1, 13, 0]);
+  assert.equal(row.inventoryCostValue, 520);
+  assert.ok(row.history.some((movement) => movement.ref === "Correction correction-qa"));
+});
+
 test("the routed shared Inventory presentation retains original Plant-first controls", () => {
   const component = readFileSync("src/components/InventoryOverview.jsx", "utf8");
   const localApp = readFileSync("src/App.jsx", "utf8");

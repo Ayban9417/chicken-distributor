@@ -108,8 +108,8 @@ select is((select base_pay from public.payroll_entries where id='f7000000-0000-4
 select throws_ok($$select public.apply_dtr_correction(
   'f7000000-0000-4000-8000-000000000001','f7000000-0000-4000-8000-000000000011',
   'f7000000-0000-4000-8000-000000000101','Correct QA shift',
-  'f7000000-0000-4000-8000-000000000201',(select dtr_version from qa7),
-  (select dtr_changes from qa7))$$,'40001',null,'stale replay cannot change attendance');
+  'f7000000-0000-4000-8000-000000000299',(select dtr_version from qa7),
+  (select dtr_changes from qa7))$$,'55000',null,'stale replay cannot change attendance');
 select is((select count(*) from public.transaction_corrections where module='dtr'
   and organization_id='f7000000-0000-4000-8000-000000000001'),
   1::bigint,'rejected replay leaves exactly one DTR audit record');

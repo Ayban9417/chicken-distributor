@@ -52,7 +52,7 @@ select throws_ok(
     'f1000000-0000-4000-8000-000000000001', 'f1000000-0000-4000-8000-000000000101',
     'Correct the recorded date', 'f1000000-0000-4000-8000-000000000205', 'version-a', 'version-b'
   )$$,
-  '40001', null, 'stale preview version is rejected'
+  '55000', null, 'stale preview version is rejected without a retryable SQLSTATE'
 );
 
 insert into public.transaction_corrections (

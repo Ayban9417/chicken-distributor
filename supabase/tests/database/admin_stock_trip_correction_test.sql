@@ -102,7 +102,7 @@ select throws_ok($$select public.apply_stock_trip_correction(
   'f2000000-0000-4000-8000-000000000001', 'f2000000-0000-4000-8000-000000000021',
   'f2000000-0000-4000-8000-000000000101', 'Correct Trip stock and cost',
   'f2000000-0000-4000-8000-000000000202', (select preview->>'versionToken' from qa_correction),
-  (select changes from qa_correction))$$, '40001', null, 'stale concurrent preview is rejected');
+  (select changes from qa_correction))$$, '55000', null, 'stale concurrent preview is rejected');
 select throws_ok($$select public.apply_stock_trip_correction(
   'f2000000-0000-4000-8000-000000000001', 'f2000000-0000-4000-8000-000000000021',
   'f2000000-0000-4000-8000-000000000101', 'Correct Trip stock and cost',

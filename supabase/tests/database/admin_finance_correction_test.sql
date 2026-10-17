@@ -101,8 +101,8 @@ select is((select count(*) from public.transaction_corrections where module = 'e
 select throws_ok($$select public.apply_expense_correction(
   'f6000000-0000-4000-8000-000000000001', 'f6000000-0000-4000-8000-000000000071',
   'f6000000-0000-4000-8000-000000000101', 'Correct QA fuel expense',
-  'f6000000-0000-4000-8000-000000000201', (select expense_preview->>'versionToken' from qa_finance),
-  (select expense_changes from qa_finance))$$, '40001', null, 'stale Expense preview is rejected');
+  'f6000000-0000-4000-8000-000000000299', (select expense_preview->>'versionToken' from qa_finance),
+  (select expense_changes from qa_finance))$$, '55000', null, 'stale Expense preview is rejected');
 reset role;
 
 update qa_finance set dcr_preview = private.inspect_dcr_amendment(
@@ -128,7 +128,12 @@ select throws_ok($$select public.apply_dcr_amendment(
   'f6000000-0000-4000-8000-000000000001', 'f6000000-0000-4000-8000-000000000081',
   'f6000000-0000-4000-8000-000000000101', 'Reconcile corrected QA cash',
   'f6000000-0000-4000-8000-000000000202', (select dcr_preview->>'versionToken' from qa_finance),
-  (select dcr_changes from qa_finance))$$, '40001', null, 'concurrent stale DCR amendment is rejected');
+  (select dcr_changes from qa_finance))$$, '23505', null, 'duplicate DCR request ID is rejected');
+select throws_ok($$select public.apply_dcr_amendment(
+  'f6000000-0000-4000-8000-000000000001', 'f6000000-0000-4000-8000-000000000081',
+  'f6000000-0000-4000-8000-000000000101', 'Reconcile corrected QA cash',
+  'f6000000-0000-4000-8000-000000000203', (select dcr_preview->>'versionToken' from qa_finance),
+  (select dcr_changes from qa_finance))$$, '55000', null, 'concurrent stale DCR amendment is rejected');
 reset role;
 select * from finish();
 rollback;

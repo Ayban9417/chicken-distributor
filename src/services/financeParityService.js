@@ -319,7 +319,7 @@ export async function loadHostedFinanceParity(organizationId, client = requireSu
   let amendmentUnavailable = false;
   if (includeAmendments) {
     const result = await client.from("dcr_amendments").select("*")
-      .eq("organization_id", organizationId).order("created_at", { ascending: false }).order("id", { ascending: false });
+      .eq("organization_id", organizationId).order("amendment_seq", { ascending: false });
     if (result.error) {
       if (["PGRST205", "42P01"].includes(result.error.code)) amendmentUnavailable = true;
       else throw result.error;
