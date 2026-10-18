@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import { withRowLockBarrier } from "./local-lock-barrier.mjs";
 
 const url = process.env.LOCAL_SUPABASE_URL;
 const anonKey = process.env.LOCAL_ANON_KEY;
@@ -181,9 +182,9 @@ assert.equal(remaining.length, 1);
 
 const movementBefore = await result(admin.from("inventory_movements").select("id").eq("inventory_lot_id", lotId), "movement count before concurrency");
 const concurrentRequestId = randomUUID();
-const simultaneous = await Promise.all([
-  apply(owner, password, "Phase 8 second correction", fresh.body.preview.versionToken, concurrentRequestId, nextChanges),
-  apply(coOwner, password, "Phase 8 second correction", fresh.body.preview.versionToken, concurrentRequestId, nextChanges),
+const simultaneous = await withRowLockBarrier("stock_trips", tripId, "Two Admins / same Trip", [
+  () => apply(owner, password, "Phase 8 second correction", fresh.body.preview.versionToken, concurrentRequestId, nextChanges),
+  () => apply(coOwner, password, "Phase 8 second correction", fresh.body.preview.versionToken, concurrentRequestId, nextChanges),
 ]);
 assert.deepEqual(simultaneous.map((item) => item.status).sort(), [200, 409], JSON.stringify(simultaneous));
 const finalCorrections = await result(admin.from("transaction_corrections").select("id").eq("transaction_id", tripId), "final correction count");
@@ -446,7 +447,7 @@ const concurrentDcrChanges = {
 const concurrentDcrPreview = await financeAction(owner, "dcr", "preview", dcrId, concurrentDcrChanges);
 assert.equal(concurrentDcrPreview.status, 200, JSON.stringify(concurrentDcrPreview.body));
 assert.equal(concurrentDcrPreview.body.preview.eligible, true);
-const dcrRace = await Promise.all([owner, coOwner].map((actor) => financeAction(
+const dcrRace = await withRowLockBarrier("daily_cash_reports", dcrId, "Two DCR amendments", [owner, coOwner].map((actor) => () => financeAction(
   actor, "dcr", "apply", dcrId, concurrentDcrChanges,
   { password, reason: "Phase 8 concurrent DCR check", versionToken: concurrentDcrPreview.body.preview.versionToken, requestId: randomUUID() },
 )));
@@ -538,12 +539,12 @@ const adjustmentRaceChanges = { grossDelta: 8, netDelta: 8, notes: "Concurrent a
 const adjustmentRacePreview = await operationsAction(owner, "payroll", "adjustment", "preview", payrollId, adjustmentRaceChanges);
 assert.equal(approvalRacePreview.body.preview.eligible, true, JSON.stringify(approvalRacePreview.body));
 assert.equal(adjustmentRacePreview.body.preview.eligible, true, JSON.stringify(adjustmentRacePreview.body));
-const payrollRace = await Promise.all([
-  operationsAction(coOwner, "payroll", "approval", "apply", pendingRequest.id, {}, {
+const payrollRace = await withRowLockBarrier("payroll_periods", periodId, "Payroll approval / adjustment", [
+  () => operationsAction(coOwner, "payroll", "approval", "apply", pendingRequest.id, {}, {
     password, reason: "Phase 8 concurrent Payroll approval",
     versionToken: approvalRacePreview.body.preview.versionToken, requestId: randomUUID(),
   }),
-  operationsAction(owner, "payroll", "adjustment", "apply", payrollId, adjustmentRaceChanges, {
+  () => operationsAction(owner, "payroll", "adjustment", "apply", payrollId, adjustmentRaceChanges, {
     password, reason: "Phase 8 concurrent Payroll adjustment",
     versionToken: adjustmentRacePreview.body.preview.versionToken, requestId: randomUUID(),
   }),
@@ -608,12 +609,12 @@ const raceStockPreview = await edge(owner, "preview", raceStockChanges, { tripId
 assert.equal(raceStockPreview.status, 200, JSON.stringify(raceStockPreview.body));
 assert.equal(raceStockPreview.body.preview.eligible, true, JSON.stringify(raceStockPreview.body.preview.blockedReasons));
 const receivingRequestId = randomUUID();
-const [raceStockApply, receivingResult] = await Promise.all([
-  edge(owner, "apply", raceStockChanges, {
+const [raceStockApply, receivingResult] = await withRowLockBarrier("inventory_lots", raceLotId, "Stock In correction / Warehouse transfer", [
+  () => edge(owner, "apply", raceStockChanges, {
     tripId: raceTripId, password, reason: "Phase 8 stock transfer race",
     versionToken: raceStockPreview.body.preview.versionToken, requestId: randomUUID(),
   }),
-  owner.client.rpc("transfer_warehouse_to_salesman", {
+  () => owner.client.rpc("transfer_warehouse_to_salesman", {
     p_organization_id: orgId, p_salesman_user_id: salesman.id, p_effective_date: transferDate,
     p_lines: [{ inventory_lot_id: raceLotId, quantity_kg: 10 }],
     p_client_request_id: receivingRequestId, p_notes: "Race receiving",
@@ -640,12 +641,12 @@ const raceRrChanges = {
 const raceRrPreview = await transfer(owner, "warehouse_transfer", "preview", raceReceiptId, raceRrChanges);
 assert.equal(raceRrPreview.status, 200, JSON.stringify(raceRrPreview.body));
 assert.equal(raceRrPreview.body.preview.eligible, true, JSON.stringify(raceRrPreview.body.preview.blockedReasons));
-const [raceRrApply, raceSale] = await Promise.all([
-  transfer(owner, "warehouse_transfer", "apply", raceReceiptId, raceRrChanges, {
+const [raceRrApply, raceSale] = await withRowLockBarrier("inventory_lots", raceLotId, "RR correction / Sale", [
+  () => transfer(owner, "warehouse_transfer", "apply", raceReceiptId, raceRrChanges, {
     password, reason: "Phase 8 transfer Sale race",
     versionToken: raceRrPreview.body.preview.versionToken, requestId: randomUUID(),
   }),
-  owner.client.rpc("create_sale", {
+  () => owner.client.rpc("create_sale", {
     p_organization_id: orgId, p_customer_id: customerId, p_salesman_user_id: salesman.id,
     p_sale_date: transferDate, p_trust_receipt_number: `TR-RACE-${suffix}`,
     p_lines: [{ inventory_lot_id: raceLotId, quantity_kg: 6, selling_price_per_kg: 50 }],
@@ -680,12 +681,12 @@ const salePaymentChanges = {
 const salePaymentPreview = await saleAction(owner, "preview", salePaymentChanges, { saleId: salePaymentRaceId });
 assert.equal(salePaymentPreview.status, 200, JSON.stringify(salePaymentPreview.body));
 assert.equal(salePaymentPreview.body.preview.eligible, true, JSON.stringify(salePaymentPreview.body.preview.blockedReasons));
-const [salePaymentCorrection, concurrentCollection] = await Promise.all([
-  saleAction(owner, "apply", salePaymentChanges, {
+const [salePaymentCorrection, concurrentCollection] = await withRowLockBarrier("sales", salePaymentRaceId, "Sale correction / Payment", [
+  () => saleAction(owner, "apply", salePaymentChanges, {
     saleId: salePaymentRaceId, password, reason: "Phase 8 Sale Payment race",
     versionToken: salePaymentPreview.body.preview.versionToken, requestId: randomUUID(),
   }),
-  owner.client.rpc("record_payment", {
+  () => owner.client.rpc("record_payment", {
     p_organization_id: orgId, p_customer_id: customerId, p_payment_date: transferDate,
     p_amount: 20, p_method: "cash", p_client_request_id: randomUUID(),
     p_salesman_user_id: secondSalesman.id, p_target_sale_id: salePaymentRaceId,
@@ -704,12 +705,12 @@ const paymentRaceChanges = { ...paymentChanges, amount: 60, notes: "Concurrent a
 const paymentRacePreview = await paymentAction(owner, "preview", paymentRaceChanges);
 assert.equal(paymentRacePreview.status, 200, JSON.stringify(paymentRacePreview.body));
 assert.equal(paymentRacePreview.body.preview.eligible, true, JSON.stringify(paymentRacePreview.body.preview.blockedReasons));
-const [paymentCorrectionRace, allocationRace] = await Promise.all([
-  paymentAction(owner, "apply", paymentRaceChanges, {
+const [paymentCorrectionRace, allocationRace] = await withRowLockBarrier("sales", saleId, "Payment reallocation / Payment", [
+  () => paymentAction(owner, "apply", paymentRaceChanges, {
     password, reason: "Phase 8 Payment allocation race",
     versionToken: paymentRacePreview.body.preview.versionToken, requestId: randomUUID(),
   }),
-  owner.client.rpc("record_payment", {
+  () => owner.client.rpc("record_payment", {
     p_organization_id: orgId, p_customer_id: customerId, p_payment_date: transferDate,
     p_amount: 70, p_method: "cash", p_client_request_id: randomUUID(),
     p_salesman_user_id: secondSalesman.id, p_target_sale_id: saleId,
@@ -725,4 +726,58 @@ assert.equal(Number(finalPaymentAmount.amount), paymentCorrectionRace.status ===
 assert.equal((await result(admin.from("transaction_corrections").select("id").eq("transaction_id", paymentId), "post-race Payment history")).length,
   paymentCorrectionRace.status === 200 ? 2 : 1);
 
-console.log("All ten module E2Es and Stock/Transfer/Sale/Payment/DCR/Payroll concurrency checks passed locally with reconciled balances.");
+const reallocationCustomerId = randomUUID();
+const reallocationPaymentId = randomUUID();
+const reallocationSaleIds = [randomUUID(), randomUUID(), randomUUID()];
+await result(admin.from("customers").insert({
+  id: reallocationCustomerId, organization_id: orgId, name: `Phase 8 Reallocation ${suffix}`,
+}), "reallocation Customer");
+await result(admin.from("sales").insert(reallocationSaleIds.map((id, index) => ({
+  id, organization_id: orgId, trust_receipt_number: `TR-REALLOC-${suffix}-${index}`,
+  customer_id: reallocationCustomerId, salesman_user_id: secondSalesman.id,
+  sale_date: transferDate, subtotal: 100, gross_sales: 100, net_sales: 100, total_cogs: 0,
+  client_request_id: randomUUID(), created_by: owner.id,
+}))), "synthetic reallocation Sales");
+await result(admin.from("payments").insert({
+  id: reallocationPaymentId, organization_id: orgId, payment_number: `PAY-REALLOC-${suffix}`,
+  customer_id: reallocationCustomerId, salesman_user_id: secondSalesman.id,
+  payment_date: transferDate, amount: 20, method: "cash", verification_status: "not_required",
+  client_request_id: randomUUID(), created_by: owner.id,
+}), "reallocation Payment");
+await result(admin.from("payment_allocations").insert({
+  payment_id: reallocationPaymentId, sale_id: reallocationSaleIds[0], amount: 20,
+}), "original reallocation target");
+const reallocationChanges = reallocationSaleIds.slice(1).map((saleId, index) => ({
+  paymentDate: transferDate, customerId: reallocationCustomerId, amount: 20,
+  method: "cash", referenceNumber: "", bankName: "", notes: `Competing allocation ${index}`,
+  allocationMode: "manual", allocations: [{ saleId, amount: 20 }],
+}));
+const reallocationPreviews = await Promise.all(reallocationChanges.map((changes) =>
+  paymentAction(owner, "preview", changes, { paymentId: reallocationPaymentId })));
+for (const preview of reallocationPreviews) {
+  assert.equal(preview.status, 200, JSON.stringify(preview.body));
+  assert.equal(preview.body.preview.eligible, true, JSON.stringify(preview.body.preview.blockedReasons));
+}
+const reallocationResults = await withRowLockBarrier("payments", reallocationPaymentId, "Two competing Payment reallocations", [
+  () => paymentAction(owner, "apply", reallocationChanges[0], {
+    paymentId: reallocationPaymentId, password, reason: "Phase 8 first reallocation",
+    versionToken: reallocationPreviews[0].body.preview.versionToken, requestId: randomUUID(),
+  }),
+  () => paymentAction(coOwner, "apply", reallocationChanges[1], {
+    paymentId: reallocationPaymentId, password, reason: "Phase 8 second reallocation",
+    versionToken: reallocationPreviews[1].body.preview.versionToken, requestId: randomUUID(),
+  }),
+]);
+assert.deepEqual(reallocationResults.map((item) => item.status).sort(), [200, 409], JSON.stringify(reallocationResults));
+const winningSaleId = reallocationSaleIds[reallocationResults[0].status === 200 ? 1 : 2];
+const finalReallocation = await result(admin.from("payment_allocations").select("sale_id,amount")
+  .eq("payment_id", reallocationPaymentId), "final reallocation");
+assert.deepEqual(finalReallocation.map((item) => ({ sale_id: item.sale_id, amount: Number(item.amount) })),
+  [{ sale_id: winningSaleId, amount: 20 }]);
+assert.equal((await result(admin.from("transaction_corrections").select("id")
+  .eq("transaction_id", reallocationPaymentId), "reallocation history")).length, 1);
+const reallocationBalances = await result(admin.from("sales").select("id,net_sales")
+  .in("id", reallocationSaleIds), "reallocation Sale totals");
+assert(reallocationBalances.every((sale) => Number(sale.net_sales) === 100));
+
+console.log("All ten module E2Es and eight controlled lock-barrier races passed locally with reconciled balances.");
