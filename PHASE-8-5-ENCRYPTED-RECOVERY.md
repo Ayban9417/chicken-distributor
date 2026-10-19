@@ -1,8 +1,9 @@
 # Phase 8.5 Encrypted Off-Site Recovery
 
-Status as of 2026-10-19 (Asia/Manila): **NO-GO** for a hosted release. This
-document records completed local backup work and the uncompleted off-site and
-platform recovery gates. It does not authorize a deployment. See
+Status as of 2026-10-19 (Asia/Manila): **NO-GO** for a hosted release. The
+encrypted off-site application-data backup and isolated restore passed; platform
+configuration recovery and release authorization remain open. This does not
+authorize a deployment. See
 [Phase 8.3](PHASE-8-3-RELEASE-PREFLIGHT.md) and
 [Phase 8.4](PHASE-8-4-PRODUCTION-READINESS.md) for the migration rehearsal,
 release sequence, and client approval requirements.
@@ -22,7 +23,7 @@ release sequence, and client approval requirements.
   independent technical audit of either vault. Neither copy belongs in the
   Google Drive backup folder.
 
-## Completed local evidence
+## Verification evidence
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
@@ -31,9 +32,10 @@ release sequence, and client approval requirements.
 | Key generation and custody | PASS with operator attestation | An X25519 age identity was generated outside Git with ACL limited to the current Windows user, Administrators, and SYSTEM. The public recipient was shown to the owner, who confirmed two separately verified vault copies. |
 | Fresh hosted logical backup | PASS with consistency limitation | Supabase CLI exports completed without write freeze to a new restricted directory. The data export is a single `pg_dump` snapshot; roles and schema exports are separate sessions. Before/after schema hashes matched. This is not one atomic cross-file snapshot. |
 | Local encryption and decryption | PASS | Five files were encrypted to the escrowed age recipient. All five ciphertexts decrypted through a streaming SHA-256 verifier without writing recovery plaintext. A deliberately wrong expected hash was rejected. |
-| Google Drive OAuth and private destination | BLOCKED | Awaiting explicit account authorization. No rclone remote exists on this machine; no OAuth flow has started. |
-| Encrypted off-site upload and independent download | BLOCKED | No remote archive ID, remote hash check, or downloaded recovery copy exists. |
-| Isolated restore of the downloaded archive | BLOCKED | The fresh Phase 8.5 archive has not been independently restored. The Phase 8.3 restore is historical evidence only. |
+| Google Drive OAuth and private destination | PASS with OAuth-client caveat | Owner authorized OAuth and confirmed the Noderno account. The `drive.file` rclone remote uses an ACL-restricted config outside Git. The newly created `Chicken Distributor Backups` folder has one owner permission and no public/domain permission. The shared rclone OAuth client was used; replace it with a custodian-managed client for long-term automation. |
+| Encrypted off-site upload and independent download | PASS | Five `.age` files, 1,486,295 bytes total, were uploaded with `--immutable` to `Chicken Distributor Backups/phase85-20261019T022445PHT`. Rclone checksum comparison passed. A separate restricted download matched all five ciphertext SHA-256 hashes, and every file has owner-only permission. No plaintext file was uploaded. |
+| Isolated restore of the downloaded archive | PASS for application data | All five downloaded ciphertexts decrypted to their expected hashes. Schema and data restored with stop-on-error transactions to a new blank database in a network-isolated PostgreSQL 17.6.1.166 container. All 28 manifest control totals matched; see details below. Platform-managed services need separate recovery. |
+| Temporary plaintext cleanup | BLOCKED | The restricted recovery SQL and disposable container are retained pending separate owner approval for removal. Original backups and downloaded ciphertext remain preserved. |
 | Platform configuration recovery | BLOCKED | See inventory below; a database SQL export is insufficient. |
 | Client release authorization | BLOCKED | No release approval is implied by backup preparation. |
 
@@ -45,7 +47,7 @@ identifiers, not the backup contents:
 
 | File | Bytes | SHA-256 |
 | --- | ---: | --- |
-| `roles.sql` | 431 | `0decd601faa70260a3a31e8cee63208cc4a4c1f99921bc6f3ed4faf1cd980da3a` |
+| `roles.sql` | 431 | `0decd601faa70260a3a31e8ce63208cc4a4c1f99921bc6f3ed4faf1cd980da3a` |
 | `schema-before.sql` | 408814 | `1d47f59cdb24fc2f6a475637dfdddc53dfe450d33e8b6dfc33ea0f90c3b210c2` |
 | `data.sql` | 664891 | `85cbaf872b645af1eeff5a5d4f11617764bf60f865f99bc1c1ee48ec8c6a01ce` |
 | `schema-after.sql` | 408814 | `1d47f59cdb24fc2f6a475637dfdddc53dfe450d33e8b6dfc33ea0f90c3b210c2` |
@@ -62,25 +64,69 @@ Only these encrypted files may be uploaded:
 | `manifest.json.age` | 2193 | `f8c5f56911caa8b78b714a3b93fea8551772c3580bcb840f424fe18484fac0cb` |
 
 The manifest includes file hashes, snapshot caveats, schema stability, and
-aggregate control totals. The export has quoted COPY sections for Auth users,
-stock trips, movements, sales, payments, audit history, and migration records.
-Presence in the SQL is not a substitute for an isolated restore.
+aggregate control totals. Its Auth, stock, sales, payment, audit, and migration
+data were verified in the isolated restore. The `roles.sql` hash above corrects
+a one-character transcription error in the initial runbook; the original file
+and encrypted manifest were not changed. Verification was rerun with fatal
+errors and passed 5/5 downloaded files.
 
-## Off-site and independent restore procedure (not yet executed)
+## Off-site restore evidence
+
+- OAuth config: `%LOCALAPPDATA%\ChickenDistributorBackupTools\rclone-private\rclone.conf`.
+  Its directory and file permissions allow only the current Windows user,
+  Administrators, and SYSTEM. Rclone may recreate the config file during token
+  refresh; the parent ACL remains restricted. No token value was printed.
+- Remote: private Noderno Drive folder
+  `Chicken Distributor Backups/phase85-20261019T022445PHT`. The folder was
+  empty before upload; no existing backup was overwritten or deleted. The
+  remote contains exactly five encrypted files and no plaintext SQL/JSON.
+- Independent download:
+  `%USERPROFILE%\Documents\Chicken Distributor Backups\phase85-recovery-20261019T113002`.
+  All five downloaded ciphertext hashes and their decrypted hashes matched.
+- Isolated restore: container `cd-phase85-recovery-20261019-1130`, image
+  `public.ecr.aws/supabase/postgres:17.6.1.166`, with no network and no
+  published port. A new `template0` database `phase85_restore` was blank before
+  import. Container copies of schema/data matched source hashes. Schema and
+  data each restored with `ON_ERROR_STOP=1` and `--single-transaction`; both
+  exited successfully. A second replay into blank `phase85_restore_diagnostics`
+  captured diagnostic counts: 0 notices, 0 warnings, 0 errors, and 15 ordinary
+  output lines (not printed). The compatible Supabase image
+  supplied platform roles, so `roles.sql` was inspected but not replayed over
+  cluster roles.
+- Reconciliation: 28/28 manifest control totals matched. The restored data
+  include 4 Auth users, 20 customers, 1 Trip/14 lines, 14 lots/67 movements,
+  14 receiving receipts, 14 Sales, 4 Payments/4 allocations, 511 audit events,
+  and 12 migration records. Stock-in was 2,569.3 kg and PHP 349,906.80 cost;
+  Sales were PHP 280,910.50; Payments and allocations each PHP 13,200.50.
+  Twenty customer balances, 11 collectibles, and 18 ledger entries reconciled
+  to PHP 267,710.00 outstanding. Company, warehouse, and salesman stock views
+  each reconciled to 0 kg; company inventory cost value was PHP 0.
+- Protection metadata: 32/32 public tables have RLS enabled; 55 public
+  policies, 12 `api` functions, 239 public constraints, 117 indexes, 28 custom
+  public triggers, and one restored sequence-state command were checked. All
+  109 foreign keys in the restored application/platform schemas are validated.
+- The recovery plaintext files and isolated container have **not** been
+  removed. Their retention permits operator review but requires continued
+  local access control. An independent human verifier has not attested this
+  machine-run restore.
+
+## Repeatable off-site and restore procedure
 
 1. Obtain the owner's explicit Google account authorization. Configure a
    dedicated rclone Google Drive remote in a restricted configuration file
    outside Git, using interactive browser OAuth. Prefer `drive.file` scope so
    rclone can see only files it creates. Do not capture terminal OAuth output.
-   Rclone's shared client ID is being retired in 2026; arrange a dedicated
-   OAuth client under operator custody rather than relying on it for recovery.
+   Rclone's shared client ID is being retired in 2026. The present backup was
+   verified with it, but future automation should use a dedicated OAuth client
+   under operator custody. Owner access through Google Drive remains a
+   separate recovery route for downloading the encrypted files.
 2. Create a private `Chicken Distributor Backups` folder in the approved
    Noderno Drive. Confirm the account and folder permissions privately. Use a
    unique, previously nonexistent subfolder for this run. Never use `sync`,
    `move`, or an overwrite-capable upload. Use `rclone copy` with an `.age`
    include filter and `--immutable`; reject unexpected existing files.
-3. Record remote object IDs, sizes, and checksum metadata without listing any
-   token or plaintext. Compare ciphertext SHA-256 locally and after a fresh
+3. Record remote path, sizes, and checksum metadata without listing any token
+   or plaintext. Compare ciphertext SHA-256 locally and after a fresh
    download into a separately ACL-restricted recovery directory. Do not rely
    solely on an upload exit code.
 4. Decrypt the downloaded `manifest.json.age` and SQL files only inside the
@@ -89,10 +135,11 @@ Presence in the SQL is not a substitute for an isolated restore.
    and the expected plaintext hash before applying SQL. It streams decrypted
    bytes into SHA-256 and does not make a plaintext copy.
 5. Restore into a **new disposable PostgreSQL/Supabase 17-compatible database**,
-   never into hosted DEV or the existing application database. Follow the
-   platform-role handling demonstrated in Phase 8.3. Apply roles, pre-snapshot
-   schema, and data in that order with `ON_ERROR_STOP=1`; record every restore
-   warning. Do not assume a plain SQL export is a `pg_restore` archive.
+   never into hosted DEV or the existing application database. Inspect the
+   roles export and use compatible pre-provisioned platform roles; do not
+   replay cluster roles blindly. Apply pre-snapshot schema, then data, with
+   `ON_ERROR_STOP=1`; record every restore warning. Do not assume a plain SQL
+   export is a `pg_restore` archive.
 6. Compare restored table row counts and control totals to the encrypted
    manifest: organization/membership, Auth users, customers, plants, trips and
    lines, lots/movements/custody, sales, payments/allocations, ledger,
@@ -112,7 +159,7 @@ and [PostgreSQL 17 pg_dump snapshot behavior](https://www.postgresql.org/docs/17
 
 | Component | Evidence | Recovery status |
 | --- | --- | --- |
-| Supabase PostgreSQL application schema/data, Auth rows, Storage metadata, migrations | Fresh encrypted local SQL exists; Phase 8.3 isolated restore passed for the earlier generation | **BLOCKED** until this off-site generation is independently restored |
+| Supabase PostgreSQL application schema/data, Auth rows, Storage metadata, migrations | Fresh encrypted off-site SQL was independently downloaded, restored, and reconciled as described above | **PASS for application data on a compatible Supabase PostgreSQL image**; not a full platform rebuild |
 | Supabase project settings and Auth providers/redirects/SMTP/JWT signing custody | Project ref, region, and DB version checked; local `config.toml` is not proof of hosted settings | **BLOCKED**; authorized operator must privately export/attest hosted settings and recovery/rotation procedure |
 | Edge Function source and deployment configuration | Source is in Git; hosted deployment list has three existing functions, while correction functions remain undeployed | **BLOCKED** for separate version/JWT/CORS/config attestation and secret custody |
 | Edge Function secrets | Names were previously checked read-only, not values | **BLOCKED**; approved secret manager and custodian must attest recovery without printing values |
@@ -141,6 +188,8 @@ describes the Storage byte limitation.
   authorization checks, and client release-approval checklist in Phase 8.4.
   Successful tests are not deployment authorization.
 
-**Current recommendation: NO-GO.** Encrypted local backup and key custody are
-complete, but off-site upload/download, independent restore, separate platform
-configuration recovery, and explicit client release authorization are not.
+**Current recommendation: NO-GO.** The encrypted off-site application-data
+backup and isolated restore passed. Separate platform/Auth/Edge/Vercel
+configuration and secret recovery, long-term OAuth client custody, an
+independent operator attestation, and explicit client release authorization
+remain open. No hosted deployment was performed.
