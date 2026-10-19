@@ -35,7 +35,7 @@ release sequence, and client approval requirements.
 | Google Drive OAuth and private destination | PASS with OAuth-client caveat | Owner authorized OAuth and confirmed the Noderno account. The `drive.file` rclone remote uses an ACL-restricted config outside Git. The newly created `Chicken Distributor Backups` folder has one owner permission and no public/domain permission. The shared rclone OAuth client was used; replace it with a custodian-managed client for long-term automation. |
 | Encrypted off-site upload and independent download | PASS | Five `.age` files, 1,486,295 bytes total, were uploaded with `--immutable` to `Chicken Distributor Backups/phase85-20261019T022445PHT`. Rclone checksum comparison passed. A separate restricted download matched all five ciphertext SHA-256 hashes, and every file has owner-only permission. No plaintext file was uploaded. |
 | Isolated restore of the downloaded archive | PASS for application data | All five downloaded ciphertexts decrypted to their expected hashes. Schema and data restored with stop-on-error transactions to a new blank database in a network-isolated PostgreSQL 17.6.1.166 container. All 28 manifest control totals matched; see details below. Platform-managed services need separate recovery. |
-| Temporary plaintext cleanup | BLOCKED | The restricted recovery SQL and disposable container are retained pending separate owner approval for removal. Original backups and downloaded ciphertext remain preserved. |
+| Temporary plaintext cleanup | PASS for approved copies | With separate owner approval, the four plaintext files in the isolated recovery directory and its disposable container were removed. The five downloaded `.age` files and original backups remain. The later configuration export staging files were also removed after separate approval; see below. File deletion is not a guarantee of physical SSD overwrite. |
 | Platform configuration recovery | BLOCKED | See inventory below; a database SQL export is insufficient. |
 | Client release authorization | BLOCKED | No release approval is implied by backup preparation. |
 
@@ -105,10 +105,9 @@ errors and passed 5/5 downloaded files.
   policies, 12 `api` functions, 239 public constraints, 117 indexes, 28 custom
   public triggers, and one restored sequence-state command were checked. All
   109 foreign keys in the restored application/platform schemas are validated.
-- The recovery plaintext files and isolated container have **not** been
-  removed. Their retention permits operator review but requires continued
-  local access control. An independent human verifier has not attested this
-  machine-run restore.
+- After owner approval, the four recovery plaintext files and exact disposable
+  container were removed. The five downloaded ciphertext files remain; an
+  independent human verifier has not attested this machine-run restore.
 
 ## Repeatable off-site and restore procedure
 
@@ -161,17 +160,47 @@ and [PostgreSQL 17 pg_dump snapshot behavior](https://www.postgresql.org/docs/17
 | --- | --- | --- |
 | Supabase PostgreSQL application schema/data, Auth rows, Storage metadata, migrations | Fresh encrypted off-site SQL was independently downloaded, restored, and reconciled as described above | **PASS for application data on a compatible Supabase PostgreSQL image**; not a full platform rebuild |
 | Supabase project settings and Auth providers/redirects/SMTP/JWT signing custody | Project ref, region, and DB version checked; local `config.toml` is not proof of hosted settings | **BLOCKED**; authorized operator must privately export/attest hosted settings and recovery/rotation procedure |
-| Edge Function source and deployment configuration | Source is in Git; hosted deployment list has three existing functions, while correction functions remain undeployed | **BLOCKED** for separate version/JWT/CORS/config attestation and secret custody |
-| Edge Function secrets | Names were previously checked read-only, not values | **BLOCKED**; approved secret manager and custodian must attest recovery without printing values |
+| Edge Function source and deployment configuration | Source is in Git; a read-only hosted inventory of three deployed functions, including versions and JWT-verification metadata, is encrypted off-site | **PARTIAL**; source and metadata are recoverable, but hosted CORS/configuration and secret custody need operator attestation |
+| Edge Function secrets | Eight hosted secret names were inventoried without saving values; names are encrypted off-site | **BLOCKED**; values require approved secret-manager custody and a recovery/rotation test |
 | Supabase Storage object bytes | Read-only inventory at this check: zero buckets and zero objects; SQL includes metadata, never object bytes | **PASS for current empty state**; recount immediately before release, export bytes separately if nonempty |
-| Vercel production environment and domain/build settings | Existing project/domain and `VITE_*` names checked; values are encrypted in read-only listing | **BLOCKED** for private value/ref verification and encrypted recovery record |
+| Vercel production environment and domain/build settings | A read-only production export matched the intended Supabase project. The three application `VITE_*` settings and selected non-secret project metadata were encrypted off-site and independently downloaded/decrypted. The full export contained a generated OIDC token and was not uploaded; its temporary staging copies were removed. | **PARTIAL**; application settings are recoverable, but complete domain/access configuration and platform-generated runtime credentials need separate operator attestation |
 | Local app target | `.env.local` mode is Supabase, URL matches the intended project ref, and public key is present (value not printed) | **PASS for local configuration only** |
 
 The database archive does not recreate Storage object bytes, Auth provider
-configuration, JWT signing keys, Edge secrets, or Vercel settings. Do not
-attempt to export sensitive platform configuration until separately authorized.
+configuration, JWT signing keys, Edge secrets, or Vercel settings. The separate
+configuration package below is incomplete and is not a substitute for platform
+secret-manager custody.
 [Supabase's backup guidance](https://supabase.com/docs/guides/platform/backups)
 describes the Storage byte limitation.
+
+### Configuration backup attempt
+
+With separate owner approval, a read-only Vercel production export and
+Supabase function/secret-name inventory were inspected without printing their
+values. The three application `VITE_*` settings matched the intended hosted
+project; only those settings and non-secret platform metadata were encrypted
+to the existing escrowed age recipient. The full Vercel export contained a
+generated runtime OIDC token, so its ciphertext was never uploaded. No hosted
+settings were changed.
+
+The private Drive destination is
+`Chicken Distributor Backups/phase85-config-20261019T161616PHT`. The restricted
+local originals are under the same-named directory in
+`%USERPROFILE%\Documents\Chicken Distributor Backups`; an independent download
+is in `phase85-config-recovery-20261019T162300PHT`. Both downloaded ciphertext
+hashes matched their local originals and decrypted to the expected plaintext
+hashes without writing a recovery plaintext copy:
+
+| Uploaded ciphertext | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `application-production.env.age` | 362 | `0968e5ee84cae8a75d5d2855eff0246fe4c7a5990a02b924a95f1d48d345fd3e` |
+| `platform-inventory.json.age` | 2071 | `1f5928756e4e7d7fdd270736cb943a4d14ca39baff731aed29c0f11ad546ebb2` |
+
+After explicit approval, the three temporary plaintext staging files and the
+unuploaded full-export ciphertext were removed. Only the two sanitized `.age`
+files remain in that staging directory. Hosted Auth provider/JWT settings,
+Edge secret values, and full Vercel domain/access configuration are not in
+this package and remain release blockers.
 
 ## Recovery and release gates
 
