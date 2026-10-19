@@ -1324,6 +1324,7 @@ export function OutOrders({ customers, trips, movements = [], receivingTransfers
 
 export function Customers({ initialCustomerId = "", customers, ledgerEntries, outs, collections, onSelect, canManage, onAdd, onEdit }) {
   const agents = useUsers();
+  const detailRef = useRef(null);
   const [selectedId, setSelectedId] = useState(initialCustomerId);
   const [balanceFilter, setBalanceFilter] = useState("All");
   const [query, setQuery] = useState("");
@@ -1331,6 +1332,15 @@ export function Customers({ initialCustomerId = "", customers, ledgerEntries, ou
   const ledger = ledgerWithRunningBalance(ledgerEntries, selected?.id);
   const totalPurchases = ledger.reduce((sum, entry) => sum + entry.charge, 0);
   const totalPayments = ledger.reduce((sum, entry) => sum + entry.payment, 0);
+  function selectCustomer(customerId) {
+    setSelectedId(customerId);
+    if (window.matchMedia("(max-width: 1279px)").matches) {
+      requestAnimationFrame(() => detailRef.current?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
+      }));
+    }
+  }
   return (
     <>
       <SectionHeader title="Ledger" action={<div className="flex flex-wrap items-end gap-3"><Field label="Customers"><select className={inputClass()} value={balanceFilter} onChange={(e) => setBalanceFilter(e.target.value)}>{["All", "With Balance", "Paid"].map((value) => <option key={value}>{value}</option>)}</select></Field>{canManage && <Button onClick={onAdd}><Plus size={17} />Add Customer</Button>}</div>} />
@@ -1339,14 +1349,14 @@ export function Customers({ initialCustomerId = "", customers, ledgerEntries, ou
       <div className="grid gap-5 xl:grid-cols-[330px_1fr]">
         <div className="space-y-2">
           {customers.filter((customer) => matchesCustomer(customer, query) && (balanceFilter === "All" || (balanceFilter === "With Balance" ? customerBalance(ledgerEntries, customer.id) > 0 : customerBalance(ledgerEntries, customer.id) <= 0))).map((customer) => (
-            <button key={customer.id} className={`w-full rounded-lg border p-3 text-left ${selectedId === customer.id ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white"}`} onClick={() => setSelectedId(customer.id)}>
+            <button key={customer.id} className={`w-full rounded-lg border p-3 text-left ${selectedId === customer.id ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white"}`} onClick={() => selectCustomer(customer.id)}>
               <p className="customer-name">{customer.name}</p>
               <p className="text-sm text-slate-500">Salesman: {getAgentName(agents, customer.agentId)}</p>
               <p className={customerBalance(ledgerEntries, customer.id) > 0 ? "mt-2 text-base font-bold text-amber-800" : "mt-2 text-sm font-semibold text-emerald-700"}>Balance: {currency(customerBalance(ledgerEntries, customer.id))}</p>
             </button>
           ))}
         </div>
-        {selected && <div className="rounded-lg border border-slate-200 bg-white p-4">
+        {selected && <div ref={detailRef} className="scroll-mt-20 rounded-lg border border-slate-200 bg-white p-4">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="customer-name">{selected.name}</h2>
