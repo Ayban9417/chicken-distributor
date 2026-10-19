@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { CorrectionDialog } from "./CorrectionDialog";
-import { Field, inputClass } from "./ui";
+import { Field, inputClass, NumericInput } from "./ui";
 import { buildCorrectionPreview } from "../utils/correctionPreview";
 import { applyTransferCorrection, previewTransferCorrection, transferCorrectionChanges } from "../services/transferCorrectionService";
 import { kg, productLabel, tripReferenceLabel } from "../utils/business";
@@ -88,7 +88,7 @@ export function TransferCorrectionDialog({ organizationId, module, receipt, user
       {module === "salesman_transfer" && <Field label="Sending Salesman"><select className={inputClass()} value={draft.fromSalesmanId} onChange={(event) => update({ fromSalesmanId: event.target.value })}><option value="">Select Salesman</option>{salesmen.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></Field>}
       <Field label="Receiving Salesman"><select className={inputClass()} value={draft.toSalesmanId} onChange={(event) => update({ toSalesmanId: event.target.value })}><option value="">Select Salesman</option>{salesmen.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></Field>
       <Field label="Product / Source Lot"><select className={inputClass()} value={draft.lotId} onChange={(event) => update({ lotId: event.target.value })}><option value="">Select Source Lot</option>{sourceLots.map((lot) => <option key={`${lot.lotId || lot.id}-${lot.salesmanId || "warehouse"}`} value={lot.lotId || lot.id}>{lot.plant} / {tripReferenceLabel(lot)} / {productLabel(lot.product, lot.sizeCode, lot.classType)} / {kg(lot.warehouseAvailable ?? lot.remainingQty)}</option>)}</select></Field>
-      <Field label="Transferred Quantity KG"><input className={inputClass()} type="number" min="0.001" step="0.001" value={draft.qty} onChange={(event) => update({ qty: event.target.value })} /></Field>
+      <Field label="Transferred Quantity KG"><NumericInput className={inputClass()} min="0.001" step="0.001" value={draft.qty} onChange={(event) => update({ qty: event.target.value })} /></Field>
       <div className="sm:col-span-2"><Field label="Notes"><textarea className={`${inputClass()} min-h-20`} maxLength={2000} value={draft.notes} onChange={(event) => update({ notes: event.target.value })} /></Field></div>
     </div>
     {selectedLot && <p className="text-sm font-semibold text-slate-600">Selected source: {selectedLot.plant} / {tripReferenceLabel(selectedLot)} / {productLabel(selectedLot.product, selectedLot.sizeCode, selectedLot.classType)}</p>}

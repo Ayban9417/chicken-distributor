@@ -33,7 +33,7 @@ export const activeProducts = (plant) => (plant?.products || []).filter((p) => p
 export const activeCodes = (product) => (product?.sizeCodes || []).filter((c) => c.active);
 export const activeClassTypes = (product) => (product?.classTypes || []).filter((c) => c.active);
 export const optionLabel = (option) => !option ? "" : option.displayName && option.displayName !== option.id ? `${option.id} — ${option.displayName}` : option.id;
-export const stockLine = (product) => ({ productId: product?.productId || "", name: product?.productName || "", sizeCode: "", classType: "", bags: "", headCount: "", qty: 0, costPerKg: "", acquisitionType: "Purchased" });
+export const stockLine = (product) => ({ productId: product?.productId || "", name: product?.productName || "", sizeCode: "", classType: "", bags: "", headCount: "", qty: "", costPerKg: "", acquisitionType: "Purchased" });
 export const belongsToPlant = (trip, plant) => trip.plantId ? trip.plantId === plant.id : trip.plant === plant.originalName;
 export function isReferenced(trips, plant, product, code) {
   return trips.some((trip) => belongsToPlant(trip, plant) && (!product || trip.products.some((p) =>

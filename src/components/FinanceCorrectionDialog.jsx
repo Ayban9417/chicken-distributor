@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { CorrectionDialog } from "./CorrectionDialog";
-import { Field, inputClass } from "./ui";
+import { Field, inputClass, NumericInput } from "./ui";
 import { currency } from "../utils/business";
 import { applyFinanceCorrection, dcrAmendmentChanges, expenseCorrectionChanges,
   loadDcrAmendments, previewFinanceCorrection } from "../services/financeCorrectionService";
@@ -67,7 +67,7 @@ export function FinanceCorrectionDialog({ module, organizationId, record, users 
         <option value="">Unassigned</option>{users.filter((item) => item.role === "Agent").map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
       </select></Field>
       <Field label="Category"><input className={inputClass()} maxLength={160} value={draft.category} onChange={(event) => update({ category: event.target.value })} /></Field>
-      <Field label="Amount"><input className={inputClass()} type="number" min="0.01" step="0.01" value={draft.amount} onChange={(event) => update({ amount: event.target.value })} /></Field>
+      <Field label="Amount"><NumericInput className={inputClass()} min="0.01" step="0.01" value={draft.amount} onChange={(event) => update({ amount: event.target.value })} /></Field>
       <Field label="Approval"><select className={inputClass()} value={draft.approvalStatus} onChange={(event) => update({ approvalStatus: event.target.value })}>
         {["pending", "approved", "rejected", "voided"].map((item) => <option key={item} value={item}>{item.toUpperCase()}</option>)}
       </select></Field>
@@ -76,7 +76,7 @@ export function FinanceCorrectionDialog({ module, organizationId, record, users 
     <Field label="Description"><textarea className={`${inputClass()} min-h-20`} maxLength={2000} value={draft.description} onChange={(event) => update({ description: event.target.value })} /></Field>
   </div> : <div className="space-y-3">
     <p className="text-sm font-semibold text-slate-700">The original submitted DCR remains locked. Approved cash Expenses are recalculated from their source records.</p>
-    <Field label="Actual Cash Remitted"><input className={inputClass()} type="number" min="0" step="0.01" value={draft.actualCashRemittance} onChange={(event) => update({ actualCashRemittance: event.target.value })} /></Field>
+    <Field label="Actual Cash Remitted"><NumericInput className={inputClass()} min="0" step="0.01" value={draft.actualCashRemittance} onChange={(event) => update({ actualCashRemittance: event.target.value })} /></Field>
     <Field label="Cash Difference Explanation"><textarea className={`${inputClass()} min-h-20`} maxLength={2000} value={draft.explanation} onChange={(event) => update({ explanation: event.target.value })} /></Field>
     <Field label="Reconciliation Notes"><textarea className={`${inputClass()} min-h-20`} maxLength={2000} value={draft.reconciliationNotes} onChange={(event) => update({ reconciliationNotes: event.target.value })} /></Field>
   </div>;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { CorrectionDialog } from "./CorrectionDialog";
-import { Field, inputClass } from "./ui";
+import { Field, inputClass, NumericInput } from "./ui";
 import { currency, kg, productLabel, tripReferenceLabel } from "../utils/business";
 import { applySaleCorrection, loadSaleCorrectionDetails, previewSaleCorrection, saleCorrectionChanges } from "../services/saleCorrectionService";
 
@@ -97,7 +97,7 @@ export function SaleCorrectionDialog({ organizationId, saleRecord, customers = [
       <Field label="Sale Date"><input className={inputClass()} type="date" value={draft.saleDate} onChange={(event) => update({ saleDate: event.target.value })} /></Field>
       <Field label="Customer"><select className={inputClass()} value={draft.customerId} onChange={(event) => update({ customerId: event.target.value })}>{customers.filter((customer) => customer.active || customer.id === draft.customerId).map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></Field>
       <Field label="Trust Receipt Number"><input className={inputClass()} maxLength={160} value={draft.trustReceiptNumber} onChange={(event) => update({ trustReceiptNumber: event.target.value })} /></Field>
-      <Field label="Sales Deductions"><input className={inputClass()} type="number" min="0" step="0.01" value={draft.salesDeductions} onChange={(event) => update({ salesDeductions: event.target.value })} /></Field>
+      <Field label="Sales Deductions"><NumericInput className={inputClass()} min="0" step="0.01" value={draft.salesDeductions} onChange={(event) => update({ salesDeductions: event.target.value })} /></Field>
       <div className="sm:col-span-2"><Field label="Notes"><textarea className={`${inputClass()} min-h-20`} maxLength={2000} value={draft.notes} onChange={(event) => update({ notes: event.target.value })} /></Field></div>
     </div>
     <h3 className="text-sm font-bold">PRODUCTS / SOURCE LOTS</h3>
@@ -106,8 +106,8 @@ export function SaleCorrectionDialog({ organizationId, saleRecord, customers = [
         {!lots.some((lot) => lot.lotId === line.lotId) && <option value={line.lotId}>{line.lotId}</option>}
         {lots.map((lot) => <option key={lot.lotId} value={lot.lotId}>{lotName(lot.lotId)}</option>)}
       </select></Field></div>
-      <Field label="Quantity KG"><input className={inputClass()} type="number" min="0.001" step="0.001" value={line.quantityKg} onChange={(event) => updateLine(line.id, { quantityKg: event.target.value })} /></Field>
-      <Field label="Selling Price / KG"><input className={inputClass()} type="number" min="0" step="0.01" value={line.pricePerKg} onChange={(event) => updateLine(line.id, { pricePerKg: event.target.value })} /></Field>
+      <Field label="Quantity KG"><NumericInput className={inputClass()} min="0.001" step="0.001" value={line.quantityKg} onChange={(event) => updateLine(line.id, { quantityKg: event.target.value })} /></Field>
+      <Field label="Selling Price / KG"><NumericInput className={inputClass()} min="0" step="0.01" value={line.pricePerKg} onChange={(event) => updateLine(line.id, { pricePerKg: event.target.value })} /></Field>
     </div>)}
   </div>;
   const detailsView = <div className="space-y-3 border-y border-slate-200 py-3 text-sm">

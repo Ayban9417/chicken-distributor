@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { CorrectionDialog } from "./CorrectionDialog";
-import { Field, inputClass } from "./ui";
+import { Field, inputClass, NumericInput } from "./ui";
 import { currency } from "../utils/business";
 import { applyPaymentCorrection, loadPaymentCorrectionDetails, paymentCorrectionChanges, previewPaymentCorrection } from "../services/paymentCorrectionService";
 
@@ -103,7 +103,7 @@ export function PaymentCorrectionDialog({ organizationId, paymentRecord, custome
     <div className="grid gap-3 sm:grid-cols-2">
       <Field label="Payment Date"><input className={inputClass()} type="date" value={draft.paymentDate} onChange={(event) => update({ paymentDate: event.target.value, allocationMode: "fifo", allocations: [] })} /></Field>
       <Field label="Customer"><select className={inputClass()} value={draft.customerId} onChange={(event) => update({ customerId: event.target.value, allocationMode: "fifo", allocations: [] })}>{customers.filter((item) => item.active || item.id === draft.customerId).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
-      <Field label="Amount"><input className={inputClass()} type="number" min="0.01" step="0.01" value={draft.amount} onChange={(event) => update({ amount: event.target.value, allocationMode: "fifo", allocations: [] })} /></Field>
+      <Field label="Amount"><NumericInput className={inputClass()} min="0.01" step="0.01" value={draft.amount} onChange={(event) => update({ amount: event.target.value, allocationMode: "fifo", allocations: [] })} /></Field>
       <Field label="Payment Method"><select className={inputClass()} value={draft.method} onChange={(event) => update({ method: event.target.value })}><option value="cash">Cash</option><option value="gcash">GCash</option><option value="bank">Bank</option></select></Field>
       {draft.method === "gcash" && <Field label="GCash Reference Number"><input className={inputClass()} maxLength={160} value={draft.referenceNumber} onChange={(event) => update({ referenceNumber: event.target.value })} /></Field>}
       {draft.method === "bank" && <Field label="Bank"><select className={inputClass()} value={draft.bankName} onChange={(event) => update({ bankName: event.target.value })}><option value="">Select Bank</option>{[...new Set([...bankNames, draft.bankName].filter(Boolean))].map((name) => <option key={name} value={name}>{name}</option>)}</select></Field>}
@@ -117,7 +117,7 @@ export function PaymentCorrectionDialog({ organizationId, paymentRecord, custome
     {draft.allocationMode === "manual" && <div className="space-y-2 border-t border-slate-200 pt-3">
       {availableSales.map((sale) => <div key={sale.id} className="grid gap-2 sm:grid-cols-[1fr_160px]">
         <span className="min-w-0 break-words text-sm font-semibold">{sale.trust_receipt_number} / {sale.sale_date}</span>
-        <input aria-label={`Allocate to ${sale.trust_receipt_number}`} className={inputClass()} type="number" min="0" step="0.01"
+        <NumericInput aria-label={`Allocate to ${sale.trust_receipt_number}`} className={inputClass()} min="0" step="0.01"
           value={draft.allocations.find((item) => item.saleId === sale.id)?.amount || ""}
           onChange={(event) => updateAllocation(sale.id, event.target.value)} />
       </div>)}

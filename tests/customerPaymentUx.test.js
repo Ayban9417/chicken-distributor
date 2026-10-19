@@ -14,14 +14,15 @@ test("customer editor offers extra phones and zero-priced customer products with
     }));
     assert.match(html, /Add Another Phone Number/);
     assert.match(html, /Whole Dressed Chicken Selling Price\/kg/);
-    assert.match(html, /value="0\.00"/);
+    assert.match(html, /placeholder="0\.00"[^>]*value=""/);
     assert.doesNotMatch(html, /Customer Type|Credit Limit|Default:/);
     const edited = renderToStaticMarkup(createElement(CustomerEditor, {
-      customer: { id: "one", name: "Branch Store", contactPerson: "", mobile: "09171234567", additionalPhones: ["09181234567"], address: "", paymentType: "Cash", paymentDays: null, creditLimit: null, active: true, pricing: {} },
-      customers: [], productNames: [], onSave() {}, onClose() {}, onExisting() {},
+      customer: { id: "one", name: "Branch Store", contactPerson: "", mobile: "09171234567", additionalPhones: ["09181234567"], address: "", paymentType: "Cash", paymentDays: null, creditLimit: null, active: true, pricing: { "Whole Dressed Chicken": 0 } },
+      customers: [], productNames: ["Whole Dressed Chicken"], onSave() {}, onClose() {}, onExisting() {},
     }));
     assert.match(edited, /Additional Phone 1/);
     assert.match(edited, /09181234567/);
+    assert.match(edited, /value="0\.00"/);
   } finally {
     await vite.close();
   }

@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Plus, Pencil, Trash2, ArrowLeft, Save } from "lucide-react";
-import { Button, Badge, Drawer, Field, inputClass, MoneyInput, ResponsiveTable, SectionHeader } from "./ui";
+import { Button, Badge, Drawer, Field, inputClass, MoneyInput, ResponsiveTable, SectionHeader, NumericInput } from "./ui";
 import { currency, customerBalance } from "../utils/business";
 import { emptyCustomer, duplicateCustomers, matchesCustomer, hasCustomerHistory, validateCustomer, customerRecord, allowsCredit } from "../utils/customers";
 
@@ -52,10 +52,10 @@ export function CustomerEditor({ customer, customers, quick = false, initialName
       </div>
       <Field label="Address"><input className={inputClass()} value={draft.address} onChange={(e) => patch({ address: e.target.value })} /></Field>
       <Field label="Payment Type"><select className={inputClass()} value={draft.paymentType} onChange={(e) => patch({ paymentType: e.target.value })}><option>Cash</option><option>Credit</option><option>Cash / Credit</option></select></Field>
-      {!quick && allowsCredit(draft) && <Field label="Payment Days"><input type="number" min="0" step="1" className={inputClass()} value={draft.paymentDays} onChange={(e) => patch({ paymentDays: e.target.value })} /></Field>}
+      {!quick && allowsCredit(draft) && <Field label="Payment Days"><NumericInput min="0" step="1" className={inputClass()} value={draft.paymentDays} onChange={(e) => patch({ paymentDays: e.target.value })} /></Field>}
       {!quick && <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={draft.active} onChange={(e) => patch({ active: e.target.checked })} />Active Customer</label>}
     </div>
-    {!quick && <section className="report-section"><h3 className="mb-3 font-bold">Customer Selling Prices</h3>{[...new Set([...productNames, ...Object.keys(draft.pricing)])].map((product) => <div key={product} className="mb-3"><Field label={product + " Selling Price/kg"}><MoneyInput value={draft.pricing[product] ?? 0} onChange={(e) => patch({ pricing: { ...draft.pricing, [product]: e.target.value } })} /></Field></div>)}</section>}
+    {!quick && <section className="report-section"><h3 className="mb-3 font-bold">Customer Selling Prices</h3>{[...new Set([...productNames, ...Object.keys(draft.pricing)])].map((product) => <div key={product} className="mb-3"><Field label={product + " Selling Price/kg"}><MoneyInput value={draft.pricing[product] ?? ""} onChange={(e) => patch({ pricing: { ...draft.pricing, [product]: e.target.value } })} /></Field></div>)}</section>}
     {error && <p role="alert" className="mt-4 text-rose-700">{error}</p>}
     {saveError && <p role="alert" className="mt-4 text-rose-700">{saveError}</p>}
     {!!duplicates.length && <section role="alert" className="mt-4 border-l-4 border-amber-500 bg-amber-50 p-4"><h3 className="font-bold">Possible existing customer</h3>{duplicates.map((c) => <div key={c.id} className="mt-3"><p className="font-semibold">{c.name}{c.active === false ? " (Inactive)" : ""}</p><p>{c.mobile || "No mobile recorded"}</p><Button variant="secondary" className="mt-2" disabled={saving || (quick && c.active === false)} onClick={() => onExisting(c)}>Use Existing Customer</Button></div>)}<Button variant="secondary" className="mt-3" disabled={saving} onClick={() => save(true)}>{customer ? "Save Anyway" : "Create Anyway"}</Button></section>}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useContext, useRef, createContext } from "react";
 import { X } from "lucide-react";
 import { editableMoneyText, moneyInputText } from "../utils/currency.js";
+import { numericDecimals, numericDraft, numericPlaceholder } from "../utils/numericInput.js";
 export const UserContext = createContext([]);
 export const useUsers = () => useContext(UserContext);
 export const PlantContext = createContext([]);
@@ -165,18 +166,35 @@ export function Info({ label, value }) {
 }
 
 
+export function NumericInput({ value, onChange, onBlur, className = inputClass(), step, min, max, placeholder, allowNegative = Number(min) < 0, ...props }) {
+  const [text, setText] = useState(() => String(value ?? ""));
+  const focused = useRef(false);
+  const integer = step === "1" || step === 1;
+  useEffect(() => { if (!focused.current) setText(String(value ?? "")); }, [value]);
+  return <input {...props} className={className} type="text" inputMode={integer ? "numeric" : "decimal"}
+    placeholder={placeholder ?? numericPlaceholder(step)} value={text} min={min} max={max}
+    onFocus={() => { focused.current = true; }}
+    onChange={(event) => {
+      const next = numericDraft(event.target.value, { integer, allowNegative, maxDecimals: numericDecimals(step) });
+      if (next === null) return;
+      setText(next);
+      onChange?.({ target: { value: next } });
+    }}
+    onBlur={(event) => { focused.current = false; onBlur?.(event); }} />;
+}
+
 export function MoneyInput({ value, onChange, onBlur, className = inputClass(), ...props }) {
   const [text, setText] = useState(() => moneyInputText(value));
   const focused = useRef(false);
   useEffect(() => { if (!focused.current) setText(moneyInputText(value)); }, [value]);
   return <span className="relative block min-w-0">
     <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-slate-500">₱</span>
-    <input {...props} className={`${className} pl-8`} type="text" inputMode="decimal" value={text}
+    <input placeholder="0.00" {...props} className={`${className} pl-8`} type="text" inputMode="decimal" value={text}
       onFocus={() => { focused.current = true; }}
       onChange={(event) => {
         const raw = editableMoneyText(event.target.value);
         if (raw === null) return;
-        setText(raw);
+        setText(event.target.value.replace(/^₱/, ""));
         onChange?.({ target: { value: raw } });
       }}
       onBlur={(event) => { focused.current = false; setText(moneyInputText(text)); onBlur?.(event); }} />

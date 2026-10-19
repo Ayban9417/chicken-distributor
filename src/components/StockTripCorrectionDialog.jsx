@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { CorrectionDialog } from "./CorrectionDialog";
-import { Field, inputClass } from "./ui";
+import { Field, inputClass, NumericInput } from "./ui";
 import { buildCorrectionPreview } from "../utils/correctionPreview";
 import { applyStockTripCorrection, previewStockTripCorrection, stockTripCorrectionChanges } from "../services/stockTripCorrectionService";
 
@@ -102,10 +102,10 @@ export function StockTripCorrectionDialog({ organizationId, trip, onClose, onSav
       <div className="sm:col-span-2"><Field label="Notes"><textarea className={`${inputClass()} min-h-20`} maxLength={2000} value={draft.notes} onChange={(event) => update({ notes: event.target.value })} /></Field></div>
     </div>
     {trip.products.map((line) => { const row = draft.lines[line.lineId]; return <section key={line.lineId} className="border-t border-slate-200 pt-3"><h3 className="mb-2 text-sm font-bold">{line.name}{line.sizeCode ? ` / ${line.sizeCode}` : ""}{line.classType ? ` / ${line.classType}` : ""}</h3><div className="grid gap-3 sm:grid-cols-2">
-      <Field label="Quantity KG"><input className={inputClass()} type="number" min="0.001" step="0.001" value={row.quantityKg} onChange={(event) => updateLine(line.lineId, { quantityKg: event.target.value })} /></Field>
-      <Field label="Cost/KG"><input className={inputClass()} type="number" min="0" step="0.01" disabled={line.acquisitionType === "Free from Plant"} value={row.costPerKg} onChange={(event) => updateLine(line.lineId, { costPerKg: event.target.value })} /></Field>
-      {line.usesBags && <Field label="Bags"><input className={inputClass()} type="number" min="0" step="1" placeholder="Not recorded" value={row.bags} onChange={(event) => updateLine(line.lineId, { bags: event.target.value })} /></Field>}
-      {line.usesHeadCount && <Field label="Heads"><input className={inputClass()} type="number" min="0" step="1" placeholder="Not recorded" value={row.headCount} onChange={(event) => updateLine(line.lineId, { headCount: event.target.value })} /></Field>}
+      <Field label="Quantity KG"><NumericInput className={inputClass()} min="0.001" step="0.001" value={row.quantityKg} onChange={(event) => updateLine(line.lineId, { quantityKg: event.target.value })} /></Field>
+      <Field label="Cost/KG"><NumericInput className={inputClass()} min="0" step="0.01" disabled={line.acquisitionType === "Free from Plant"} value={row.costPerKg} onChange={(event) => updateLine(line.lineId, { costPerKg: event.target.value })} /></Field>
+      {line.usesBags && <Field label="Bags"><NumericInput className={inputClass()} min="0" step="1" value={row.bags} onChange={(event) => updateLine(line.lineId, { bags: event.target.value })} /></Field>}
+      {line.usesHeadCount && <Field label="Heads"><NumericInput className={inputClass()} min="0" step="1" value={row.headCount} onChange={(event) => updateLine(line.lineId, { headCount: event.target.value })} /></Field>}
     </div></section>; })}
   </div>;
 

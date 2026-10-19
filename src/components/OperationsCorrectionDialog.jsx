@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { CorrectionDialog } from "./CorrectionDialog";
-import { Field, inputClass } from "./ui";
+import { Field, inputClass, NumericInput } from "./ui";
 import { applyOperationsCorrection, previewOperationsCorrection } from "../services/operationsCorrectionService";
 
 const specs = {
@@ -43,7 +43,7 @@ function initialDraft(module, kind, row) {
     timeOut: row.time_out?.slice(0, 5) || "", breakMinutes: String(row.break_minutes || 0),
     attendanceStatus: row.attendance_status || "present", attendanceNotes: row.attendance_notes || "" };
   if (module === "payroll" && kind === "period") return { status: row.status === "draft" ? "reviewed" : "paid" };
-  if (module === "payroll" && kind === "adjustment") return { grossDelta: "0", netDelta: "0", notes: "" };
+  if (module === "payroll" && kind === "adjustment") return { grossDelta: "", netDelta: "", notes: "" };
   if (module === "payroll" && kind === "approval") return {};
   if (module === "payroll") return {
     hourlyRate: String(row.hourly_rate ?? (row.regular_minutes ? Number(row.base_pay) * 60 / row.regular_minutes : 0)),
@@ -119,8 +119,9 @@ export function OperationsCorrectionDialog({ module, kind, organizationId, row, 
     <Field key={key} label={label}>{type === "select" ?
       <select className={inputClass()} value={draft[key]} onChange={(event) => update(key, event.target.value)}>
         {options.map((value) => <option key={value} value={value}>{value.toUpperCase()}</option>)}
-      </select> : <input className={inputClass()} type={type} step={type === "number" ? "any" : undefined}
-        value={draft[key]} onChange={(event) => update(key, event.target.value)} />}</Field>)}</div>;
+      </select> : type === "number" ? <NumericInput className={inputClass()} step={key === "breakMinutes" ? "1" : "any"}
+        allowNegative={module === "payroll" && kind === "adjustment"} value={draft[key]} onChange={(event) => update(key, event.target.value)} />
+      : <input className={inputClass()} type={type} value={draft[key]} onChange={(event) => update(key, event.target.value)} />}</Field>)}</div>;
   const shown = !dirty && !error && preview ? preview : {
     originalValues: preview?.originalValues || initialDraft(module, kind, row),
     proposedValues: changesFor(module, kind, draft),

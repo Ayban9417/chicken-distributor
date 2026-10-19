@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Plus, Pencil, Trash2, Clock, Check, Gauge, Wrench, Save } from "lucide-react";
-import { Badge, Button, DateRange, Field, inputClass, MoneyInput, ResponsiveTable, SectionHeader, StatMini } from "./ui";
+import { Badge, Button, DateRange, Field, inputClass, MoneyInput, ResponsiveTable, SectionHeader, StatMini, NumericInput } from "./ui";
 import { currency, shortDate } from "../utils/business";
 import { addMonths, attendanceHours, businessWeek, inRange, payrollTotals, truckAlerts } from "../utils/operations";
 import { demoToday, truckRules } from "../data/demoData";
@@ -98,7 +98,7 @@ export function Dtr({ users, attendance, setAttendance, pushToast, addAudit }) {
     setEditing(null); setError(""); addAudit("Updated DTR for " + users.find((user) => user.id === item.employeeId)?.name, "Owner / Admin"); pushToast("DTR saved");
   }
   return <>
-    <SectionHeader title="DTR" action={<Button onClick={() => { setError(""); setEditing({ employeeId: clockEmployee, date: demoToday, timeIn: "08:00", timeOut: "17:00", breakMinutes: 60 }); }}><Plus size={17} />Manual Entry</Button>} />
+    <SectionHeader title="DTR" action={<Button onClick={() => { setError(""); setEditing({ employeeId: clockEmployee, date: demoToday, timeIn: "08:00", timeOut: "17:00", breakMinutes: "" }); }}><Plus size={17} />Manual Entry</Button>} />
     <div className="flex flex-wrap items-end gap-3"><DateRange range={range} setRange={setRange} /><Button variant="secondary" onClick={() => setRange({ start: demoToday, end: demoToday })}>Today</Button>
       <Field label="Employee Filter"><select className={inputClass()} value={employee} onChange={(e) => setEmployee(e.target.value)}><option>All</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></Field></div>
     <Editor title={"Attendance / " + shortDate(demoToday)}><div className="flex flex-wrap items-end gap-3">
@@ -112,7 +112,7 @@ export function Dtr({ users, attendance, setAttendance, pushToast, addAudit }) {
       <EmployeeSelect users={users.filter((user) => user.active || user.id === editing.employeeId)} value={editing.employeeId} onChange={(employeeId) => setEditing({ ...editing, employeeId })} />
       <Field label="Date"><input className={inputClass()} type="date" value={editing.date} onInput={(e) => setEditing({ ...editing, date: e.target.value })} /></Field>
       {["timeIn", "timeOut"].map((key) => <Field key={key} label={key === "timeIn" ? "Time In" : "Time Out"}><input className={inputClass()} type="time" value={editing[key]} onInput={(e) => setEditing({ ...editing, [key]: e.target.value })} /></Field>)}
-      <Field label="Break (Minutes)"><input className={inputClass()} type="number" min="0" value={editing.breakMinutes} onChange={(e) => setEditing({ ...editing, breakMinutes: e.target.value })} /></Field>
+      <Field label="Break (Minutes)"><NumericInput className={inputClass()} min="0" step="1" value={editing.breakMinutes} onChange={(e) => setEditing({ ...editing, breakMinutes: e.target.value })} /></Field>
     </div><Actions onSave={() => save(editing)} onCancel={() => setEditing(null)} /></Editor>}
     <ResponsiveTable columns={["Employee", "Date", "Time In", "Time Out", "Break", "Total Hours", "Status", "Actions"]} rows={records.map((item) => [
       users.find((user) => user.id === item.employeeId)?.name, shortDate(item.date), item.timeIn, item.timeOut || "-", item.breakMinutes + " min",
@@ -124,7 +124,7 @@ export function Dtr({ users, attendance, setAttendance, pushToast, addAudit }) {
 export function Payroll({ users, attendance, payroll, setPayroll, pushToast, addAudit }) {
   const [editing, setEditing] = useState(null);
   const [error, setError] = useState("");
-  const fresh = () => ({ employeeId: activeUsers(users).find((user) => user.role === "Agent")?.id || users[0]?.id || "", ...businessWeek(demoToday), rate: 85, overtimeHours: 0, overtimeRate: 110, allowances: 0, deductions: 0, status: "Draft" });
+  const fresh = () => ({ employeeId: activeUsers(users).find((user) => user.role === "Agent")?.id || users[0]?.id || "", ...businessWeek(demoToday), rate: "", overtimeHours: "", overtimeRate: "", allowances: "", deductions: "", status: "Draft" });
   function save() {
     if (!editing.start || !editing.end || editing.start > editing.end || ["rate", "overtimeHours", "overtimeRate", "allowances", "deductions"].some((key) => editing[key] === "" || !Number.isFinite(Number(editing[key])) || Number(editing[key]) < 0)) return setError("Enter a valid period and nonnegative payroll amounts.");
     if (payroll.some((item) => item.id !== editing.id && item.employeeId === editing.employeeId && item.start <= editing.end && item.end >= editing.start)) return setError("This employee already has a payroll period overlapping these dates.");
@@ -148,7 +148,7 @@ export function Payroll({ users, attendance, payroll, setPayroll, pushToast, add
       <EmployeeSelect users={users.filter((user) => user.active || user.id === editing.employeeId)} value={editing.employeeId} onChange={(employeeId) => setEditing({ ...editing, employeeId })} />
       {["start", "end"].map((key) => <Field key={key} label={key === "start" ? "Period Start" : "Period End"}><input className={inputClass()} type="date" value={editing[key]} onInput={(e) => setEditing({ ...editing, [key]: e.target.value })} /></Field>)}
       {[["rate", "Hourly Rate"], ["overtimeRate", "Overtime Rate"], ["allowances", "Allowances"], ["deductions", "Deductions"]].map(([key, label]) => <Field key={key} label={label}><MoneyInput value={editing[key]} onChange={(e) => setEditing({ ...editing, [key]: e.target.value })} /></Field>)}
-      <Field label="Additional Overtime Hours"><input className={inputClass()} type="number" min="0" value={editing.overtimeHours} onChange={(e) => setEditing({ ...editing, overtimeHours: Number(e.target.value) })} /></Field>
+      <Field label="Additional Overtime Hours"><NumericInput className={inputClass()} min="0" step="0.01" value={editing.overtimeHours} onChange={(e) => setEditing({ ...editing, overtimeHours: e.target.value })} /></Field>
     </div><div className="mt-4 grid gap-3 sm:grid-cols-3"><StatMini label="DTR Hours" value={payrollTotals(editing, attendance).hours.toFixed(2)} /><StatMini label="Gross Pay" value={currency(payrollTotals(editing, attendance).gross)} /><StatMini label="Net Pay" value={currency(payrollTotals(editing, attendance).net)} /></div>
     {error && <p role="alert" className="mt-3 text-rose-700">{error}</p>}<Actions onSave={save} onCancel={() => setEditing(null)} /></Editor>}
     <ResponsiveTable columns={["Employee", "Pay Period", "Hourly Rate", "Days / Hours", "Overtime", "Allowances", "Deductions", "Gross Pay", "Net Pay", "Status", "Actions"]} rows={payroll.map((record) => {
@@ -162,7 +162,7 @@ export function Trucks({ trucks, setTrucks, pushToast, addAudit }) {
   const [editing, setEditing] = useState(null);
   const [service, setService] = useState(null);
   const [error, setError] = useState("");
-  const fresh = { unit: "", plate: "", model: "", mileage: 0, ltoExpiry: "", lastRenewalDate: "", nextRenewalDate: "", lastOilDate: "", lastOilMileage: 0, nextOilDate: "", nextOilMileage: "", status: "Active", notes: "" };
+  const fresh = { unit: "", plate: "", model: "", mileage: "", ltoExpiry: "", lastRenewalDate: "", nextRenewalDate: "", lastOilDate: "", lastOilMileage: "", nextOilDate: "", nextOilMileage: "", status: "Active", notes: "" };
   function save() {
     const old = trucks.find((truck) => truck.id === editing.id);
     if (!editing.unit.trim() || !editing.plate.trim() || !editing.model.trim() || !editing.ltoExpiry) return setError("Enter unit, plate, make/model and LTO expiry.");
@@ -189,13 +189,13 @@ export function Trucks({ trucks, setTrucks, pushToast, addAudit }) {
     {!trucks.length && <p className="mb-4 text-slate-500">No trucks configured.</p>}
     {error && <p role="alert" className="mb-4 text-rose-700">{error}</p>}
     {editing && <Editor title={editing.id ? "Edit Truck" : "Add Truck"}><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {[["unit", "Unit Name / Truck Number", "text"], ["plate", "Plate Number", "text"], ["model", "Make / Model", "text"], ["mileage", "Current Mileage", "number"], ["ltoExpiry", "LTO Registration Expiry", "date"], ["lastRenewalDate", "Last Truck Renewal", "date"], ["lastOilDate", "Last Oil Change Date", "date"], ["lastOilMileage", "Last Oil Change Mileage", "number"], ["nextOilDate", "Next Oil Change Date", "date"], ["nextOilMileage", "Next Oil Change Mileage", "number"]].map(([key, label, type]) => <Field key={key} label={label}><input className={inputClass()} type={type} min={type === "number" ? 0 : undefined} value={editing[key]} onInput={(e) => setEditing({ ...editing, [key]: e.target.value })} /></Field>)}
+      {[["unit", "Unit Name / Truck Number", "text"], ["plate", "Plate Number", "text"], ["model", "Make / Model", "text"], ["mileage", "Current Mileage", "number"], ["ltoExpiry", "LTO Registration Expiry", "date"], ["lastRenewalDate", "Last Truck Renewal", "date"], ["lastOilDate", "Last Oil Change Date", "date"], ["lastOilMileage", "Last Oil Change Mileage", "number"], ["nextOilDate", "Next Oil Change Date", "date"], ["nextOilMileage", "Next Oil Change Mileage", "number"]].map(([key, label, type]) => <Field key={key} label={label}>{type === "number" ? <NumericInput className={inputClass()} min="0" step="0.1" value={editing[key]} onChange={(e) => setEditing({ ...editing, [key]: e.target.value })} /> : <input className={inputClass()} type={type} value={editing[key]} onInput={(e) => setEditing({ ...editing, [key]: e.target.value })} />}</Field>)}
       <Field label="Next Truck Renewal (+3 Months)"><input className={inputClass()} type="date" disabled value={addMonths(editing.lastRenewalDate, truckRules.renewalMonths)} /></Field>
       <Field label="Status"><select className={inputClass()} value={editing.status} onChange={(e) => setEditing({ ...editing, status: e.target.value })}>{["Active", "Maintenance", "Inactive"].map((status) => <option key={status}>{status}</option>)}</select></Field>
       <Field label="Notes"><textarea className={inputClass()} value={editing.notes} onChange={(e) => setEditing({ ...editing, notes: e.target.value })} /></Field>
     </div><Actions onSave={save} onCancel={() => setEditing(null)} /></Editor>}
     {service && <Editor title={service.mode === "oil" ? "Record Oil Change" : "Update Mileage"}><div className="grid gap-3 sm:grid-cols-2">
-      <Field label="Current Mileage"><input className={inputClass()} type="number" min="0" value={service.mileage} onChange={(e) => setService({ ...service, mileage: e.target.value })} /></Field>
+      <Field label="Current Mileage"><NumericInput className={inputClass()} min="0" step="0.1" value={service.mileage} onChange={(e) => setService({ ...service, mileage: e.target.value })} /></Field>
       {service.mode === "oil" && <Field label="Oil Change Date"><input className={inputClass()} type="date" value={service.date} onInput={(e) => setService({ ...service, date: e.target.value })} /></Field>}
     </div><Actions onSave={saveService} onCancel={() => setService(null)} /></Editor>}
     <div className="grid gap-4 xl:grid-cols-2">{trucks.map((truck) => <article key={truck.id} className="rounded-lg border border-slate-200 bg-white p-4">

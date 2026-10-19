@@ -64,7 +64,7 @@ import {
   tripReferenceLabel,
 } from "./utils/business";
 
-import { Badge, Button, Field, inputClass, StatCard, Drawer, SectionHeader, ResponsiveTable, StatMini, Info, MoneyInput, PlantName, UserContext, useUsers } from "./components/ui";
+import { Badge, Button, Field, inputClass, StatCard, Drawer, SectionHeader, ResponsiveTable, StatMini, Info, MoneyInput, PlantName, UserContext, useUsers, NumericInput } from "./components/ui";
 import { Dashboard, Reports, Collectibles } from "./components/Reporting";
 import { Administration, Dtr, Payroll, Trucks } from "./components/Supporting";
 import { validateStock, validateSale, validatePayment, salePaymentStatus, sum, duplicateTrustReceipt } from "./utils/operations";
@@ -533,9 +533,9 @@ export function Trips({ trips, setTrips, addAudit, pushToast, plantConfigs, onSt
             <Field label="Product"><select className={inputClass()} value={item.productId} onChange={(e) => updateProduct(index, stockLine(productOptions.find((p) => p.productId === e.target.value)))}>{productOptions.map((p) => <option key={p.productId} value={p.productId}>{p.productName}</option>)}</select></Field>
             {config?.usesSizeCodes && <Field label="Size/Code"><select className={inputClass()} value={item.sizeCode} onChange={(e) => updateProduct(index, { sizeCode: e.target.value })}><option value="">Select Code</option>{activeCodes(config).map((c) => <option key={c.id} value={c.id}>{optionLabel(c)}</option>)}</select></Field>}
             {config?.usesClassTypes && <Field label="Class Type"><select className={inputClass()} value={item.classType} onChange={(e) => updateProduct(index, { classType: e.target.value })}><option value="">Select Class Type</option>{activeClassTypes(config).map((c) => <option key={c.id} value={c.id}>{optionLabel(c)}</option>)}</select></Field>}
-            {config?.usesBags && <Field label="Bags"><input className={inputClass()} type="number" min="0" step="1" value={item.bags} onChange={(e) => updateProduct(index, { bags: e.target.value })} placeholder="Not recorded" /></Field>}
-            {config?.usesHeadCount && <Field label="Heads Count"><input className={inputClass()} type="number" min="0" step="1" value={item.headCount} onChange={(e) => updateProduct(index, { headCount: e.target.value })} placeholder="Not recorded" /></Field>}
-            <Field label="Total KG"><input className={inputClass()} type="number" min="0" step="0.01" value={item.qty} onChange={(e) => updateProduct(index, { qty: e.target.value })} /></Field>
+            {config?.usesBags && <Field label="Bags"><NumericInput className={inputClass()} min="0" step="1" value={item.bags} onChange={(e) => updateProduct(index, { bags: e.target.value })} /></Field>}
+            {config?.usesHeadCount && <Field label="Heads Count"><NumericInput className={inputClass()} min="0" step="1" value={item.headCount} onChange={(e) => updateProduct(index, { headCount: e.target.value })} /></Field>}
+            <Field label="Total KG"><NumericInput className={inputClass()} min="0" step="0.01" value={item.qty} onChange={(e) => updateProduct(index, { qty: e.target.value })} /></Field>
             <Field label="Cost/kg"><MoneyInput disabled={item.acquisitionType === "Free from Plant"} value={item.costPerKg} onChange={(e) => updateProduct(index, { costPerKg: e.target.value })} /></Field>
             <Field label="Acquisition Type"><select className={inputClass()} value={item.acquisitionType} onChange={(e) => updateProduct(index, { acquisitionType: e.target.value, costPerKg: e.target.value === "Free from Plant" ? 0 : "" })}><option>Purchased</option>{config?.allowsFreeFromPlant && <option>Free from Plant</option>}</select></Field>
             <StatMini label="Total Purchase Cost" value={currency(Number(item.qty || 0) * Number(item.costPerKg || 0))} />
@@ -935,8 +935,10 @@ export function OutOrders({ customers, trips, movements = [], receivingTransfers
     return saleableTrips[0]?.id || "";
   }
 
-  function lineFor(product, qty = 0, customer = selectedCustomer) {
-    return { product, qty, sizeCode: "", sizeCodeLabel: "", classType: "", classTypeLabel: "", price: customerPrice(customer, product) };
+  function draftPrice(customer, product) { return customer?.pricing?.[product] ?? ""; }
+
+  function lineFor(product, qty = "", customer = selectedCustomer) {
+    return { product, qty, sizeCode: "", sizeCodeLabel: "", classType: "", classTypeLabel: "", price: draftPrice(customer, product) };
   }
 
   function normalizeLinesForTrip(lines, trip, customer = selectedCustomer) {
@@ -951,12 +953,12 @@ export function OutOrders({ customers, trips, movements = [], receivingTransfers
         ...line,
         product,
         lotId: exact?.lotId || "", sizeCode: exact?.sizeCode || "", sizeCodeLabel: exact?.sizeCodeLabel || "", classType: exact?.classType || "", classTypeLabel: exact?.classTypeLabel || "",
-        price: line.product === product ? line.price : customerPrice(customer, product),
+        price: line.product === product ? line.price : draftPrice(customer, product),
       };
     });
   }
 
-  function buildOrderGroup(preferredTripId = defaultTripId(), lineSpecs = [{ product: wholeChickenProduct, qty: 0 }], customer = selectedCustomer) {
+  function buildOrderGroup(preferredTripId = defaultTripId(), lineSpecs = [{ product: wholeChickenProduct, qty: "" }], customer = selectedCustomer) {
     const trip = getTrip(preferredTripId);
     const lines = lineSpecs.map((line) => lineFor(line.product, line.qty, customer));
     return {
@@ -967,7 +969,7 @@ export function OutOrders({ customers, trips, movements = [], receivingTransfers
   }
 
   function buildDefaultGroup(customer = selectedCustomer) {
-    return buildOrderGroup(defaultTripId(), [{ product: "Whole Dressed Chicken", qty: 0 }], customer);
+    return buildOrderGroup(defaultTripId(), [{ product: "Whole Dressed Chicken", qty: "" }], customer);
   }
 
   useEffect(() => {
@@ -993,7 +995,7 @@ export function OutOrders({ customers, trips, movements = [], receivingTransfers
     setGroups((current) =>
       current.map((group) => ({
         ...group,
-        lines: group.lines.map((line) => ({ ...line, price: Number(line.price) === customerPrice(selectedCustomer, line.product) ? customerPrice(nextCustomer, line.product) : line.price })),
+        lines: group.lines.map((line) => ({ ...line, price: line.price === "" || Number(line.price) === customerPrice(selectedCustomer, line.product) ? draftPrice(nextCustomer, line.product) : line.price })),
       }))
     );
   }
@@ -1043,7 +1045,7 @@ export function OutOrders({ customers, trips, movements = [], receivingTransfers
       const nextTrip =
         saleableTrips.find((trip) => !usedTripIds.has(trip.id)) ||
         saleableTrips[0];
-      const lineSpecs = [{ product: "Whole Dressed Chicken", qty: 0 }];
+      const lineSpecs = [{ product: "Whole Dressed Chicken", qty: "" }];
       return [...current, buildOrderGroup(nextTrip?.id, lineSpecs)];
     });
   }
@@ -1172,7 +1174,7 @@ export function OutOrders({ customers, trips, movements = [], receivingTransfers
           <div className="mt-4 grid gap-3 sm:grid-cols-3 2xl:grid-cols-1">
             <Field label="Trust Receipt No."><input className={inputClass()} placeholder="TR-001" value={trustReceipt} onChange={(e) => setTrustReceipt(e.target.value)} /></Field>
             <Field label="Sale Date"><input className={inputClass()} type="date" value={saleDate} onInput={(e) => setSaleDate(e.target.value)} /></Field>
-            <Field label="Salesman"><select disabled={!canSelectSalesman} className={inputClass()} value={selectedAgentId} onChange={(e) => { const id = e.target.value; setSaleAgent(id); const firstTrip = trips.find((trip) => trip.products.some((item) => availableFor(id, trip, item) > 0)); const firstItem = firstTrip?.products.find((item) => availableFor(id, firstTrip, item) > 0); setGroups([{ id: uid("group"), tripId: firstTrip?.id || "", lines: firstItem ? [{ product: firstItem.name, lotId: firstItem.lotId || "", sizeCode: firstItem.sizeCode || "", sizeCodeLabel: firstItem.sizeCodeLabel || "", classType: firstItem.classType || "", classTypeLabel: firstItem.classTypeLabel || "", qty: 0, price: customerPrice(selectedCustomer, firstItem.name) }] : [] }]); }} >{agents.filter((agent) => agent.active && agent.role === "Agent").map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</select></Field>
+            <Field label="Salesman"><select disabled={!canSelectSalesman} className={inputClass()} value={selectedAgentId} onChange={(e) => { const id = e.target.value; setSaleAgent(id); const firstTrip = trips.find((trip) => trip.products.some((item) => availableFor(id, trip, item) > 0)); const firstItem = firstTrip?.products.find((item) => availableFor(id, firstTrip, item) > 0); setGroups([{ id: uid("group"), tripId: firstTrip?.id || "", lines: firstItem ? [{ product: firstItem.name, lotId: firstItem.lotId || "", sizeCode: firstItem.sizeCode || "", sizeCodeLabel: firstItem.sizeCodeLabel || "", classType: firstItem.classType || "", classTypeLabel: firstItem.classTypeLabel || "", qty: "", price: draftPrice(selectedCustomer, firstItem.name) }] : [] }]); }} >{agents.filter((agent) => agent.active && agent.role === "Agent").map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</select></Field>
           </div>
         </div>
         <div className="space-y-4">
@@ -1222,14 +1224,14 @@ export function OutOrders({ customers, trips, movements = [], receivingTransfers
                     return (
                       <div key={`${group.id}-${index}`} className={`rounded-lg border p-3 ${insufficient ? "border-rose-200 bg-rose-50" : "border-slate-200 bg-slate-50"}`}>
                         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(150px,1fr)_120px_120px_100px_130px_44px]">
-                          <Field label="Product"><select className={inputClass()} value={line.product} onChange={(e) => { const item = availableItems.find((stock) => stock.name === e.target.value); updateLine(group.id, index, { product: e.target.value, lotId: item?.lotId || "", sizeCode: item?.sizeCode || "", sizeCodeLabel: item?.sizeCodeLabel || "", classType: item?.classType || "", classTypeLabel: item?.classTypeLabel || "", qty: 0, price: customerPrice(selectedCustomer, e.target.value) }); }}>
+                          <Field label="Product"><select className={inputClass()} value={line.product} onChange={(e) => { const item = availableItems.find((stock) => stock.name === e.target.value); updateLine(group.id, index, { product: e.target.value, lotId: item?.lotId || "", sizeCode: item?.sizeCode || "", sizeCodeLabel: item?.sizeCodeLabel || "", classType: item?.classType || "", classTypeLabel: item?.classTypeLabel || "", qty: "", price: draftPrice(selectedCustomer, e.target.value) }); }}>
                             {[...new Set(availableItems.map((item) => item.name))].map((name) => <option key={name}>{name}</option>)}
                           </select></Field>
-                          {availableItems.some((item) => item.name === line.product && item.sizeCode) && <Field label="Size/Code"><select className={inputClass()} value={line.sizeCode || ""} onChange={(e) => { const item = availableItems.find((stock) => stock.name === line.product && stock.sizeCode === e.target.value); updateLine(group.id, index, { lotId: item?.lotId || "", sizeCode: e.target.value, sizeCodeLabel: item?.sizeCodeLabel || "", classType: item?.classType || "", classTypeLabel: item?.classTypeLabel || "", qty: 0 }); }}>
+                          {availableItems.some((item) => item.name === line.product && item.sizeCode) && <Field label="Size/Code"><select className={inputClass()} value={line.sizeCode || ""} onChange={(e) => { const item = availableItems.find((stock) => stock.name === line.product && stock.sizeCode === e.target.value); updateLine(group.id, index, { lotId: item?.lotId || "", sizeCode: e.target.value, sizeCodeLabel: item?.sizeCodeLabel || "", classType: item?.classType || "", classTypeLabel: item?.classTypeLabel || "", qty: "" }); }}>
                             {[...new Map(availableItems.filter((item) => item.name === line.product).map((item) => [item.sizeCode || "", item])).values()].map((item) => <option key={item.sizeCode || "uncoded"} value={item.sizeCode || ""}>{productLabel("", item.sizeCode, "", item.sizeCodeLabel)}</option>)}
                           </select></Field>}
-                          {availableItems.some((item) => item.name === line.product && item.classType) && <Field label="Class Type"><select className={inputClass()} value={line.classType || ""} onChange={(e) => { const item = availableItems.find((stock) => stock.name === line.product && (stock.sizeCode || "") === (line.sizeCode || "") && stock.classType === e.target.value); updateLine(group.id, index, { lotId: item?.lotId || "", classType: e.target.value, classTypeLabel: item?.classTypeLabel || "", qty: 0 }); }}>{availableItems.filter((item) => item.name === line.product && (item.sizeCode || "") === (line.sizeCode || "")).map((item) => <option key={item.classType} value={item.classType}>{productLabel("", "", item.classType, "", item.classTypeLabel)}</option>)}</select></Field>}
-                          <Field label="KG"><input className={inputClass()} type="number" min="0" step="0.01" value={line.qty} onChange={(e) => updateLine(group.id, index, { qty: e.target.value })} /></Field>
+                          {availableItems.some((item) => item.name === line.product && item.classType) && <Field label="Class Type"><select className={inputClass()} value={line.classType || ""} onChange={(e) => { const item = availableItems.find((stock) => stock.name === line.product && (stock.sizeCode || "") === (line.sizeCode || "") && stock.classType === e.target.value); updateLine(group.id, index, { lotId: item?.lotId || "", classType: e.target.value, classTypeLabel: item?.classTypeLabel || "", qty: "" }); }}>{availableItems.filter((item) => item.name === line.product && (item.sizeCode || "") === (line.sizeCode || "")).map((item) => <option key={item.classType} value={item.classType}>{productLabel("", "", item.classType, "", item.classTypeLabel)}</option>)}</select></Field>}
+                          <Field label="KG"><NumericInput className={inputClass()} min="0" step="0.01" value={line.qty} onChange={(e) => updateLine(group.id, index, { qty: e.target.value })} /></Field>
                           <Field label="Selling Price/kg"><MoneyInput value={line.price} onChange={(e) => updateLine(group.id, index, { price: e.target.value })} /></Field>
                           <Button variant="ghost" className="px-0" disabled={group.lines.length === 1} onClick={() => updateGroup(group.id, { lines: group.lines.filter((_, lineIndex) => lineIndex !== index) })} aria-label="Remove line"><X size={18} /></Button>
                         </div>
@@ -1243,7 +1245,7 @@ export function OutOrders({ customers, trips, movements = [], receivingTransfers
                     );
                   })}
                 </div>
-                <Button variant="secondary" className="mt-3" onClick={() => { const item = availableItems[0]; if (item) updateGroup(group.id, { lines: [...group.lines, { product: item.name, lotId: item.lotId || "", sizeCode: item.sizeCode || "", sizeCodeLabel: item.sizeCodeLabel || "", classType: item.classType || "", classTypeLabel: item.classTypeLabel || "", qty: 0, price: customerPrice(selectedCustomer, item.name) }] }); }}>
+                <Button variant="secondary" className="mt-3" onClick={() => { const item = availableItems[0]; if (item) updateGroup(group.id, { lines: [...group.lines, { product: item.name, lotId: item.lotId || "", sizeCode: item.sizeCode || "", sizeCodeLabel: item.sizeCodeLabel || "", classType: item.classType || "", classTypeLabel: item.classTypeLabel || "", qty: "", price: draftPrice(selectedCustomer, item.name) }] }); }}>
                   <Plus size={18} /> Add Product
                 </Button>
               </div>
@@ -1573,7 +1575,7 @@ export function Dcr({ outs, customers, collections, expenses, dcrs, setDcrs, set
   const agents = providedUsers || contextUsers;
   const [agentId, setAgentId] = useState(initialSalesmanId || agents.find((agent) => agent.active && agent.role === "Agent")?.id || "");
   const [date, setDate] = useState(currentDate);
-  const [actual, setActual] = useState(0);
+  const [actual, setActual] = useState("");
   const [explanation, setExplanation] = useState("");
   const [showOriginal, setShowOriginal] = useState(false);
   const liveDcr = buildDcr({ collections, expenses, customers, agentId, date });

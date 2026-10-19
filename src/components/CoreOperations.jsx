@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Banknote, ClipboardCheck, PackageCheck, Plus, RefreshCw, Save, Send, ShoppingCart } from "lucide-react";
-import { Badge, Button, Field, inputClass, MoneyInput, ResponsiveTable, SectionHeader, StatCard, StatMini } from "./ui";
+import { Badge, Button, Field, inputClass, MoneyInput, ResponsiveTable, SectionHeader, StatCard, StatMini, NumericInput } from "./ui";
 import { currency, kg, shortDate } from "../utils/business";
 import { useRemote } from "../hooks/useRemote";
 import { readableError } from "../services/errors";
@@ -64,9 +64,9 @@ export function StockInScreen({ organizationId, onChanged }) {
         <Field label="Product"><select className={inputClass()} value={line.plantProductId} onChange={(e) => patchLine(index, { plantProductId: e.target.value, codeId: "", classTypeId: "" })}><option value="">Select Product</option>{links.map((item) => <option key={item.id} value={item.id}>{item.product?.name}</option>)}</select></Field>
         {link?.uses_size_codes && <Field label="Code"><select className={inputClass()} value={line.codeId} onChange={(e) => patchLine(index, { codeId: e.target.value })}><option value="">Select Code</option>{link.codes.map((code) => <option key={code.id} value={code.id}>{code.code}{code.display_name ? " / " + code.display_name : ""}</option>)}</select></Field>}
         {link?.uses_class_types && <Field label="Class Type"><select className={inputClass()} value={line.classTypeId} onChange={(e) => patchLine(index, { classTypeId: e.target.value })}><option value="">Select Class</option>{link.classTypes.map((item) => <option key={item.id} value={item.id}>{item.class_type}</option>)}</select></Field>}
-        {link?.uses_bags && <Field label="Bags"><input type="number" min="0" className={inputClass()} value={line.bags} onChange={(e) => patchLine(index, { bags: e.target.value })} /></Field>}
-        {link?.uses_head_count && <Field label="Head Count"><input type="number" min="0" className={inputClass()} value={line.headCount} onChange={(e) => patchLine(index, { headCount: e.target.value })} /></Field>}
-        <Field label="KG"><input type="number" min="0" step="0.001" className={inputClass()} value={line.quantity} onChange={(e) => patchLine(index, { quantity: e.target.value })} /></Field>
+        {link?.uses_bags && <Field label="Bags"><NumericInput min="0" step="1" className={inputClass()} value={line.bags} onChange={(e) => patchLine(index, { bags: e.target.value })} /></Field>}
+        {link?.uses_head_count && <Field label="Head Count"><NumericInput min="0" step="1" className={inputClass()} value={line.headCount} onChange={(e) => patchLine(index, { headCount: e.target.value })} /></Field>}
+        <Field label="KG"><NumericInput min="0" step="0.001" className={inputClass()} value={line.quantity} onChange={(e) => patchLine(index, { quantity: e.target.value })} /></Field>
         <Field label="Acquisition"><select className={inputClass()} value={line.acquisitionType} onChange={(e) => patchLine(index, { acquisitionType: e.target.value, cost: e.target.value === "free_from_plant" ? "0" : line.cost })}><option value="purchased">Purchased</option>{link?.allows_free_from_plant && <option value="free_from_plant">Free from Plant</option>}</select></Field>
         <Field label="Cost / KG"><MoneyInput disabled={line.acquisitionType === "free_from_plant"} value={line.cost} onChange={(e) => patchLine(index, { cost: e.target.value })} /></Field>
         <Button variant="ghost" onClick={() => setForm({ ...form, lines: form.lines.filter((_, i) => i !== index) })}>Remove</Button>
@@ -96,7 +96,7 @@ export function WarehouseScreen({ organizationId, role, onChanged }) {
     {(role === "owner_admin" || role === "warehouse") && <section className="report-section mt-5"><h2 className="mb-4 text-lg font-bold">Warehouse to Salesman</h2><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <Field label="Stock Lot"><select className={inputClass()} value={form.lotId} onChange={(e) => setForm({ ...form, lotId: e.target.value })}><option value="">Select Lot</option>{(stock.data || []).filter((row) => num(row.available_quantity_kg) > 0).map((row) => <option key={row.inventory_lot_id} value={row.inventory_lot_id}>{rowLabel(row)} / {kg(row.available_quantity_kg)}</option>)}</select></Field>
       <Field label="Salesman"><select className={inputClass()} value={form.salesmanId} onChange={(e) => setForm({ ...form, salesmanId: e.target.value })}><option value="">Select Salesman</option>{salesmen.map((person) => <option key={person.user_id} value={person.user_id}>{person.full_name}</option>)}</select></Field>
-      <Field label="KG"><input type="number" min="0" max={selected?.available_quantity_kg || undefined} step="0.001" className={inputClass()} value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} /></Field>
+      <Field label="KG"><NumericInput min="0" max={selected?.available_quantity_kg || undefined} step="0.001" className={inputClass()} value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} /></Field>
       <Field label="Date"><input type="date" className={inputClass()} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field>
     </div><p className="mt-3 text-sm font-semibold text-slate-600">Available: {kg(selected?.available_quantity_kg)} / Cost basis: {currency(selected?.cost_per_kg)}/kg</p><Button className="mt-4" disabled={status.busy || !form.lotId || !form.salesmanId || num(form.quantity) <= 0} onClick={transfer}><Send size={17} />{status.busy ? "Transferring..." : "Create Receiving Receipt"}</Button></section>}
     {stock.loading && !stock.data ? <Loading /> : <StockTable rows={stock.data || []} quantityKey="available_quantity_kg" />}</div>;
@@ -121,7 +121,7 @@ export function SalesmanInventoryScreen({ organizationId, role, userId, onChange
     {(role === "owner_admin" || role === "salesman") && salesmanId && <section className="report-section"><h2 className="mb-4 text-lg font-bold">Salesman to Salesman Transfer</h2><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <Field label="Stock Lot"><select className={inputClass()} value={form.lotId} onChange={(e) => setForm({ ...form, lotId: e.target.value })}><option value="">Select Lot</option>{(stock.data || []).filter((row) => num(row.available_quantity_kg) > 0).map((row) => <option key={row.inventory_lot_id} value={row.inventory_lot_id}>{rowLabel(row)} / {kg(row.available_quantity_kg)}</option>)}</select></Field>
       <Field label="To Salesman"><select className={inputClass()} value={form.toSalesmanId} onChange={(e) => setForm({ ...form, toSalesmanId: e.target.value })}><option value="">Select Salesman</option>{salesmen.filter((person) => person.user_id !== salesmanId).map((person) => <option key={person.user_id} value={person.user_id}>{person.full_name}</option>)}</select></Field>
-      <Field label="KG"><input type="number" min="0" step="0.001" className={inputClass()} value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} /></Field>
+      <Field label="KG"><NumericInput min="0" step="0.001" className={inputClass()} value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} /></Field>
       <Field label="Date"><input type="date" className={inputClass()} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field>
     </div><Button className="mt-4" disabled={status.busy || !form.lotId || !form.toSalesmanId || num(form.quantity) <= 0} onClick={transfer}><Send size={17} />Create Transfer Receipt</Button></section>}
     {stock.loading && !stock.data ? <Loading /> : <StockTable rows={stock.data || []} quantityKey="available_quantity_kg" showSalesman />}</div>;
@@ -163,7 +163,7 @@ export function CustomersScreen({ organizationId, onChanged, selectMode = false,
       <Field label="Customer Type"><input className={inputClass()} value={draft.customerType || ""} onChange={(e) => setDraft({ ...draft, customerType: e.target.value })} /></Field>
       <Field label="Payment Type"><select className={inputClass()} value={draft.paymentType || "cash"} onChange={(e) => setDraft({ ...draft, paymentType: e.target.value })}><option value="cash">Cash</option><option value="credit">Credit</option><option value="cash_credit">Cash / Credit</option></select></Field>
       <Field label="Credit Limit"><MoneyInput value={draft.creditLimit ?? ""} onChange={(e) => setDraft({ ...draft, creditLimit: e.target.value })} /></Field>
-      <Field label="Payment Terms / Days"><input type="number" min="0" className={inputClass()} value={draft.paymentTerms ?? ""} onChange={(e) => setDraft({ ...draft, paymentTerms: e.target.value })} /></Field>
+      <Field label="Payment Terms / Days"><NumericInput min="0" step="1" className={inputClass()} value={draft.paymentTerms ?? ""} onChange={(e) => setDraft({ ...draft, paymentTerms: e.target.value })} /></Field>
       <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={draft.active !== false} onChange={(e) => setDraft({ ...draft, active: e.target.checked })} />Active</label>
     </div><div className="mt-4 flex gap-3"><Button onClick={save} disabled={status.busy}><Save size={17} />Save Customer</Button><Button variant="secondary" onClick={() => setDraft(null)}>Cancel</Button></div></section> : <>
       <Field label="Search"><input className={inputClass()} value={query} onChange={(e) => setQuery(e.target.value)} /></Field>
@@ -198,7 +198,7 @@ export function SalesScreen({ organizationId, role, userId, onChanged }) {
     </div>
     {form.lines.map((line, index) => <div key={index} className="mt-4 grid gap-3 border-t border-slate-200 pt-4 sm:grid-cols-2 xl:grid-cols-4">
       <Field label="Plant / Trip / Product"><select className={inputClass()} value={line.lotId} onChange={(e) => patchLine(index, { lotId: e.target.value })}><option value="">Select Stock</option>{(stock.data || []).filter((row) => num(row.available_quantity_kg) > 0).map((row) => <option key={row.inventory_lot_id} value={row.inventory_lot_id}>{rowLabel(row)} / {kg(row.available_quantity_kg)}</option>)}</select></Field>
-      <Field label="Quantity / KG"><input type="number" min="0" step="0.001" className={inputClass()} value={line.quantity} onChange={(e) => patchLine(index, { quantity: e.target.value })} /></Field>
+      <Field label="Quantity / KG"><NumericInput min="0" step="0.001" className={inputClass()} value={line.quantity} onChange={(e) => patchLine(index, { quantity: e.target.value })} /></Field>
       <Field label="Selling Price / KG"><MoneyInput value={line.price} onChange={(e) => patchLine(index, { price: e.target.value })} /></Field>
       <Button variant="ghost" onClick={() => setForm({ ...form, lines: form.lines.filter((_, i) => i !== index) })}>Remove</Button>
     </div>)}
